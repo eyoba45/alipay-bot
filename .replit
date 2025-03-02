@@ -1,0 +1,139 @@
+modules = ["python-3.11", "postgresql-16", "python3"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Telegram Bot"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Clean Locks"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Telegram Bot"
+
+[[workflows.workflow]]
+name = "Clean Locks"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python clean_locks.py"
+
+[[workflows.workflow]]
+name = "Run Bot"
+author = 40012573
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bot.py"
+
+[[workflows.workflow]]
+name = "Run Bot with Monitor"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python run_bot.py"
+
+[[workflows.workflow]]
+name = "Forever Bot"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python forever.py"
+
+[[workflows.workflow]]
+name = "Run Bot Forever"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python forever.py"
+
+[[workflows.workflow]]
+name = "Bot with Keep-Alive"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python forever.py"
+
+[[workflows.workflow]]
+name = "Simple Bot"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python simple_bot.py"
+
+[[workflows.workflow]]
+name = "Run Robust Bot"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python robust_bot.py"
+
+[[workflows.workflow]]
+name = "Telegram Bot"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 bot.py"
+
+[[workflows.workflow]]
+name = "Run Bot Monitor"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 monitor_bot.py"
+
+[[workflows.workflow]]
+name = "Run Bot 24/7"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python forever.py"
+
+[[workflows.workflow]]
+name = "Bot with Forever Monitor"
+author = 40012573
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python forever.py"
+
+[deployment]
+run = ["sh", "-c", "python run_bot.py"]
+deploymentTarget = "gce"
+ignorePorts = true
+mode = "backgroundWorker"
+
+[[ports]]
+localPort = 8080
+externalPort = 8080

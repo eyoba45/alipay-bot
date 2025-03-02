@@ -1,0 +1,10 @@
+
+pytelegrambotapi>=4.26.0
+sqlalchemy>=2.0.38
+flask>=2.0.1
+requests>=2.27.1
+psycopg2-binary>=2.9.3
+filelock>=3.6.0
+backoff>=2.0.0
+werkzeug>=2.0.2
+gunicorn>=20.1.0
