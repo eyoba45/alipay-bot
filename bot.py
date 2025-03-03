@@ -7,36 +7,12 @@ import traceback
 import signal
 import threading
 import fcntl
+import requests
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database import init_db, get_session, safe_close_session
 from models import User, Order, PendingApproval, PendingDeposit
-from datetime import datetime
-
-# Add signal handling for graceful shutdown
-shutdown_requested = False
-bot_instance = None
-
-def signal_handler(sig, frame):
-    """Handle termination signals for graceful shutdown"""
-    global shutdown_requested, bot_instance
-    logger = logging.getLogger(__name__)
-    logger.info(f"Received signal {sig}, shutting down gracefully...")
-    shutdown_requested = True
-
-    # If bot instance exists, stop polling
-    if bot_instance:
-        try:
-            logger.info("Stopping bot polling...")
-            bot_instance.stop_polling()
-        except Exception as e:
-            logger.error(f"Error stopping bot: {e}")
-
-    # Exit after a short delay to allow cleanup
-    threading.Timer(3.0, sys.exit, args=(0,)).start()
-
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+from datetime import datetime, timedelta
+from keep_alive import keep_alive
 
 # Configure logging
 logging.basicConfig(
@@ -46,175 +22,100 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class SingleInstanceLock:
-    def __init__(self, lockfile):
-        self.lockfile = lockfile
-        self.lockfd = None
+# Add signal handling for graceful shutdown
+shutdown_requested = False
+bot_instance = None
 
-    def acquire(self):
+def signal_handler(sig, frame):
+    """Handle termination signals for graceful shutdown"""
+    global shutdown_requested, bot_instance
+    logger.info(f"Received signal {sig}, shutting down gracefully...")
+    shutdown_requested = True
+    if bot_instance:
         try:
-            self.lockfd = open(self.lockfile, 'w')
-            fcntl.flock(self.lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            self.lockfd.write(str(os.getpid()))
-            self.lockfd.flush()
-            return True
-        except (IOError, OSError):
-            if self.lockfd:
-                self.lockfd.close()
-                self.lockfd = None
-            return False
+            logger.info("Stopping bot polling...")
+            bot_instance.stop_polling()
+        except Exception as e:
+            logger.error(f"Error stopping bot: {e}")
+    sys.exit(0)
 
-    def release(self):
-        if self.lockfd:
-            try:
-                fcntl.flock(self.lockfd, fcntl.LOCK_UN)
-                self.lockfd.close()
-                os.unlink(self.lockfile)
-            except (IOError, OSError):
-                pass
-            self.lockfd = None
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
-class KeepAliveThread(threading.Thread):
-    """Thread to maintain bot connection and verify its health"""
-    def __init__(self, bot_instance):
-        super().__init__(daemon=True)
-        self.bot = bot_instance
-        self.running = True
-        self.last_check = time.time()
-
-    def run(self):
-        while self.running:
-            try:
-                # Test bot connection
-                bot_info = self.bot.get_me()
-                logger.info(f"✅ Keep-alive check passed - Connected as @{bot_info.username}")
-
-                # Test database connection
-                session = get_session()
-                from sqlalchemy import text
-                session.execute(text("SELECT 1"))
-                session.close()
-                logger.info("✅ Database connection verified")
-
-                self.last_check = time.time()
-            except Exception as e:
-                logger.error(f"❌ Keep-alive check failed: {e}")
-
-            time.sleep(30)  # Check every 30 seconds
-
-    def stop(self):
-        self.running = False
+def verify_keep_alive(retries=5, delay=1):
+    """Verify keep-alive server is running"""
+    logger.info("Verifying keep-alive server...")
+    for attempt in range(retries):
+        try:
+            response = requests.get('http://127.0.0.1:8080/ping', timeout=5)
+            if response.status_code == 200 and response.text == "pong":
+                logger.info("✅ Keep-alive server verified")
+                return True
+            logger.warning(f"Server responded with status {response.status_code}")
+        except requests.ConnectionError as e:
+            logger.warning(f"Connection error (attempt {attempt + 1}/{retries}): {e}")
+        except requests.Timeout as e:
+            logger.warning(f"Timeout error (attempt {attempt + 1}/{retries}): {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error (attempt {attempt + 1}/{retries}): {e}")
+        time.sleep(delay)
+    logger.error("❌ Keep-alive server verification failed")
+    return False
 
 def run_bot():
     """Run bot with automatic recovery"""
-    retry_count = 0
-    start_time = time.time()
-    last_success = time.time()
+    global bot_instance
+    logger.info("🤖 Bot initializing...")
 
-    # Create instance lock
-    lock = SingleInstanceLock('bot_instance.lock')
-    if not lock.acquire():
-        logger.error("Another instance is already running")
-        sys.exit(1)
+    # First clean up any stale locks
+    for lock_file in ["bot_instance.lock", "keep_alive.lock"]:
+        try:
+            if os.path.exists(lock_file):
+                os.remove(lock_file)
+                logger.info(f"✅ Removed {lock_file}")
+        except Exception as e:
+            logger.error(f"❌ Error removing stale lock: {e}")
+
+    # Initialize keep-alive server
+    logger.info("Starting keep-alive server...")
+    try:
+        if not keep_alive():
+            logger.error("❌ Failed to start keep-alive server")
+            return False
+
+        # Verify keep-alive server is responding
+        if not verify_keep_alive():
+            return False
+
+    except Exception as e:
+        logger.error(f"❌ Error starting keep-alive server: {e}")
+        return False
 
     try:
-        while True:
-            try:
-                logger.info("🚀 Starting bot...")
+        # Initialize database
+        init_db()
+        logger.info("✅ Database initialized")
 
-                # Start keep-alive thread
-                keep_alive = KeepAliveThread(bot)
-                keep_alive.start()
-                logger.info("✅ Keep-alive thread started")
+        # Test database connection
+        session = get_session()
+        from sqlalchemy import text
+        session.execute(text("SELECT 1"))
+        session.close()
+        logger.info("✅ Database connection verified")
 
-                # Test connection
-                bot_info = bot.get_me()
-                logger.info(f"✅ Connected as @{bot_info.username}")
+        # Clear webhook
+        bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook cleared")
 
-                # Clear webhook with verification
-                try:
-                    bot.delete_webhook()
-                    # Verify webhook is cleared
-                    webhook_info = bot.get_webhook_info()
-                    if not webhook_info.url:
-                        logger.info("✅ Webhook cleared")
-                    else:
-                        logger.warning(f"⚠️ Webhook still set: {webhook_info.url}")
-                        # Try one more time
-                        bot.delete_webhook()
-                except Exception as e:
-                    logger.error(f"❌ Webhook error: {e}")
+        # Start polling
+        logger.info("🤖 Starting message polling...")
+        bot.polling(none_stop=True, interval=1, timeout=60)
+        return True
 
-                # Initialize database
-                try:
-                    init_db()
-                    logger.info("✅ Database initialized")
-
-                    # Test database connection
-                    session = get_session()
-                    from sqlalchemy import text
-                    session.execute(text("SELECT 1"))
-                    session.close()
-                    logger.info("✅ Database connection verified")
-                except Exception as e:
-                    logger.error(f"❌ Database error: {e}")
-                    raise
-
-                # Log every minute to show bot is alive
-                def send_heartbeat():
-                    while not shutdown_requested:
-                        try:
-                            logger.info("💓 Bot process is running...")
-                            # Verify bot connection is still active
-                            bot_info = bot.get_me()
-                            logger.info(f"✅ Still connected as @{bot_info.username}")
-                            time.sleep(60)
-                        except Exception as e:
-                            if not shutdown_requested:
-                                logger.error(f"❌ Bot connection error in heartbeat: {e}")
-                            break
-
-                # Start heartbeat in separate thread
-                heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
-                heartbeat_thread.start()
-
-                logger.info("🤖 Starting message polling...")
-                bot.polling(
-                    none_stop=True,
-                    interval=1,
-                    timeout=60,
-                    long_polling_timeout=70,
-                    logger_level=logging.INFO
-                )
-            except Exception as e:
-                # Stop keep-alive thread on error
-                if 'keep_alive' in locals():
-                    keep_alive.stop()
-                    keep_alive.join(timeout=5)
-
-                retry_count += 1
-                logger.error(f"❌ Bot error (attempt {retry_count}): {traceback.format_exc()}")
-
-                # Reset retry count after successful runtime
-                if time.time() - last_success > 3600:  # 1 hour
-                    retry_count = 0
-                    start_time = time.time()
-                    last_success = time.time()
-
-                if not shutdown_requested:
-                    logger.info("⏳ Waiting 5 seconds before restart...")
-                    time.sleep(5)
-                else:
-                    break
-
-    finally:
-        # Ensure keep-alive thread is stopped
-        if 'keep_alive' in locals():
-            keep_alive.stop()
-            keep_alive.join(timeout=5)
-
-        lock.release()
-        logger.info("🔓 Released instance lock")
+    except Exception as e:
+        logger.error(f"❌ Bot error: {traceback.format_exc()}")
+        return False
 
 # Get bot token from environment
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -234,7 +135,6 @@ except (ValueError, TypeError):
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
 bot_instance = bot  # Store reference for signal handling
 
-# Cache for user data
 _user_cache = {}
 user_states = {}
 registration_data = {}
@@ -286,7 +186,7 @@ def start_message(message):
             del registration_data[chat_id]
 
         welcome_msg = """
-✨ <b>Welcome to AliPay_ETH!</b> ✨
+:✨ <b>Welcome to AliPay_ETH!</b> ✨
 
 Your trusted Ethiopian payment solution for AliExpress shopping!
 
@@ -885,7 +785,7 @@ def handle_deposit_screenshot(message):
         deposit_amount = user_states[chat_id].get('deposit_amount', 0)
         birr_amount = int(deposit_amount * 160)
 
-        session = get_session()
+        session =get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         pending_deposit = PendingDeposit(
@@ -897,7 +797,7 @@ def handle_deposit_screenshot(message):
 
         admin_markup = InlineKeyboardMarkup()
         admin_markup.row(
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{chat_id}_{deposit_amount}"),
+            InlineKeyboardButton("✅Approve", callback_data=f"approve_deposit_{chat_id}_{deposit_amount}"),
             InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{chat_id}_{deposit_amount}")
         )
 
@@ -989,7 +889,7 @@ Need more? Click 💰 Deposit
                 parse_mode='HTML'
             )
     except Exception as e:
-        logger.error(f"Error checking balance: {e}")
+        logger.error(f"Error checking balance:{e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
@@ -1281,7 +1181,6 @@ def check_subscription(message):
 
             if days_remaining > 0:
                 status = f"✅ Active ({days_remaining} days remaining)"
-                from datetime import timedelta
                 renewal_date = (user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')
             else:
                 status = "❌ Expired"
@@ -1547,630 +1446,164 @@ def help_center(message):
     bot.send_message(message.chat.id, help_msg, parse_mode='HTML')
 
 @bot.message_handler(commands=['updateorder'])
-def update_order_details(message):
-    """Admin command to update order details and notify user"""
+def handle_order_admin_decision(message):
+    """Handle order status updates from admin"""
     chat_id = message.chat.id
-    session = None
 
-    # Check if the sender is admin
-    if not ADMIN_ID or int(chat_id) != int(ADMIN_ID):
-        bot.send_message(chat_id, "❌ This command is for admin use only.")
+    # Check if user is admin
+    if chat_id != ADMIN_ID:
+        logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
+        return
 
+    try:
+        # Extract order ID and new status from command
+        parts = message.text.split()
+        if len(parts) < 3:
+            bot.reply_to(message, "Usage: /updateorder <order_id> <status>")
+            return
+
+        order_id = parts[1]
+        new_status = parts[2].lower()
+
+        # Validate status
+        valid_statuses = ['processing', 'shipped', 'delivered', 'cancelled']
+        if new_status not in valid_statuses:
+            bot.reply_to(message, f"Invalid status. Use one of: {', '.join(valid_statuses)}")
+            return
+
+        session = get_session()
+        order = session.query(Order).filter_by(order_number=order_id).first()
+
+        if not order:
+            bot.reply_to(message, f"Order {order_id} not found")
+            safe_close_session(session)
+            return
+
+        # Update order status
+        order.status = new_status
+        order.updated_at = datetime.utcnow()
+        session.commit()
+
+        # Notify customer
+        customer = session.query(User).filter_by(id=order.user_id).first()
+        if customer:
+            bot.send_message(
+                customer.telegram_id,
+                f"""
+╔═══《 📦 》═══╗
+║ Order Update ║
+╚═══《 🔔 》═══╝
+
+<b>Order #{order.order_number}</b>
+Status: <b>{new_status.upper()}</b>
+
+Thank you for using AliPay_ETH!
+""",
+                parse_mode='HTML'
+            )
+
+        bot.reply_to(message, f"✅ Order {order_id} updated to {new_status}")
+
+    except Exception as e:
+        logger.error(f"Error updating order: {e}")
+        bot.reply_to(message, "❌ Error updating order")
+    finally:
+        safe_close_session(session)
 
 def check_subscription_status():
     """Check for users with expired subscriptions and notify them"""
     session = None
     try:
         session = get_session()
-        current_time = datetime.utcnow()
-        from datetime import timedelta
+        now = datetime.utcnow()
 
-        # Find users with subscriptions over 30 days old
-        users = session.query(User).all()
+        # Find users with expiring/expired subscriptions
+        users = session.query(User).filter(
+            User.subscription_date.isnot(None)  # Only check users with subscription dates
+        ).all()
 
         for user in users:
-            if not user.subscription_date:
-                continue
+            try:
+                if not user.subscription_date:
+                    continue
 
-            days_passed = (current_time - user.subscription_date).days
+                days_passed = (now - user.subscription_date).days
+                days_remaining = 30 - days_passed
 
-            if days_passed >= 30:
-                # Send notification about subscription renewal
-                try:
-                    # Check if we already sent a notification recently (within last 24 hours)
-                    hours_since_last_update = 0
-                    if hasattr(user, 'last_subscription_reminder'):
-                        hours_since_last_update = (current_time - user.last_subscription_reminder).total_seconds() / 3600
-
+                if days_remaining <= 3:  # Notify when 3 or fewer days remain
                     # Only send reminder if we haven't sent one in the last 24 hours
-                    if not hasattr(user, 'last_subscription_reminder') or hours_since_last_update >= 24:
-                        payment_msg = f"""
+                    if (not user.last_subscription_reminder or 
+                        (now - user.last_subscription_reminder).total_seconds() > 24 * 3600):
+
+                        if days_remaining <= 0:
+                            # Subscription expired
+                            bot.send_message(
+                                user.telegram_id,
+                                """
+╔═══《 ⚠️ 》═══╗
+║ SUBSCRIPTION ║
+╚═══《 📅 》═══╝
+
+<b>Your subscription has expired!</b>
+
+• Expired: {-days_remaining} days ago
+• Renew now to continue using AliPay_ETH
+
+Use the 💳 <b>Subscription</b> menu to renew.
+""",
+                                parse_mode='HTML'
+                            )
+                        else:
+                            # Subscription expiring soon
+                            bot.send_message(
+                                user.telegram_id,
+                                f"""
 ╔═══《 🔔 》═══╗
-║ SUBSCRIPTION RENEWAL ║
-╚═══《 💫 》═══╝
+║ REMINDER ║
+╚═══《 📅 》═══╝
 
-<b>Hello {user.name}!</b>
+<b>Subscription ending soon!</b>
 
-Your monthly subscription has ended. To continue using AliPay_ETH services, please renew your subscription:
+• Days remaining: {days_remaining}
+• Renew now to avoid interruption
 
-<b>💰 Subscription Fee:</b>
-┌─────────────────┐
-│ 🇺🇸 <code>$1.00</code> USD
-│ 🇪🇹 <code>150</code> ETB
-└─────────────────┘
+Use the 💳 <b>Subscription</b> menu to renew.
+""",
+                                parse_mode='HTML'
+                            )
 
-<b>💳 Payment Methods:</b>
-
-🏦 <b>Commercial Bank (CBE)</b>
-┌─────────────────┐
-│ 💠 Account: <code>1000547241316</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-📱 <b>TeleBirr</b>
-┌─────────────────┐
-│ 💠 Number: <code>0986693062</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-Please use /renewsub command to renew your subscription.
-"""
-                        bot.send_message(user.telegram_id, payment_msg, parse_mode='HTML')
-                        logger.info(f"Sent subscription renewal notification to user {user.telegram_id}")
-
-                        # Update notification timestamp to prevent spam
-                        user.last_subscription_reminder = current_time
+                        # Update last reminder time
+                        user.last_subscription_reminder = now
                         session.commit()
 
-                except Exception as e:
-                    logger.error(f"Failed to send subscription notification to {user.telegram_id}: {e}")
+            except Exception as e:
+                logger.error(f"Error notifying user {user.telegram_id}: {e}")
+                continue
 
     except Exception as e:
-        logger.error(f"Error checking subscription status: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Error checking subscriptions: {e}")
     finally:
         safe_close_session(session)
 
-# Run subscription check in a separate thread
-import threading
 def run_subscription_checker():
     """Run the subscription checker periodically"""
     while True:
         try:
             check_subscription_status()
-            logger.info("Completed subscription status check")
         except Exception as e:
-            logger.error(f"Error in subscription checker thread: {e}")
-
+            logger.error(f"Error in subscription checker: {e}")
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
 
-# Start the subscription checker in the run_bot function
-
-
-logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
-        return
-
-    try:
-        # Command format: /updateorder user_id order_number tracking_number order_id
-        parts = message.text.split()
-
-        if len(parts) < 5:
-            bot.send_message(
-                chat_id, 
-                """
-❌ <b>Invalid format</b>
-
-Correct format:
-/updateorder [user_id] [order_number] [tracking_number] [order_id]
-
-Example:
-/updateorder 123456789 1 LY123456789CN ALI1234567890
-""", 
-                parse_mode='HTML'
-            )
-            return
-
-        user_id = int(parts[1])
-        order_number = int(parts[2])
-        tracking_number = parts[3]
-        order_id = parts[4]
-
-        session = get_session()
-
-        # Get the user
-        user = session.query(User).filter_by(telegram_id=user_id).first()
-        if not user:
-            bot.send_message(chat_id, f"❌ User with ID {user_id} not found.")
-            return
-
-        # Get the order
-        order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
-        if not order:
-            bot.send_message(chat_id, f"❌ Order #{order_number} for user {user_id} not found.")
-            return
-
-        # Update order details
-        order.tracking_number = tracking_number
-        order.order_id = order_id
-        order.status = 'Shipped'
-        session.commit()
-
-        # Send notification to user
-        user_notification = f"""
-✅ <b>Order Shipped!</b>
-
-📦 <b>Order Details Updated:</b>
-┌─────────────────┐
-│ 📊 Order #: <b>{order_number}</b>
-│ 🆔 Order ID: <code>{order_id}</code>
-│ 📦 Tracking #: <code>{tracking_number}</code>
-│ 💰 Balance: $<code>{user.balance:.2f}</code>
-└─────────────────┘
-
-🔍 <b>Track your package:</b>
-https://global.cainiao.com/detail.htm?mailNoList={tracking_number}
-
-Thank you for shopping with AliPay_ETH!
-"""
-        bot.send_message(user_id, user_notification, parse_mode='HTML')
-
-        # Confirm to admin
-        bot.send_message(
-            chat_id, 
-            f"""
-✅ <b>Order updated successfully!</b>
-
-User <b>{user.name}</b> ({user_id}) has been notified about:
-- Order #{order_number}
-- Tracking: {tracking_number}
-- Order ID: {order_id}
-- Balance: ${user.balance:.2f}
-""", 
-            parse_mode='HTML'
-        )
-
-    except ValueError as e:
-        bot.send_message(chat_id, f"❌ Invalid input. Please check user ID and order number are numeric.")
-    except Exception as e:
-        logger.error(f"Error updating order: {e}")
-        logger.error(traceback.format_exc())
-        bot.send_message(chat_id, f"❌ Error: {str(e)}")
-    finally:
-        safe_close_session(session)
-
-@bot.message_handler(commands=['renewsub'])
-def renew_subscription(message):
-    """Command to manually renew subscription"""
-    chat_id = message.chat.id
-
-    # Set state for waiting for screenshot
-    user_states[chat_id] = {
-        'state': 'waiting_for_subscription_screenshot',
-    }
-
-    payment_msg = f"""
-╔═══《 💳 》═══╗
-║   SUBSCRIPTION   ║
-╚═══《 💫 》═══╝
-
-<b>💰 Monthly Fee:</b>
-┌─────────────────┐
-│ 🇺🇸 <code>$1.00</code> USD
-│ 🇪🇹 <code>150</code> ETB
-└─────────────────┘
-
-<b>💳 Payment Methods:</b>
-
-🏦 <b>Commercial Bank (CBE)</b>
-┌─────────────────┐
-│ 💠 Account: <code>1000547241316</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-📱 <b>TeleBirr</b>
-┌─────────────────┐
-│ 💠 Number: <code>0986693062</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-<b>📝 Instructions:</b>
-1️⃣ Choose payment method
-2️⃣ Send exact amount
-3️⃣ Take clear screenshot
-4️⃣ Send screenshot below ⬇️
-"""
-    bot.send_message(chat_id, payment_msg, parse_mode='HTML')
-
-@bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_subscription_screenshot', content_types=['photo'])
-def handle_subscription_screenshot(message):
-    """Process subscription renewal screenshot"""
-    chat_id = message.chat.id
-    session = None
-    try:
-        file_id = message.photo[-1].file_id
-
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.send_message(chat_id, "User not found. Please register first.")
-            return
-
-        # Admin markup for approval/rejection
-        admin_markup = InlineKeyboardMarkup()
-        admin_markup.row(
-            InlineKeyboardButton("✅ Approve Sub", callback_data=f"approve_sub_{chat_id}"),
-            InlineKeyboardButton("❌ Reject Sub", callback_data=f"reject_sub_{chat_id}")
-        )
-
-        # Admin notification
-        admin_msg = f"""
-╔═══《 🔔 》═══╗
-║ Subscription Renewal ║
-╚═══《 💫 》═══╝
-
-👤 <b>User Details:</b>
-┌─────────────────┐
-│ Name: <b>{user.name}</b>
-│ ID: <code>{chat_id}</code>
-│ Phone: <code>{user.phone}</code>
-└─────────────────┘
-
-💰 <b>Amount:</b> $1.00 (150 ETB)
-⏰ <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-📸 Screenshot attached below
-"""
-        if ADMIN_ID:
-            bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
-            bot.send_photo(ADMIN_ID, file_id, caption="📸 Subscription Payment Screenshot")
-
-        # User confirmation
-        bot.send_message(
-            chat_id,
-            """
-╔══════《 💰 》══════╗
-║ ✨ PAYMENT RECEIVED ✨ ║
-╚══════《⏳ 》══════╝
-
-<b>🌟 Thank you for your subscription payment! 🌟</b>
-
-<b>💸 Payment Information:</b>
-┏━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 💵 Amount: <code>$1.00</code>
-┃ 🇪🇹 ETB: <code>150</code> birr
-┃ 📤 Screenshot: <b>✅ Received</b>
-┃ 🔄 Status: <b>⏳ Processing</b>
-┗━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-<b>🚀 Your subscription will be renewed shortly!</b>
-""",
-            parse_mode='HTML'
-        )
-
-        # Clear state
-        if chat_id in user_states:
-            del user_states[chat_id]
-
-    except Exception as e:
-        logger.error(f"Error processing subscription payment: {e}")
-        logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_sub_', 'reject_sub_')))
-def handle_subscription_admin_decision(call):
-    """Handle admin approval/rejection for subscription payments"""
-    session = None
-    try:
-        parts = call.data.split('_')
-        action = parts[0]
-        chat_id = int(parts[2])
-
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.answer_callback_query(call.id, "User not found")
-            return
-
-        if action == 'approve':
-            # Update subscription date
-            user.subscription_date = datetime.utcnow()
-            session.commit()
-
-            # Notify user
-            bot.send_message(
-                chat_id,
-                """
-╔══════《 💎 》══════╗
-║ ✅ SUBSCRIPTION RENEWED! ✅ ║
-╚══════《 💫 》══════╝
-
-<b>🎉 Your monthly subscription has been renewed!</b>
-
-<b>⏱️ Valid until:</b> 1 month from today
-
-<i>Thank you for continuing to use AliPay_ETH!</i>
-""",
-                parse_mode='HTML'
-            )
-
-            # Update admin message
-            bot.edit_message_text(
-                f"✅ Subscription renewed for {user.name}!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        elif action == 'reject':
-            bot.send_message(
-                chat_id,
-                "❌ Subscription payment rejected. Please try again with a clearer payment screenshot.",
-                parse_mode='HTML'
-            )
-
-            bot.edit_message_text(
-                f"❌ Subscription renewal rejected for {user.name}!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        bot.answer_callback_query(call.id, text="Processed successfully")
-    except Exception as e:
-        logger.error(f"Error in subscription admin decision: {e}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error processing decision")
-    finally:
-        safe_close_session(session)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
-def handle_deposit_admin_decision(call):
-    """Handle admin approval/rejection for deposits"""
-    session = None
-    try:
-        parts = call.data.split('_')
-        action = parts[0]
-        chat_id = int(parts[2])
-        amount = float(parts[3])
-
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.answer_callback_query(call.id, "User not found")
-            return
-
-        pending_deposit = session.query(PendingDeposit).filter_by(user_id=user.id, amount=amount).first()
-
-        if not pending_deposit:
-            bot.answer_callback_query(call.id, "No pending deposit found")
-            return
-
-        if action == 'approve':
-            user.balance += amount
-            session.delete(pending_deposit)
-            session.commit()
-
-            bot.send_message(
-                chat_id,
-                f"""
-╔══════《 💎 》══════╗
-║ ✅ DEPOSIT APPROVED! ✅ ║
-╚══════《 💫 》══════╝
-
-<b>💰 Amount Added:</b> $<code>{amount:,.2f}</code>
-<b>💳 Current Balance:</b> $<code>{user.balance:,.2f}</code>
-
-<b>🚀 Ready for Shopping!</b>
-You can now submit your order using the 📦 <b>Submit Order</b> button.
-
-<i>Thank you for using AliPay_ETH!</i>
-""",
-                parse_mode='HTML'
-            )
-            bot.edit_message_text(
-                f"✅ Deposit of ${amount:.2f} approved for {user.name}!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        elif action == 'reject':
-            session.delete(pending_deposit)
-            session.commit()
-
-            bot.send_message(
-                chat_id,
-                "❌ Deposit rejected. Please try again with a clearer payment screenshot.",
-                parse_mode='HTML'
-            )
-            bot.edit_message_text(
-                f"❌ Deposit of ${amount:.2f} rejected for {user.name}!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        bot.answer_callback_query(call.id, text="Processed successfully")
-    except Exception as e:
-        logger.error(f"Error in deposit admin decision: {e}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error processing decision")
-    finally:
-        safe_close_session(session)
-
-
-@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_custom_amount')
-def handle_custom_deposit_amount(message):
-    """Handle custom deposit amount"""
-    chat_id = message.chat.id
-
-    if message.text == 'Back to Main Menu':
-        # Check if user is registered
-        session = None
-        try:
-            session = get_session()
-            user = session.query(User).filter_by(telegram_id=chat_id).first()
-            is_registered = user is not None
-
-            # Return to main menu
-            bot.send_message(
-                chat_id,
-                "🏠 Returning to main menu...",
-                reply_markup=create_main_menu(is_registered=is_registered)
-            )
-
-            # Clear state
-            del user_states[chat_id]
-        except Exception as e:
-            logger.error(f"Error returning to main menu: {e}")
-            bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
-        finally:
-            safe_close_session(session)
-        return
-
-    try:
-        amount = float(message.text)
-        if amount <= 0:
-            bot.send_message(chat_id, "Please enter a valid positive amount.")
-            return
-        send_payment_details(message, amount)
-    except ValueError:
-        bot.send_message(chat_id, "Invalid amount. Please enter a number.")
-
-
-def run_bot():
-    """Run bot with automatic recovery"""
-    retry_count = 0
-    start_time = time.time()
-    last_success = time.time()
-
-    # Create instance lock
-    lock = SingleInstanceLock('bot_instance.lock')
-    if not lock.acquire():
-        logger.error("Another instance is already running")
-        sys.exit(1)
-
-    try:
-        while True:
-            try:
-                logger.info("🚀 Starting bot...")
-
-                # Start keep-alive thread
-                keep_alive = KeepAliveThread(bot)
-                keep_alive.start()
-                logger.info("✅ Keep-alive thread started")
-
-                # Test connection
-                bot_info = bot.get_me()
-                logger.info(f"✅ Connected as @{bot_info.username}")
-
-                # Clear webhook with verification
-                try:
-                    bot.delete_webhook()
-                    # Verify webhook is cleared
-                    webhook_info = bot.get_webhook_info()
-                    if not webhook_info.url:
-                        logger.info("✅ Webhook cleared")
-                    else:
-                        logger.warning(f"⚠️ Webhook still set: {webhook_info.url}")
-                        # Try one more time
-                        bot.delete_webhook()
-                except Exception as e:
-                    logger.error(f"❌ Webhook error: {e}")
-
-                # Initialize database
-                try:
-                    init_db()
-                    logger.info("✅ Database initialized")
-
-                    # Test database connection
-                    session = get_session()
-                    from sqlalchemy import text
-                    session.execute(text("SELECT 1"))
-                    session.close()
-                    logger.info("✅ Database connection verified")
-                except Exception as e:
-                    logger.error(f"❌ Database error: {e}")
-                    raise
-
-                # Log every minute to show bot is alive
-                def send_heartbeat():
-                    while not shutdown_requested:
-                        try:
-                            logger.info("💓 Bot process is running...")
-                            # Verify bot connection is still active
-                            bot_info = bot.get_me()
-                            logger.info(f"✅ Still connected as @{bot_info.username}")
-                            time.sleep(60)
-                        except Exception as e:
-                            if not shutdown_requested:
-                                logger.error(f"❌ Bot connection error in heartbeat: {e}")
-                            break
-
-                # Start heartbeat in separate thread
-                heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
-                heartbeat_thread.start()
-
-                logger.info("🤖 Starting message polling...")
-                bot.polling(
-                    none_stop=True,
-                    interval=1,
-                    timeout=60,
-                    long_polling_timeout=70,
-                    logger_level=logging.INFO
-                )
-            except Exception as e:
-                # Stop keep-alive thread on error
-                if 'keep_alive' in locals():
-                    keep_alive.stop()
-                    keep_alive.join(timeout=5)
-
-                retry_count += 1
-                logger.error(f"❌ Bot error (attempt {retry_count}): {traceback.format_exc()}")
-
-                # Reset retry count after successful runtime
-                if time.time() - last_success > 3600:  # 1 hour
-                    retry_count = 0
-                    start_time = time.time()
-                    last_success = time.time()
-
-                if not shutdown_requested:
-                    logger.info("⏳ Waiting 5 seconds before restart...")
-                    time.sleep(5)
-                else:
-                    break
-
-    finally:
-        # Ensure keep-alive thread is stopped
-        if 'keep_alive' in locals():
-            keep_alive.stop()
-            keep_alive.join(timeout=5)
-
-        lock.release()
-        logger.info("🔓 Released instance lock")
-
 if __name__ == "__main__":
-    logger.info("🤖 Bot initializing...")
+    logger.info("🤖 Starting bot...")
     try:
-        # First clean up any stale locks
-        if os.path.exists('bot_instance.lock'):
-            try:
-                os.remove('bot_instance.lock')
-                logger.info("✅ Removed stale lock file")
-            except Exception as e:
-                logger.error(f"❌ Error removing stale lock: {e}")
-
-        subscription_checker_thread = threading.Thread(target=run_subscription_checker, daemon=True)
-        subscription_checker_thread.start()
-        logger.info("✅ Subscription checker thread started")
-
-
         run_bot()
     except KeyboardInterrupt:
-        logger.info("👋 Bot shutting down...")
-        sys.exit(0)
+        logger.info("👋 Shutting down gracefully...")
     except Exception as e:
-        logger.error(f"❌ Fatal error: {traceback.format_exc()}")
-        time.sleep(5)  # Wait before exiting to prevent instant restarts
-        sys.exit(1)
+        logger.error(f"❌ Fatal error: {e}")
+        logger.error(traceback.format_exc())
+    finally:
+        if 'session' in locals():
+            safe_close_session(session)
