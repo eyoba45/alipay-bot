@@ -1269,3 +1269,48 @@ if __name__ == "__main__":
         logger.error(f"❌ Fatal error: {traceback.format_exc()}")
         time.sleep(5)  # Wait before exiting to prevent instant restarts
         sys.exit(1)
+@bot.callback_query_handler(func=lambda call: call.data.startswith('update_order_'))
+def update_order_details(call):
+    """Update order with tracking number, order ID and process payment"""
+    session = None
+    try:
+        order_id = int(call.data.split('_')[2])
+        session = get_session()
+        
+        order = session.query(Order).filter_by(id=order_id).first()
+        user = session.query(User).filter_by(id=order.user_id).first()
+        
+        # Update order details
+        order.order_id = "AL123456789"  # Replace with actual order ID
+        order.tracking_number = "CN123456789"  # Replace with actual tracking number
+        order.amount = 10.0  # Replace with actual amount
+        order.status = "Shipped"
+        
+        # Update user balance
+        user.balance -= order.amount
+        
+        session.commit()
+        
+        # Notify user
+        bot.send_message(
+            user.telegram_id,
+            f"✅ Your order #{order.order_number} has been shipped!\n\n"
+            f"📊 Order ID: {order.order_id}\n"
+            f"📦 Tracking: {order.tracking_number}\n"
+            f"💰 Amount: ${order.amount:.2f}\n"
+            f"💳 Remaining balance: ${user.balance:.2f}"
+        )
+        
+        # Update admin message
+        bot.edit_message_text(
+            f"✅ Order #{order.order_number} processed and shipped!",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id
+        )
+        
+        bot.answer_callback_query(call.id, "Order updated successfully")
+    except Exception as e:
+        logger.error(f"Error updating order: {e}")
+        bot.answer_callback_query(call.id, "Error updating order")
+    finally:
+        safe_close_session(session)
