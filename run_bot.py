@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script to run the Telegram bot with uptime server"""
+"""Script to run the Telegram bot with uptime server and optimized reliability"""
 
 import os
 import sys
@@ -7,19 +7,78 @@ import time
 import subprocess
 import signal
 import logging
+import threading
+from datetime import datetime
+import traceback
 # Added import for keep_alive function
 from keep_alive import keep_alive
 
-# Configure logging
+# Configure logging with more detailed format
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - [%(threadName)s]',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("bot_uptime.log")
+    ]
 )
 logger = logging.getLogger(__name__)
 
 # Global variables
 bot_process = None
+last_restart = datetime.now()
+restart_count = 0
+max_restarts_per_hour = 5
+
+# Lock to prevent concurrent operations
+process_lock = threading.Lock()
+
+# Pre-flight checks
+def run_preflight_checks():
+    """Run checks before starting the bot"""
+    logger.info("🔍 Running pre-flight checks...")
+    
+    # Check database connectivity
+    try:
+        import database
+        db_ok = database.check_db_connection()
+        if not db_ok:
+            logger.error("❌ Database pre-flight check failed")
+            # Try to reset connection pool
+            database.reset_connection_pool()
+        else:
+            logger.info("✅ Database pre-flight check passed")
+    except Exception as e:
+        logger.error(f"❌ Database import error: {e}")
+        logger.error(traceback.format_exc())
+    
+    # Check Telegram API connectivity
+    try:
+        import requests
+        token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        if not token:
+            logger.error("❌ TELEGRAM_BOT_TOKEN not found")
+            return False
+            
+        response = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=5)
+        if response.status_code == 200:
+            logger.info(f"✅ Telegram API check passed: {response.json()['result']['username']}")
+        else:
+            logger.error(f"❌ Telegram API check failed: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Telegram API check error: {e}")
+        logger.error(traceback.format_exc())
+        return False
+        
+    # Clean up stale lock files
+    try:
+        subprocess.run(["python", "clean_locks.py"], check=True)
+    except Exception as e:
+        logger.error(f"❌ Lock file cleanup error: {e}")
+    
+    logger.info("✅ Pre-flight checks completed")
+    return True
 
 def cleanup_environment():
     """Clean up any existing bot processes or lock files"""
