@@ -1,7 +1,6 @@
-
-#!/usr/bin/env python3
 """
 Monitor script for keeping the Telegram bot alive 24/7
+with enhanced logging and coordination with keep-alive thread
 """
 import os
 import sys
@@ -15,8 +14,11 @@ import requests
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot_monitor.log')
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -49,13 +51,15 @@ class BotMonitor:
                 except Exception as e:
                     logger.warning(f"⚠️ Cleanup command failed: {e}")
 
-            # Clean up lock file if it exists
-            if os.path.exists("bot_instance.lock"):
-                try:
-                    os.remove("bot_instance.lock")
-                    logger.info("✅ Removed existing lock file")
-                except Exception as e:
-                    logger.error(f"❌ Error removing lock file: {e}")
+            # Clean up lock files
+            lock_files = ['bot_instance.lock', 'keep_alive.lock']
+            for lock_file in lock_files:
+                if os.path.exists(lock_file):
+                    try:
+                        os.remove(lock_file)
+                        logger.info(f"✅ Removed {lock_file}")
+                    except Exception as e:
+                        logger.error(f"❌ Error removing {lock_file}: {e}")
 
             # Clear Telegram webhook
             if self.clear_webhook():
@@ -70,7 +74,7 @@ class BotMonitor:
             logger.error(f"❌ Error during cleanup: {e}")
 
     def clear_webhook(self):
-        """Clear any existing webhook"""
+        """Clear any existing webhook with verification"""
         try:
             TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
             if not TOKEN:
@@ -156,7 +160,7 @@ class BotMonitor:
             return False
 
     def check_process_health(self):
-        """Check if the bot process is healthy"""
+        """Check if bot process and keep-alive thread are healthy"""
         if self.process is None:
             logger.warning("⚠️ No bot process found")
             return False
@@ -169,7 +173,7 @@ class BotMonitor:
             if err: logger.error(f"❌ Last error: {err.strip()}")
             return False
 
-        # Read process output
+        # Read process output and look for keep-alive messages
         self._read_process_output()
 
         # Check heartbeat timeout
@@ -177,10 +181,16 @@ class BotMonitor:
             logger.warning(f"⚠️ Bot heartbeat timeout (>{self.heartbeat_timeout}s)")
             return False
 
+        # Check if keep-alive thread is running by looking for its log messages
+        if "Keep-alive check passed" not in self._read_process_output():
+            logger.warning("⚠️ Keep-alive thread not detected")
+            return False
+
         return True
 
     def _read_process_output(self):
         """Read and log process output"""
+        output_buffer = []
         try:
             if self.process and self.process.stdout:
                 while True:
@@ -190,7 +200,8 @@ class BotMonitor:
                     output = output.strip()
                     if output:
                         logger.info(f"📤 Bot: {output}")
-                        if "Bot process is running..." in output or "Successfully connected" in output:
+                        output_buffer.append(output)
+                        if "Bot process is running..." in output or "Keep-alive check passed" in output:
                             self.last_heartbeat = time.time()
 
             if self.process and self.process.stderr:
@@ -204,6 +215,8 @@ class BotMonitor:
 
         except Exception as e:
             logger.error(f"❌ Error reading process output: {e}")
+
+        return '\n'.join(output_buffer)
 
     def terminate_process(self):
         """Gracefully terminate the bot process"""
@@ -237,7 +250,7 @@ class BotMonitor:
         """Main monitoring loop"""
         consecutive_failures = 0
         last_success = time.time()
-        
+
         while True:
             try:
                 # Reset restart count every hour
@@ -270,11 +283,11 @@ class BotMonitor:
                         else:
                             logger.error(f"❌ Failed to start bot (start attempt {start_attempt + 1}/3)")
                             time.sleep(5 * (start_attempt + 1))  # Progressive delay
-                    
+
                     if not start_success:
                         logger.error("❌ All start attempts failed")
                         consecutive_failures += 1
-                        
+
                         # If we've had multiple consecutive failures, try more drastic measures
                         if consecutive_failures > 3:
                             logger.error(f"⚠️ {consecutive_failures} consecutive failures, performing deep cleanup...")
@@ -285,7 +298,7 @@ class BotMonitor:
                                 time.sleep(5)
                             except Exception as cleanup_err:
                                 logger.error(f"❌ Deep cleanup error: {cleanup_err}")
-                        
+
                         time.sleep(10)
                         continue
 
@@ -306,12 +319,12 @@ class BotMonitor:
                     self.terminate_process()
                     self.cleanup_processes()
                     time.sleep(5)
-                    
+
                     # Force restart with fresh state
                     if self.start_bot():
                         logger.info("✅ Hourly verification restart successful")
                         last_success = time.time()
-                    
+
                 # Log heartbeat
                 logger.info("💓 Monitor heartbeat - Bot is running")
                 time.sleep(10)
