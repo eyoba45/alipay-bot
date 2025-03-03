@@ -9,6 +9,7 @@ import signal
 import logging
 import subprocess
 import traceback
+import requests
 
 # Configure logging
 logging.basicConfig(
