@@ -10,6 +10,10 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=True, nullable=False)
+
+    subscription_date = Column(DateTime, default=datetime.utcnow)
+    last_subscription_reminder = Column(DateTime, nullable=True)
+
     name = Column(String, nullable=False)
     phone = Column(String)
     address = Column(String)
