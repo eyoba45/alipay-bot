@@ -88,7 +88,7 @@ def run_bot_with_restart():
             try:
                 logger.info("Checking for syntax errors before starting bot...")
                 result = subprocess.run(
-                    [sys.executable, "-m", "py_compile", "bot.py"],
+                    [sys.executable, "-c", "import ast; ast.parse(open('bot.py', 'r', encoding='utf-8').read())"],
                     capture_output=True,
                     text=True,
                     timeout=10
