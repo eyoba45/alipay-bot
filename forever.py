@@ -66,7 +66,7 @@ def run_bot_with_restart():
     global bot_process
 
     restart_count = 0
-    max_restarts = 10
+    max_restarts = 15  # Increased restart attempts
 
     while not shutdown_requested and restart_count < max_restarts:
         try:
@@ -83,6 +83,25 @@ def run_bot_with_restart():
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'  # Ensure output is not buffered
 
+            # Try to check for syntax errors before starting the bot
+            try:
+                logger.info("Checking for syntax errors before starting bot...")
+                result = subprocess.run(
+                    [sys.executable, "-m", "py_compile", "bot.py"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode != 0:
+                    logger.error(f"⚠️ Syntax check failed: {result.stderr}")
+                    logger.error("❌ Unable to start bot due to syntax errors. Please fix and try again.")
+                    time.sleep(10)
+                    continue
+                logger.info("✅ No syntax errors detected")
+            except Exception as e:
+                logger.warning(f"⚠️ Syntax check failed: {e}")
+                
+            # Start the actual bot process
             bot_process = subprocess.Popen(
                 [sys.executable, "bot.py"],
                 stdout=subprocess.PIPE,
