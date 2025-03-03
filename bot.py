@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+"""
+Telegram Bot Runner with enhanced functionality
+"""
 import os
 import logging
 import sys
@@ -12,7 +16,6 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from database import init_db, get_session, safe_close_session
 from models import User, Order, PendingApproval, PendingDeposit
 from datetime import datetime, timedelta
-from keep_alive import keep_alive
 
 # Configure logging
 logging.basicConfig(
@@ -22,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Add signal handling for graceful shutdown
+# Set up signal handling for graceful shutdown
 shutdown_requested = False
 bot_instance = None
 
@@ -39,87 +42,11 @@ def signal_handler(sig, frame):
             logger.error(f"Error stopping bot: {e}")
     sys.exit(0)
 
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
-def verify_keep_alive(retries=5, delay=1):
-    """Verify keep-alive server is running"""
-    logger.info("Verifying keep-alive server...")
-    for attempt in range(retries):
-        try:
-            logger.debug(f"Verification attempt {attempt + 1}")
-            response = requests.get('http://127.0.0.1:5000/ping', timeout=5)
-            if response.status_code == 200 and response.text == "pong":
-                logger.info("✅ Keep-alive server verified")
-                return True
-            logger.warning(f"Server responded with unexpected status {response.status_code}: {response.text}")
-        except requests.ConnectionError as e:
-            logger.warning(f"Connection error (attempt {attempt + 1}/{retries}): {str(e)}")
-        except requests.Timeout as e:
-            logger.warning(f"Timeout error (attempt {attempt + 1}/{retries}): {str(e)}")
-        except Exception as e:
-            logger.warning(f"Unexpected error (attempt {attempt + 1}/{retries}): {str(e)}")
-            logger.error(traceback.format_exc())
-        time.sleep(delay)
-    logger.error("❌ Keep-alive server verification failed")
-    return False
 
-def run_bot():
-    """Run bot with automatic recovery"""
-    global bot_instance
-    logger.info("🤖 Bot initializing...")
-
-    # First clean up any stale locks
-    for lock_file in ["bot_instance.lock", "keep_alive.lock"]:
-        try:
-            if os.path.exists(lock_file):
-                os.remove(lock_file)
-                logger.info(f"✅ Removed {lock_file}")
-        except Exception as e:
-            logger.error(f"❌ Error removing stale lock: {e}")
-
-    # Initialize keep-alive server
-    logger.info("Starting keep-alive server...")
-    try:
-        if not keep_alive():
-            logger.error("❌ Failed to start keep-alive server")
-            return False
-
-        # Verify keep-alive server is responding
-        if not verify_keep_alive():
-            return False
-
-    except Exception as e:
-        logger.error(f"❌ Error starting keep-alive server: {e}")
-        return False
-
-    try:
-        # Initialize database
-        init_db()
-        logger.info("✅ Database initialized")
-
-        # Test database connection
-        session = get_session()
-        from sqlalchemy import text
-        session.execute(text("SELECT 1"))
-        session.close()
-        logger.info("✅ Database connection verified")
-
-        # Clear webhook
-        bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook cleared")
-
-        # Start polling
-        logger.info("🤖 Starting message polling...")
-        bot.polling(none_stop=True, interval=1, timeout=60)
-        return True
-
-    except Exception as e:
-        logger.error(f"❌ Bot error: {traceback.format_exc()}")
-        return False
-
-# Get bot token from environment
+# Get Telegram token
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 ADMIN_ID = os.environ.get('ADMIN_CHAT_ID')
 
@@ -287,9 +214,9 @@ def get_phone(message):
         user_states[chat_id] = 'waiting_for_payment'
 
         payment_msg = f"""
-╔═══《 📝 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(12381)}{chr(32)}{chr(12381)}{chr(32)}{chr(12381)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ Registration ║
-╚═══《 💫 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>👤 User Details:</b>
 ┌─────────────────┐
@@ -389,9 +316,9 @@ def handle_payment_screenshot(message):
                     bot.send_message(
                         chat_id,
                         """
-╔═════《 ⚠️ 》═════╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ ALREADY PENDING ║
-╚═════《 ⚠️ 》═════╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>Your registration is already being processed!</b>
 
@@ -446,9 +373,9 @@ Please wait for admin approval. You'll be notified once your account is activate
 
         # Admin notification
         admin_msg = f"""
-╔═══《 🔔 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ New User! ║
-╚═══《 💫 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>👤 User Information:</b>
 ┌─────────────────┐
@@ -482,9 +409,9 @@ Please wait for admin approval. You'll be notified once your account is activate
         try:
             bot.edit_message_text(
                 """
-╔═════《 📸 》═════╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ ✨ RECEIVED! ✨ ║
-╚═════《 ⏳ 》═════╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>🌟 Thank you for your registration! 🌟</b>
 
@@ -504,9 +431,9 @@ Please wait for admin approval. You'll be notified once your account is activate
             bot.send_message(
                 chat_id,
                 """
-╔═════《 📸 》═════╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ ✨ RECEIVED! ✨ ║
-╚═════《 ⏳ 》═════╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>🌟 Thank you for your registration! 🌟</b>
 
@@ -745,9 +672,9 @@ def send_payment_details(message, amount):
     }
 
     payment_msg = f"""
-╔═══《 💳 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║   Deposit   ║
-╚═══《 💫 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>💰 Amount Due:</b>
 ┌─────────────────┐
@@ -787,7 +714,7 @@ def handle_deposit_screenshot(message):
         deposit_amount = user_states[chat_id].get('deposit_amount', 0)
         birr_amount = int(deposit_amount * 160)
 
-        session =get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         pending_deposit = PendingDeposit(
@@ -804,9 +731,9 @@ def handle_deposit_screenshot(message):
         )
 
         admin_msg = f"""
-╔═══《 🔔 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ New Deposit ║
-╚═══《 💫 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 👤 <b>User Details:</b>
 ┌─────────────────┐
@@ -832,9 +759,9 @@ def handle_deposit_screenshot(message):
         bot.send_message(
             chat_id,
             f"""
-╔══════《 💰 》══════╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ ✨ DEPOSIT RECEIVED ✨ ║
-╚══════《 ⏳ 》══════╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>🌟 Thank you for your deposit! 🌟</b>
 
@@ -942,9 +869,9 @@ Click 💰 Deposit to add funds.
         bot.send_message(
             chat_id,
             """
-╔═════✨═════╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 📦 <b>NEW ORDER</b> 📦
-╚═════✨═════╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>🌟 Ready to shop on AliExpress? 🌟</b>
 
@@ -1035,9 +962,9 @@ def process_order_link(message):
         )
 
         admin_msg = f"""
-╔═══《 🔔 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ New Order! ║
-╚═══《 💫 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 👤 <b>Customer Details:</b>
 ┌─────────────────┐
@@ -1053,6 +980,7 @@ def process_order_link(message):
 │ 🛒 Order #: {new_order_number}
 └─────────────────┘
 
+
 🔗 <b>Product Link:</b>
 <code>{link}</code>
 
@@ -1065,9 +993,9 @@ def process_order_link(message):
         bot.send_message(
             chat_id,
             f"""
-✨✨✨✨✨✨✨✨✨
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
     💫 <b>ORDER RECEIVED!</b> 💫
-✨✨✨✨✨✨✨✨✨
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 🎉 <b>Order #{new_order_number} successfully placed!</b> 🎉
 
@@ -1091,121 +1019,6 @@ def process_order_link(message):
     except Exception as e:
         logger.error(f"Error processing order link: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
-def handle_order_admin_decision(call):
-    """Handle admin approval/rejection for orders"""
-    session = None
-    try:
-        action, order_id = call.data.split('_order_')
-        order_id = int(order_id)
-
-        session = get_session()
-        order = session.query(Order).filter_by(id=order_id).first()
-        if not order:
-            bot.answer_callback_query(call.id, "Order not found.")
-            return
-
-        user = session.query(User).filter_by(id=order.user_id).first()
-
-        if action == 'process':
-            # Update order status
-            order.status = 'Confirmed'
-            session.commit()
-
-            bot.send_message(
-                user.telegram_id,
-                f"""
-\u2705 <b>Order Confirmed!</b>
-
-\U0001F4E6 <b>Order #:</b> {order.order_number}
-\U0001F504 <b>Status:</b> Confirmed
-
-We'll process your order and update you when it ships.
-""",
-                parse_mode='HTML'
-            )
-
-            bot.edit_message_text(
-                "✅ Order processed!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        elif action == 'reject':
-            # Update order status
-            order.status = 'Rejected'
-            session.commit()
-
-            bot.send_message(
-                user.telegram_id,
-                f"""
-❌ <b>Order Rejected</b>
-
-\U0001F4E6 <b>Order #:</b> {order.order_number}
-\U0001F504 <b>Status:</b> Rejected
-
-Please contact support for more information.
-""",
-                parse_mode='HTML'
-            )
-
-            bot.edit_message_text(
-                f"❌ Order rejected!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        bot.answer_callback_query(call.id)
-
-    except Exception as e:
-        logger.error(f"Error in order admin decision: {e}")
-        bot.answer_callback_query(call.id, "Error processing decision.")
-    finally:
-        safe_close_session(session)
-
-@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
-def check_subscription(message):
-    """Check user subscription status"""
-    chat_id = message.chat.id
-    session = None
-    try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if user and user.subscription_date:
-            current_time = datetime.utcnow()
-            days_passed = (current_time - user.subscription_date).days
-            days_remaining = max(0, 30 - days_passed)
-
-            if days_remaining > 0:
-                status = f"✅ Active ({days_remaining} days remaining)"
-                renewal_date = (user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')
-            else:
-                status = "❌ Expired"
-                renewal_date = "Now - Please renew"
-
-            subscription_text = """
-\U0001F5D3️ <b>Subscription Status</b>
-
-Status: """ + status + """
-Next Payment: """ + renewal_date + """
-Monthly Fee: $1.00 (150 ETB)
-
-To renew your subscription, use /renewsub command.
-"""
-            bot.send_message(
-                chat_id,
-                subscription_text,
-                parse_mode='HTML'
-            )
-        else:
-            bot.send_message(chat_id, "Subscription information not available. Please contact support.")
-    except Exception as e:
-        logger.error(f"Error checking subscription: {e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
@@ -1419,9 +1232,9 @@ def process_order_tracking(message):
 def help_center(message):
     """Help center button"""
     help_msg = """
-╔═══《 ❓ 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(65039)}{chr(32)}{chr(65039)}{chr(32)}{chr(65039)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ Help Center ║
-╚═══《 💫 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 📱 <b>Contact Support</b>
 ┌─────────────────┐
@@ -1443,7 +1256,7 @@ def help_center(message):
 │ • Money: 💳 Balance
 └─────────────────┘
 
-✨ We're here to help!
+:✨ We're here to help!
 """
     bot.send_message(message.chat.id, help_msg, parse_mode='HTML')
 
@@ -1492,9 +1305,9 @@ def handle_order_admin_decision(message):
             bot.send_message(
                 customer.telegram_id,
                 f"""
-╔═══《 📦 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128373)}{chr(32)}{chr(128373)}{chr(32)}{chr(128373)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ Order Update ║
-╚═══《 🔔 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>Order #{order.order_number}</b>
 Status: <b>{new_status.upper()}</b>
@@ -1542,9 +1355,9 @@ def check_subscription_status():
                             bot.send_message(
                                 user.telegram_id,
                                 """
-╔═══《 ⚠️ 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ SUBSCRIPTION ║
-╚═══《 📅 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>Your subscription has expired!</b>
 
@@ -1560,9 +1373,9 @@ Use the 💳 <b>Subscription</b> menu to renew.
                             bot.send_message(
                                 user.telegram_id,
                                 f"""
-╔═══《 🔔 》═══╗
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 ║ REMINDER ║
-╚═══《 📅 》═══╝
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>Subscription ending soon!</b>
 
@@ -1597,15 +1410,30 @@ def run_subscription_checker():
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
 
-if __name__ == "__main__":
-    logger.info("🤖 Starting bot...")
+def main():
+    """Main function to start the bot"""
+    logger.info("🚀 Starting bot in polling mode...")
+
+    # Delete any existing webhook
     try:
-        run_bot()
-    except KeyboardInterrupt:
-        logger.info("👋 Shutting down gracefully...")
+        bot.delete_webhook()
+        logger.info("✅ Webhook cleared")
     except Exception as e:
-        logger.error(f"❌ Fatal error: {e}")
-        logger.error(traceback.format_exc())
-    finally:
-        if 'session' in locals():
-            safe_close_session(session)
+        logger.error(f"Error clearing webhook: {e}")
+
+    # Start polling with recovery
+    while not shutdown_requested:
+        try:
+            logger.info("Starting polling...")
+            bot.polling(none_stop=True, timeout=60, interval=1)
+        except Exception as e:
+            if shutdown_requested:
+                break
+            logger.error(f"Polling error: {e}")
+            logger.info("Restarting in 5 seconds...")
+            time.sleep(5)
+
+    logger.info("Bot shutdown complete")
+
+if __name__ == "__main__":
+    main()
