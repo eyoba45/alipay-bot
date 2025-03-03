@@ -1025,7 +1025,8 @@ def handle_deposit_admin_decision(call):
     session = None
     try:
         parts = call.data.split('_')
-        action = parts[1]
+        action = parts[0]  # Now "approve" or "reject"
+        deposit_marker = parts[1]  # This will be "deposit"
         chat_id = int(parts[2])
         amount = float(parts[3])
         
@@ -1046,7 +1047,7 @@ def handle_deposit_admin_decision(call):
             logger.warning(f"No pending deposit found for user {chat_id} with amount ${amount}")
             return
             
-        if action == 'deposit':
+        if action == 'approve':
             # Add amount to user balance
             user.balance += amount
             pending_deposit.status = 'Approved'
