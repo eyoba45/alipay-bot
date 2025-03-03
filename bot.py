@@ -6,6 +6,7 @@ import time
 import traceback
 import signal
 import threading
+import fcntl
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database import init_db, get_session, safe_close_session
 from models import User, Order, PendingApproval, PendingDeposit
@@ -44,6 +45,176 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
+
+class SingleInstanceLock:
+    def __init__(self, lockfile):
+        self.lockfile = lockfile
+        self.lockfd = None
+
+    def acquire(self):
+        try:
+            self.lockfd = open(self.lockfile, 'w')
+            fcntl.flock(self.lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.lockfd.write(str(os.getpid()))
+            self.lockfd.flush()
+            return True
+        except (IOError, OSError):
+            if self.lockfd:
+                self.lockfd.close()
+                self.lockfd = None
+            return False
+
+    def release(self):
+        if self.lockfd:
+            try:
+                fcntl.flock(self.lockfd, fcntl.LOCK_UN)
+                self.lockfd.close()
+                os.unlink(self.lockfile)
+            except (IOError, OSError):
+                pass
+            self.lockfd = None
+
+class KeepAliveThread(threading.Thread):
+    """Thread to maintain bot connection and verify its health"""
+    def __init__(self, bot_instance):
+        super().__init__(daemon=True)
+        self.bot = bot_instance
+        self.running = True
+        self.last_check = time.time()
+
+    def run(self):
+        while self.running:
+            try:
+                # Test bot connection
+                bot_info = self.bot.get_me()
+                logger.info(f"✅ Keep-alive check passed - Connected as @{bot_info.username}")
+
+                # Test database connection
+                session = get_session()
+                from sqlalchemy import text
+                session.execute(text("SELECT 1"))
+                session.close()
+                logger.info("✅ Database connection verified")
+
+                self.last_check = time.time()
+            except Exception as e:
+                logger.error(f"❌ Keep-alive check failed: {e}")
+
+            time.sleep(30)  # Check every 30 seconds
+
+    def stop(self):
+        self.running = False
+
+def run_bot():
+    """Run bot with automatic recovery"""
+    retry_count = 0
+    start_time = time.time()
+    last_success = time.time()
+
+    # Create instance lock
+    lock = SingleInstanceLock('bot_instance.lock')
+    if not lock.acquire():
+        logger.error("Another instance is already running")
+        sys.exit(1)
+
+    try:
+        while True:
+            try:
+                logger.info("🚀 Starting bot...")
+
+                # Start keep-alive thread
+                keep_alive = KeepAliveThread(bot)
+                keep_alive.start()
+                logger.info("✅ Keep-alive thread started")
+
+                # Test connection
+                bot_info = bot.get_me()
+                logger.info(f"✅ Connected as @{bot_info.username}")
+
+                # Clear webhook with verification
+                try:
+                    bot.delete_webhook()
+                    # Verify webhook is cleared
+                    webhook_info = bot.get_webhook_info()
+                    if not webhook_info.url:
+                        logger.info("✅ Webhook cleared")
+                    else:
+                        logger.warning(f"⚠️ Webhook still set: {webhook_info.url}")
+                        # Try one more time
+                        bot.delete_webhook()
+                except Exception as e:
+                    logger.error(f"❌ Webhook error: {e}")
+
+                # Initialize database
+                try:
+                    init_db()
+                    logger.info("✅ Database initialized")
+
+                    # Test database connection
+                    session = get_session()
+                    from sqlalchemy import text
+                    session.execute(text("SELECT 1"))
+                    session.close()
+                    logger.info("✅ Database connection verified")
+                except Exception as e:
+                    logger.error(f"❌ Database error: {e}")
+                    raise
+
+                # Log every minute to show bot is alive
+                def send_heartbeat():
+                    while not shutdown_requested:
+                        try:
+                            logger.info("💓 Bot process is running...")
+                            # Verify bot connection is still active
+                            bot_info = bot.get_me()
+                            logger.info(f"✅ Still connected as @{bot_info.username}")
+                            time.sleep(60)
+                        except Exception as e:
+                            if not shutdown_requested:
+                                logger.error(f"❌ Bot connection error in heartbeat: {e}")
+                            break
+
+                # Start heartbeat in separate thread
+                heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
+                heartbeat_thread.start()
+
+                logger.info("🤖 Starting message polling...")
+                bot.polling(
+                    none_stop=True,
+                    interval=1,
+                    timeout=60,
+                    long_polling_timeout=70,
+                    logger_level=logging.INFO
+                )
+            except Exception as e:
+                # Stop keep-alive thread on error
+                if 'keep_alive' in locals():
+                    keep_alive.stop()
+                    keep_alive.join(timeout=5)
+
+                retry_count += 1
+                logger.error(f"❌ Bot error (attempt {retry_count}): {traceback.format_exc()}")
+
+                # Reset retry count after successful runtime
+                if time.time() - last_success > 3600:  # 1 hour
+                    retry_count = 0
+                    start_time = time.time()
+                    last_success = time.time()
+
+                if not shutdown_requested:
+                    logger.info("⏳ Waiting 5 seconds before restart...")
+                    time.sleep(5)
+                else:
+                    break
+
+    finally:
+        # Ensure keep-alive thread is stopped
+        if 'keep_alive' in locals():
+            keep_alive.stop()
+            keep_alive.join(timeout=5)
+
+        lock.release()
+        logger.info("🔓 Released instance lock")
 
 # Get bot token from environment
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -767,7 +938,7 @@ def handle_deposit_screenshot(message):
 
 <b>💸 Deposit Information:</b>
 ┏━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 💵 Amount: <code>${deposit_amount:,.2f}</code>
+┃ 💵 Amount: `$ {deposit_amount:,.2f}
 ┃ 🇪🇹 ETB: <code>{birr_amount:,}</code> birr
 ┃ 📤 Screenshot: <b>✅ Received</b>
 ┃ 🔄 Status: <b>⏳ Processing</b>
@@ -1476,7 +1647,8 @@ def run_subscription_checker():
 
 # Start the subscription checker in the run_bot function
 
-        logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
+
+logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
         return
 
     try:
@@ -1659,7 +1831,7 @@ def handle_subscription_screenshot(message):
             """
 ╔══════《 💰 》══════╗
 ║ ✨ PAYMENT RECEIVED ✨ ║
-╚══════《 ⏳ 》══════╝
+╚══════《⏳ 》══════╝
 
 <b>🌟 Thank you for your subscription payment! 🌟</b>
 
@@ -1868,170 +2040,132 @@ def handle_custom_deposit_amount(message):
 
 
 def run_bot():
-    """Run bot with enhanced resilience and recovery"""
-    global shutdown_requested
+    """Run bot with automatic recovery"""
     retry_count = 0
     start_time = time.time()
     last_success = time.time()
-    max_quick_retries = 5
 
-    # Track active handlers for improved reliability
-    active_handlers = {}
+    # Create instance lock
+    lock = SingleInstanceLock('bot_instance.lock')
+    if not lock.acquire():
+        logger.error("Another instance is already running")
+        sys.exit(1)
 
-    while not shutdown_requested:
-        try:
-            logger.info("🚀 Starting bot...")
-
-            # Aggressive webhook cleanupto prevent conflicts
-            for cleanup_attempt in range(3):
-                try:
-                    bot.delete_webhook(drop_pending_updates=True)
-                    logger.info("✅ Webhook cleared with pending updates dropped")
-                    break
-                except Exception as e:
-                    logger.error(f"❌ Webhook cleanup error (attempt {cleanup_attempt+1}): {e}")
-                    time.sleep(2)
-
-            # Test connection with retries
-            connection_success = False
-            for attempt in range(3):
-                try:
-                    bot_info = bot.get_me()
-                    logger.info(f"✅ Connected as @{bot_info.username}")
-                    connection_success = True
-                    break
-                except Exception as e:
-                    logger.error(f"❌ Connection test error (attempt {attempt+1}): {e}")
-                    time.sleep(2)
-
-            if not connection_success:
-                logger.error("❌ Failed to establish Telegram connection after multiple attempts")
-                raise Exception("Telegram API connection failed")
-
-            # Initialize database with validation
+    try:
+        while True:
             try:
-                init_db()
-                logger.info("✅ Database initialized")
+                logger.info("🚀 Starting bot...")
 
-                # Comprehensive database validation
-                from sqlalchemy import text, inspect
-                from database import engine
-                session = get_session()
-                session.execute(text("SELECT 1"))
+                # Start keep-alive thread
+                keep_alive = KeepAliveThread(bot)
+                keep_alive.start()
+                logger.info("✅ Keep-alive thread started")
 
-                # Check all expected tables exist
-                inspector = inspect(engine)
-                required_tables = ['users', 'orders', 'pending_approvals', 'pending_deposits']
-                existing_tables = inspector.get_table_names()
+                # Test connection
+                bot_info = bot.get_me()
+                logger.info(f"✅ Connected as @{bot_info.username}")
 
-                missing_tables = [table for table in required_tables if table not in existing_tables]
-                if missing_tables:
-                    logger.warning(f"⚠️ Missing tables in database: {missing_tables}")
-                    # Consider auto-fixing here if needed
-
-                session.close()
-                logger.info("✅ Database connection and schema verified")
-            except Exception as e:
-                logger.error(f"❌ Database initialization error: {e}")
-                logger.error(traceback.format_exc())
-                raise
-
-            # Enhanced heartbeat with connection testing
-            def send_heartbeat():
-                heartbeat_interval = 30  # seconds
-                connection_failures = 0
-                max_failures = 5
-
-                while True:
-                    try:
-                        logger.info("💓 Bot process is running...")
-
-                        # Test database connection
-                        try:
-                            session = get_session()
-                            session.execute(text("SELECT 1"))
-                            session.close()
-                        except Exception as db_error:
-                            logger.error(f"❌ Database connection error in heartbeat: {db_error}")
-
-                        # Verify bot connection is still active
-                        bot_info = bot.get_me()
-                        logger.info(f"✅ Connection verified as @{bot_info.username}")
-                        connection_failures = 0  # Reset failure counter on success
-
-                        # Track handler responsiveness metrics here if needed
-                        # This could be expanded to detect slow handlers
-
-                        time.sleep(heartbeat_interval)
-                    except Exception as e:
-                        connection_failures += 1
-                        logger.error(f"❌ Bot connection error in heartbeat ({connection_failures}/{max_failures}): {e}")
-
-                        if connection_failures >= max_failures:
-                            logger.critical("🚨 Multiple connection failures detected, forcing bot restart")
-                            # This will exit this thread and allow main thread to restart bot
-                            return
-
-                        time.sleep(5)  # Shorter sleep on failure
-
-            # Start enhanced heartbeat in separate thread
-            import threading
-            heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
-            heartbeat_thread.start()
-
-            # Start subscription checker in separate thread with error handling
-            def subscription_checker_wrapper():
+                # Clear webhook with verification
                 try:
-                    run_subscription_checker()
+                    bot.delete_webhook()
+                    # Verify webhook is cleared
+                    webhook_info = bot.get_webhook_info()
+                    if not webhook_info.url:
+                        logger.info("✅ Webhook cleared")
+                    else:
+                        logger.warning(f"⚠️ Webhook still set: {webhook_info.url}")
+                        # Try one more time
+                        bot.delete_webhook()
                 except Exception as e:
-                    logger.error(f"Subscription checker error: {e}")
-                    logger.error(traceback.format_exc())
+                    logger.error(f"❌ Webhook error: {e}")
 
-            subscription_thread = threading.Thread(target=subscription_checker_wrapper, daemon=True)
-            subscription_thread.start()
-            logger.info("🔄 Subscription checker started")
+                # Initialize database
+                try:
+                    init_db()
+                    logger.info("✅ Database initialized")
 
-            # Use optimized polling parameters
-            logger.info("🤖 Starting infinity polling with optimized parameters...")
-            bot.infinity_polling(
-                timeout=30,               # Reduced timeout for faster error detection
-                long_polling_timeout=45,  # Slightly increased to reduce API calls but still responsive
-                allowed_updates=[         # Only get updates we actually handle
-                    "message", 
-                    "edited_message", 
-                    "callback_query"
-                ],
-                logger_level=logging.INFO,
-                skip_pending=True         # Skip pending updates for clean restart
-            )
+                    # Test database connection
+                    session = get_session()
+                    from sqlalchemy import text
+                    session.execute(text("SELECT 1"))
+                    session.close()
+                    logger.info("✅ Database connection verified")
+                except Exception as e:
+                    logger.error(f"❌ Database error: {e}")
+                    raise
 
-            # If we reach here, polling has ended (should not happen with infinity_polling)
-            logger.warning("⚠️ Polling loop exited unexpectedly")
+                # Log every minute to show bot is alive
+                def send_heartbeat():
+                    while not shutdown_requested:
+                        try:
+                            logger.info("💓 Bot process is running...")
+                            # Verify bot connection is still active
+                            bot_info = bot.get_me()
+                            logger.info(f"✅ Still connected as @{bot_info.username}")
+                            time.sleep(60)
+                        except Exception as e:
+                            if not shutdown_requested:
+                                logger.error(f"❌ Bot connection error in heartbeat: {e}")
+                            break
 
-        except Exception as e:
-            retry_count += 1
-            logger.error(f"❌ Bot error (attempt {retry_count}): {traceback.format_exc()}")
+                # Start heartbeat in separate thread
+                heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
+                heartbeat_thread.start()
 
-            # Exponential backoff for retries to prevent API rate limiting
-            if retry_count <= max_quick_retries:
-                # Quick retries with short delay for temporary issues
-                wait_time = 3
-            else:
-                # Exponential backoff for persistent issues, max 60 seconds
-                wait_time = min(60, 5 * (2 ** min(retry_count - max_quick_retries, 5)))
+                logger.info("🤖 Starting message polling...")
+                bot.polling(
+                    none_stop=True,
+                    interval=1,
+                    timeout=60,
+                    long_polling_timeout=70,
+                    logger_level=logging.INFO
+                )
+            except Exception as e:
+                # Stop keep-alive thread on error
+                if 'keep_alive' in locals():
+                    keep_alive.stop()
+                    keep_alive.join(timeout=5)
 
-            # Reset retry count after successful runtime
-            if time.time() - last_success > 3600:  # 1 hour
-                retry_count = 0
-                start_time = time.time()
-                last_success = time.time()
+                retry_count += 1
+                logger.error(f"❌ Bot error (attempt {retry_count}): {traceback.format_exc()}")
 
-            logger.info(f"⏳ Waiting {wait_time} seconds before restart...")
-            time.sleep(wait_time)
+                # Reset retry count after successful runtime
+                if time.time() - last_success > 3600:  # 1 hour
+                    retry_count = 0
+                    start_time = time.time()
+                    last_success = time.time()
+
+                if not shutdown_requested:
+                    logger.info("⏳ Waiting 5 seconds before restart...")
+                    time.sleep(5)
+                else:
+                    break
+
+    finally:
+        # Ensure keep-alive thread is stopped
+        if 'keep_alive' in locals():
+            keep_alive.stop()
+            keep_alive.join(timeout=5)
+
+        lock.release()
+        logger.info("🔓 Released instance lock")
 
 if __name__ == "__main__":
     logger.info("🤖 Bot initializing...")
     try:
+        # First clean up any stale locks
+        if os.path.exists('bot_instance.lock'):
+            try:
+                os.remove('bot_instance.lock')
+                logger.info("✅ Removed stale lock file")
+            except Exception as e:
+                logger.error(f"❌ Error removing stale lock: {e}")
+
+        subscription_checker_thread = threading.Thread(target=run_subscription_checker, daemon=True)
+        subscription_checker_thread.start()
+        logger.info("✅ Subscription checker thread started")
+
+
         run_bot()
     except KeyboardInterrupt:
         logger.info("👋 Bot shutting down...")
