@@ -48,17 +48,19 @@ def verify_keep_alive(retries=5, delay=1):
     logger.info("Verifying keep-alive server...")
     for attempt in range(retries):
         try:
-            response = requests.get('http://127.0.0.1:8080/ping', timeout=5)
+            logger.debug(f"Verification attempt {attempt + 1}")
+            response = requests.get('http://127.0.0.1:5000/ping', timeout=5)
             if response.status_code == 200 and response.text == "pong":
                 logger.info("✅ Keep-alive server verified")
                 return True
-            logger.warning(f"Server responded with status {response.status_code}")
+            logger.warning(f"Server responded with unexpected status {response.status_code}: {response.text}")
         except requests.ConnectionError as e:
-            logger.warning(f"Connection error (attempt {attempt + 1}/{retries}): {e}")
+            logger.warning(f"Connection error (attempt {attempt + 1}/{retries}): {str(e)}")
         except requests.Timeout as e:
-            logger.warning(f"Timeout error (attempt {attempt + 1}/{retries}): {e}")
+            logger.warning(f"Timeout error (attempt {attempt + 1}/{retries}): {str(e)}")
         except Exception as e:
-            logger.warning(f"Unexpected error (attempt {attempt + 1}/{retries}): {e}")
+            logger.warning(f"Unexpected error (attempt {attempt + 1}/{retries}): {str(e)}")
+            logger.error(traceback.format_exc())
         time.sleep(delay)
     logger.error("❌ Keep-alive server verification failed")
     return False
