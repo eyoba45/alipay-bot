@@ -4,10 +4,38 @@ import sys
 import telebot
 import time
 import traceback
+import signal
+import threading
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database import init_db, get_session, safe_close_session
 from models import User, Order, PendingApproval, PendingDeposit
 from datetime import datetime
+
+# Add signal handling for graceful shutdown
+shutdown_requested = False
+bot_instance = None
+
+def signal_handler(sig, frame):
+    """Handle termination signals for graceful shutdown"""
+    global shutdown_requested, bot_instance
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received signal {sig}, shutting down gracefully...")
+    shutdown_requested = True
+    
+    # If bot instance exists, stop polling
+    if bot_instance:
+        try:
+            logger.info("Stopping bot polling...")
+            bot_instance.stop_polling()
+        except Exception as e:
+            logger.error(f"Error stopping bot: {e}")
+    
+    # Exit after a short delay to allow cleanup
+    threading.Timer(3.0, sys.exit, args=(0,)).start()
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Configure logging
 logging.basicConfig(
@@ -33,6 +61,7 @@ except (ValueError, TypeError):
 
 # Initialize bot with large timeout
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
+bot_instance = bot  # Store reference for signal handling
 
 # Cache for user data
 _user_cache = {}
@@ -235,7 +264,7 @@ def handle_payment_screenshot(message):
     chat_id = message.chat.id
     session = None
     registration_complete = False
-    
+
     # First, acknowledge receipt immediately to provide user feedback
     try:
         bot.send_chat_action(chat_id, 'typing')
@@ -246,14 +275,14 @@ def handle_payment_screenshot(message):
             return
     except Exception as e:
         logger.error(f"Initial acknowledgment error: {e}")
-    
+
     # Import performance monitor if available
     try:
         from monitor_performance import monitor
         has_monitor = True
     except ImportError:
         has_monitor = False
-    
+
     # Set a timeout for the entire operation
     registration_timeout = threading.Timer(
         30.0, 
@@ -263,7 +292,7 @@ def handle_payment_screenshot(message):
         )
     )
     registration_timeout.start()
-    
+
     try:
         # Get the highest quality photo
         file_id = message.photo[-1].file_id
@@ -281,7 +310,7 @@ def handle_payment_screenshot(message):
             try:
                 session = get_session()
                 existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
-                
+
                 if existing_pending:
                     logger.info(f"User {chat_id} already has a pending approval")
                     bot.send_message(
@@ -306,7 +335,7 @@ Please wait for admin approval. You'll be notified once your account is activate
                 if db_attempt == 2:  # Last attempt failed
                     raise
                 time.sleep(0.5 * (db_attempt + 1))  # Progressive delay
-                
+
         # Add retries for database operations with transactional safety
         max_retries = 5
         for retry_count in range(max_retries):
@@ -315,7 +344,7 @@ Please wait for admin approval. You'll be notified once your account is activate
                 if session:
                     safe_close_session(session)
                 session = get_session()
-                
+
                 # Create new pending approval
                 pending = PendingApproval(
                     telegram_id=chat_id,
@@ -416,7 +445,7 @@ Please wait for admin approval. You'll be notified once your account is activate
 """,
                 parse_mode='HTML'
             )
-            
+
         logger.info(f"Confirmation sent to user {chat_id}")
         registration_complete = True
 
@@ -425,7 +454,7 @@ Please wait for admin approval. You'll be notified once your account is activate
             del registration_data[chat_id]
         if chat_id in user_states:
             del user_states[chat_id]
-            
+
         # Record successful registration in performance monitor
         if has_monitor:
             monitor.record_registration("success")
@@ -433,11 +462,11 @@ Please wait for admin approval. You'll be notified once your account is activate
     except Exception as e:
         logger.error(f"Error handling payment: {e}")
         logger.error(traceback.format_exc())
-        
+
         # Record failed registration in performance monitor
         if has_monitor:
             monitor.record_registration("failure")
-            
+
         # Send a more helpful error message
         try:
             bot.send_message(
@@ -454,10 +483,10 @@ Don't worry! We've saved your information. Please try again in a few moments or 
     finally:
         # Cancel the timeout timer
         registration_timeout.cancel()
-        
+
         # Always close the session
         safe_close_session(session)
-        
+
         # Final registration completion check
         if not registration_complete and has_monitor:
             monitor.record_registration("timeout")
@@ -892,7 +921,7 @@ def process_order_link(message):
             logger.error(f"Error returning to main menu: {e}")
             if chat_id in user_states:
                 del user_states[chat_id]
-            bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
+            bot.send_message(chat_id, "🏠 Back to main menu",reply_markup=create_main_menu(is_registered=True))
             return
         finally:
             safe_close_session(session)
@@ -1057,7 +1086,7 @@ def check_subscription(message):
             current_time = datetime.utcnow()
             days_passed = (current_time - user.subscription_date).days
             days_remaining = max(0, 30 - days_passed)
-            
+
             if days_remaining > 0:
                 status = f"✅ Active ({days_remaining} days remaining)"
                 from datetime import timedelta
@@ -1065,7 +1094,7 @@ def check_subscription(message):
             else:
                 status = "❌ Expired"
                 renewal_date = "Now - Please renew"
-                
+
             subscription_text = """
 \U0001F4C5 <b>Subscription Status</b>
 
@@ -1142,23 +1171,6 @@ We'll process your order and update you when it ships.
 🔄 <b>Status:</b> Rejected
 
 Please contact support for more information.
-""",
-                parse_mode='HTML'
-            )
-
-            bot.edit_message_text(
-                f"❌ Order rejected!",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        bot.answer_callback_query(call.id)
-
-    except Exception as e:
-        logger.error(f"Error in order admin decision: {e}")
-        bot.answer_callback_query(call.id, "Error processing decision.")
-    finally:
-        safe_close_session(session)
 """,
                 parse_mode='HTML'
             )
@@ -1347,7 +1359,7 @@ def update_order_details(message):
     """Admin command to update order details and notify user"""
     chat_id = message.chat.id
     session = None
-    
+
     # Check if the sender is admin
     if not ADMIN_ID or int(chat_id) != int(ADMIN_ID):
         bot.send_message(chat_id, "❌ This command is for admin use only.")
@@ -1360,16 +1372,16 @@ def check_subscription_status():
         session = get_session()
         current_time = datetime.utcnow()
         from datetime import timedelta
-        
+
         # Find users with subscriptions over 30 days old
         users = session.query(User).all()
-        
+
         for user in users:
             if not user.subscription_date:
                 continue
-                
+
             days_passed = (current_time - user.subscription_date).days
-            
+
             if days_passed >= 30:
                 # Send notification about subscription renewal
                 try:
@@ -1377,7 +1389,7 @@ def check_subscription_status():
                     hours_since_last_update = 0
                     if hasattr(user, 'last_subscription_reminder'):
                         hours_since_last_update = (current_time - user.last_subscription_reminder).total_seconds() / 3600
-                    
+
                     # Only send reminder if we haven't sent one in the last 24 hours
                     if not hasattr(user, 'last_subscription_reminder') or hours_since_last_update >= 24:
                         payment_msg = f"""
@@ -1413,14 +1425,14 @@ Please use /renewsub command to renew your subscription.
 """
                         bot.send_message(user.telegram_id, payment_msg, parse_mode='HTML')
                         logger.info(f"Sent subscription renewal notification to user {user.telegram_id}")
-                        
+
                         # Update notification timestamp to prevent spam
                         user.last_subscription_reminder = current_time
                         session.commit()
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to send subscription notification to {user.telegram_id}: {e}")
-    
+
     except Exception as e:
         logger.error(f"Error checking subscription status: {e}")
         logger.error(traceback.format_exc())
@@ -1437,7 +1449,7 @@ def run_subscription_checker():
             logger.info("Completed subscription status check")
         except Exception as e:
             logger.error(f"Error in subscription checker thread: {e}")
-        
+
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
 
@@ -1445,11 +1457,11 @@ def run_subscription_checker():
 
         logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
         return
-    
+
     try:
         # Command format: /updateorder user_id order_number tracking_number order_id
         parts = message.text.split()
-        
+
         if len(parts) < 5:
             bot.send_message(
                 chat_id, 
@@ -1465,32 +1477,32 @@ Example:
                 parse_mode='HTML'
             )
             return
-        
+
         user_id = int(parts[1])
         order_number = int(parts[2])
         tracking_number = parts[3]
         order_id = parts[4]
-        
+
         session = get_session()
-        
+
         # Get the user
         user = session.query(User).filter_by(telegram_id=user_id).first()
         if not user:
             bot.send_message(chat_id, f"❌ User with ID {user_id} not found.")
             return
-            
+
         # Get the order
         order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
         if not order:
             bot.send_message(chat_id, f"❌ Order #{order_number} for user {user_id} not found.")
             return
-            
+
         # Update order details
         order.tracking_number = tracking_number
         order.order_id = order_id
         order.status = 'Shipped'
         session.commit()
-        
+
         # Send notification to user
         user_notification = f"""
 ✅ <b>Order Shipped!</b>
@@ -1509,7 +1521,7 @@ https://global.cainiao.com/detail.htm?mailNoList={tracking_number}
 Thank you for shopping with AliPay_ETH!
 """
         bot.send_message(user_id, user_notification, parse_mode='HTML')
-        
+
         # Confirm to admin
         bot.send_message(
             chat_id, 
@@ -1524,7 +1536,7 @@ User <b>{user.name}</b> ({user_id}) has been notified about:
 """, 
             parse_mode='HTML'
         )
-        
+
     except ValueError as e:
         bot.send_message(chat_id, f"❌ Invalid input. Please check user ID and order number are numeric.")
     except Exception as e:
@@ -1538,12 +1550,12 @@ User <b>{user.name}</b> ({user_id}) has been notified about:
 def renew_subscription(message):
     """Command to manually renew subscription"""
     chat_id = message.chat.id
-    
+
     # Set state for waiting for screenshot
     user_states[chat_id] = {
         'state': 'waiting_for_subscription_screenshot',
     }
-    
+
     payment_msg = f"""
 ╔═══《 💳 》═══╗
 ║   SUBSCRIPTION   ║
@@ -1584,21 +1596,21 @@ def handle_subscription_screenshot(message):
     session = None
     try:
         file_id = message.photo[-1].file_id
-        
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.send_message(chat_id, "User not found. Please register first.")
             return
-            
+
         # Admin markup for approval/rejection
         admin_markup = InlineKeyboardMarkup()
         admin_markup.row(
             InlineKeyboardButton("✅ Approve Sub", callback_data=f"approve_sub_{chat_id}"),
             InlineKeyboardButton("❌ Reject Sub", callback_data=f"reject_sub_{chat_id}")
         )
-        
+
         # Admin notification
         admin_msg = f"""
 ╔═══《 🔔 》═══╗
@@ -1619,7 +1631,7 @@ def handle_subscription_screenshot(message):
         if ADMIN_ID:
             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
             bot.send_photo(ADMIN_ID, file_id, caption="📸 Subscription Payment Screenshot")
-            
+
         # User confirmation
         bot.send_message(
             chat_id,
@@ -1642,11 +1654,11 @@ def handle_subscription_screenshot(message):
 """,
             parse_mode='HTML'
         )
-        
+
         # Clear state
         if chat_id in user_states:
             del user_states[chat_id]
-            
+
     except Exception as e:
         logger.error(f"Error processing subscription payment: {e}")
         logger.error(traceback.format_exc())
@@ -1662,19 +1674,19 @@ def handle_subscription_admin_decision(call):
         parts = call.data.split('_')
         action = parts[0]
         chat_id = int(parts[2])
-        
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.answer_callback_query(call.id, "User not found")
             return
-            
+
         if action == 'approve':
             # Update subscription date
             user.subscription_date = datetime.utcnow()
             session.commit()
-            
+
             # Notify user
             bot.send_message(
                 chat_id,
@@ -1691,27 +1703,27 @@ def handle_subscription_admin_decision(call):
 """,
                 parse_mode='HTML'
             )
-            
+
             # Update admin message
             bot.edit_message_text(
                 f"✅ Subscription renewed for {user.name}!",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
-            
+
         elif action == 'reject':
             bot.send_message(
                 chat_id,
                 "❌ Subscription payment rejected. Please try again with a clearer payment screenshot.",
                 parse_mode='HTML'
             )
-            
+
             bot.edit_message_text(
                 f"❌ Subscription renewal rejected for {user.name}!",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
-            
+
         bot.answer_callback_query(call.id, text="Processed successfully")
     except Exception as e:
         logger.error(f"Error in subscription admin decision: {e}")
@@ -1719,7 +1731,7 @@ def handle_subscription_admin_decision(call):
         bot.answer_callback_query(call.id, "Error processing decision")
     finally:
         safe_close_session(session)
-        
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
 def handle_deposit_admin_decision(call):
     """Handle admin approval/rejection for deposits"""
@@ -1836,19 +1848,20 @@ def handle_custom_deposit_amount(message):
 
 def run_bot():
     """Run bot with enhanced resilience and recovery"""
+    global shutdown_requested
     retry_count = 0
     start_time = time.time()
     last_success = time.time()
     max_quick_retries = 5
-    
+
     # Track active handlers for improved reliability
     active_handlers = {}
-    
-    while True:
+
+    while not shutdown_requested:
         try:
             logger.info("🚀 Starting bot...")
 
-            # Aggressive webhook cleanup to prevent conflicts
+            # Aggressive webhook cleanupto prevent conflicts
             for cleanup_attempt in range(3):
                 try:
                     bot.delete_webhook(drop_pending_updates=True)
@@ -1869,7 +1882,7 @@ def run_bot():
                 except Exception as e:
                     logger.error(f"❌ Connection test error (attempt {attempt+1}): {e}")
                     time.sleep(2)
-            
+
             if not connection_success:
                 logger.error("❌ Failed to establish Telegram connection after multiple attempts")
                 raise Exception("Telegram API connection failed")
@@ -1883,17 +1896,17 @@ def run_bot():
                 from sqlalchemy import text, inspect
                 session = get_session()
                 session.execute(text("SELECT 1"))
-                
+
                 # Check all expected tables exist
                 inspector = inspect(engine)
                 required_tables = ['users', 'orders', 'pending_approvals', 'pending_deposits']
                 existing_tables = inspector.get_table_names()
-                
+
                 missing_tables = [table for table in required_tables if table not in existing_tables]
                 if missing_tables:
                     logger.warning(f"⚠️ Missing tables in database: {missing_tables}")
                     # Consider auto-fixing here if needed
-                
+
                 session.close()
                 logger.info("✅ Database connection and schema verified")
             except Exception as e:
@@ -1906,11 +1919,11 @@ def run_bot():
                 heartbeat_interval = 30  # seconds
                 connection_failures = 0
                 max_failures = 5
-                
+
                 while True:
                     try:
                         logger.info("💓 Bot process is running...")
-                        
+
                         # Test database connection
                         try:
                             session = get_session()
@@ -1918,32 +1931,32 @@ def run_bot():
                             session.close()
                         except Exception as db_error:
                             logger.error(f"❌ Database connection error in heartbeat: {db_error}")
-                        
+
                         # Verify bot connection is still active
                         bot_info = bot.get_me()
                         logger.info(f"✅ Connection verified as @{bot_info.username}")
                         connection_failures = 0  # Reset failure counter on success
-                        
+
                         # Track handler responsiveness metrics here if needed
                         # This could be expanded to detect slow handlers
-                        
+
                         time.sleep(heartbeat_interval)
                     except Exception as e:
                         connection_failures += 1
                         logger.error(f"❌ Bot connection error in heartbeat ({connection_failures}/{max_failures}): {e}")
-                        
+
                         if connection_failures >= max_failures:
                             logger.critical("🚨 Multiple connection failures detected, forcing bot restart")
                             # This will exit this thread and allow main thread to restart bot
                             return
-                        
+
                         time.sleep(5)  # Shorter sleep on failure
 
             # Start enhanced heartbeat in separate thread
             import threading
             heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
             heartbeat_thread.start()
-            
+
             # Start subscription checker in separate thread with error handling
             def subscription_checker_wrapper():
                 try:
@@ -1951,7 +1964,7 @@ def run_bot():
                 except Exception as e:
                     logger.error(f"Subscription checker error: {e}")
                     logger.error(traceback.format_exc())
-            
+
             subscription_thread = threading.Thread(target=subscription_checker_wrapper, daemon=True)
             subscription_thread.start()
             logger.info("🔄 Subscription checker started")
@@ -1969,10 +1982,10 @@ def run_bot():
                 logger_level=logging.INFO,
                 skip_pending=True         # Skip pending updates for clean restart
             )
-            
+
             # If we reach here, polling has ended (should not happen with infinity_polling)
             logger.warning("⚠️ Polling loop exited unexpectedly")
-            
+
         except Exception as e:
             retry_count += 1
             logger.error(f"❌ Bot error (attempt {retry_count}): {traceback.format_exc()}")
@@ -1984,7 +1997,7 @@ def run_bot():
             else:
                 # Exponential backoff for persistent issues, max 60 seconds
                 wait_time = min(60, 5 * (2 ** min(retry_count - max_quick_retries, 5)))
-            
+
             # Reset retry count after successful runtime
             if time.time() - last_success > 3600:  # 1 hour
                 retry_count = 0
