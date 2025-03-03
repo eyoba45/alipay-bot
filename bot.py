@@ -52,7 +52,10 @@ def create_main_menu(is_registered=False):
             KeyboardButton('📊 Order Status'),
             KeyboardButton('🔍 Track Order')
         )
-        menu.add(KeyboardButton('💳 Balance'))
+        menu.add(
+            KeyboardButton('💳 Balance'),
+            KeyboardButton('📅 Subscription')
+        )
         menu.add(
             KeyboardButton('👥 Join Community'),
             KeyboardButton('❓ Help Center')
@@ -329,7 +332,8 @@ def handle_admin_decision(call):
                 name=pending.name,
                 phone=pending.phone,
                 address=pending.address,
-                balance=0.0
+                balance=0.0,
+                subscription_date=datetime.utcnow()
             )
             session.add(new_user)
             session.delete(pending)
@@ -885,6 +889,100 @@ We'll process your order and update you when it ships.
                 f"""
 ❌ <b>Order Rejected</b>
 
+
+@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
+def check_subscription(message):
+    """Check user subscription status"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+
+        if user and user.subscription_date:
+            current_time = datetime.utcnow()
+            days_passed = (current_time - user.subscription_date).days
+            days_remaining = max(0, 30 - days_passed)
+            
+            if days_remaining > 0:
+                status = f"✅ Active ({days_remaining} days remaining)"
+                from datetime import timedelta
+                renewal_date = (user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')
+            else:
+                status = "❌ Expired"
+                renewal_date = "Now - Please renew"
+                
+            bot.send_message(
+                chat_id,
+                f"""
+📅 <b>Subscription Status</b>
+
+Status: {status}
+Next Payment: {renewal_date}
+Monthly Fee: $1.00 (150 ETB)
+
+To renew your subscription, use /renewsub command.
+""",
+                parse_mode='HTML'
+            )
+        else:
+            bot.send_message(chat_id, "Subscription information not available. Please contact support.")
+    except Exception as e:
+        logger.error(f"Error checking subscription: {e}")
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
+def handle_order_admin_decision(call):
+    """Handle admin approval/rejection for orders"""
+    session = None
+    try:
+        action, order_id = call.data.split('_order_')
+        order_id = int(order_id)
+
+        session = get_session()
+        order = session.query(Order).filter_by(id=order_id).first()
+        if not order:
+            bot.answer_callback_query(call.id, "Order not found.")
+            return
+
+        user = session.query(User).filter_by(id=order.user_id).first()
+
+        if action == 'process':
+            # Update order status
+            order.status = 'Confirmed'
+            session.commit()
+
+            bot.send_message(
+                user.telegram_id,
+                f"""
+✅ <b>Order Confirmed!</b>
+
+📦 <b>Order #:</b> {order.order_number}
+🔄 <b>Status:</b> Confirmed
+
+We'll process your order and update you when it ships.
+""",
+                parse_mode='HTML'
+            )
+
+            bot.edit_message_text(
+                "✅ Order processed!",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+
+        elif action == 'reject':
+            # Update order status
+            order.status = 'Rejected'
+            session.commit()
+
+            bot.send_message(
+                user.telegram_id,
+                f"""
+❌ <b>Order Rejected</b>
+
 📦 <b>Order #:</b> {order.order_number}
 🔄 <b>Status:</b> Rejected
 
@@ -896,7 +994,24 @@ Please contact support for more information.
             bot.edit_message_text(
                 f"❌ Order rejected!",
                 chat_id=call.message.chat.id,
-                message_id=call.message.id
+                message_id=call.message.message_id
+            )
+
+        bot.answer_callback_query(call.id)
+
+    except Exception as e:
+        logger.error(f"Error in order admin decision: {e}")
+        bot.answer_callback_query(call.id, "Error processing decision.")
+    finally:
+        safe_close_session(session)
+""",
+                parse_mode='HTML'
+            )
+
+            bot.edit_message_text(
+                f"❌ Order rejected!",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
             )
 
         bot.answer_callback_query(call.id)
@@ -1079,8 +1194,101 @@ def update_order_details(message):
     session = None
     
     # Check if the sender is admin
-    if str(chat_id) != str(ADMIN_ID):
+    if not ADMIN_ID or int(chat_id) != int(ADMIN_ID):
         bot.send_message(chat_id, "❌ This command is for admin use only.")
+
+
+def check_subscription_status():
+    """Check for users with expired subscriptions and notify them"""
+    session = None
+    try:
+        session = get_session()
+        current_time = datetime.utcnow()
+        from datetime import timedelta
+        
+        # Find users with subscriptions over 30 days old
+        users = session.query(User).all()
+        
+        for user in users:
+            if not user.subscription_date:
+                continue
+                
+            days_passed = (current_time - user.subscription_date).days
+            
+            if days_passed >= 30:
+                # Send notification about subscription renewal
+                try:
+                    # Check if we already sent a notification recently (within last 24 hours)
+                    hours_since_last_update = 0
+                    if hasattr(user, 'last_subscription_reminder'):
+                        hours_since_last_update = (current_time - user.last_subscription_reminder).total_seconds() / 3600
+                    
+                    # Only send reminder if we haven't sent one in the last 24 hours
+                    if not hasattr(user, 'last_subscription_reminder') or hours_since_last_update >= 24:
+                        payment_msg = f"""
+╔═══《 🔔 》═══╗
+║ SUBSCRIPTION RENEWAL ║
+╚═══《 💫 》═══╝
+
+<b>Hello {user.name}!</b>
+
+Your monthly subscription has ended. To continue using AliPay_ETH services, please renew your subscription:
+
+<b>💰 Subscription Fee:</b>
+┌─────────────────┐
+│ 🇺🇸 <code>$1.00</code> USD
+│ 🇪🇹 <code>150</code> ETB
+└─────────────────┘
+
+<b>💳 Payment Methods:</b>
+
+🏦 <b>Commercial Bank (CBE)</b>
+┌─────────────────┐
+│ 💠 Account: <code>1000547241316</code>
+│ 👤 Name: <b>Eyob Mulugeta</b>
+└─────────────────┘
+
+📱 <b>TeleBirr</b>
+┌─────────────────┐
+│ 💠 Number: <code>0986693062</code>
+│ 👤 Name: <b>Eyob Mulugeta</b>
+└─────────────────┘
+
+Please use /renewsub command to renew your subscription.
+"""
+                        bot.send_message(user.telegram_id, payment_msg, parse_mode='HTML')
+                        logger.info(f"Sent subscription renewal notification to user {user.telegram_id}")
+                        
+                        # Update notification timestamp to prevent spam
+                        user.last_subscription_reminder = current_time
+                        session.commit()
+                    
+                except Exception as e:
+                    logger.error(f"Failed to send subscription notification to {user.telegram_id}: {e}")
+    
+    except Exception as e:
+        logger.error(f"Error checking subscription status: {e}")
+        logger.error(traceback.format_exc())
+    finally:
+        safe_close_session(session)
+
+# Run subscription check in a separate thread
+import threading
+def run_subscription_checker():
+    """Run the subscription checker periodically"""
+    while True:
+        try:
+            check_subscription_status()
+            logger.info("Completed subscription status check")
+        except Exception as e:
+            logger.error(f"Error in subscription checker thread: {e}")
+        
+        # Wait for 24 hours before checking again
+        time.sleep(24 * 60 * 60)
+
+# Start the subscription checker in the run_bot function
+
+        logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
         return
     
     try:
@@ -1171,6 +1379,192 @@ User <b>{user.name}</b> ({user_id}) has been notified about:
     finally:
         safe_close_session(session)
 
+@bot.message_handler(commands=['renewsub'])
+def renew_subscription(message):
+    """Command to manually renew subscription"""
+    chat_id = message.chat.id
+    
+    # Set state for waiting for screenshot
+    user_states[chat_id] = {
+        'state': 'waiting_for_subscription_screenshot',
+    }
+    
+    payment_msg = f"""
+╔═══《 💳 》═══╗
+║   SUBSCRIPTION   ║
+╚═══《 💫 》═══╝
+
+<b>💰 Monthly Fee:</b>
+┌─────────────────┐
+│ 🇺🇸 <code>$1.00</code> USD
+│ 🇪🇹 <code>150</code> ETB
+└─────────────────┘
+
+<b>💳 Payment Methods:</b>
+
+🏦 <b>Commercial Bank (CBE)</b>
+┌─────────────────┐
+│ 💠 Account: <code>1000547241316</code>
+│ 👤 Name: <b>Eyob Mulugeta</b>
+└─────────────────┘
+
+📱 <b>TeleBirr</b>
+┌─────────────────┐
+│ 💠 Number: <code>0986693062</code>
+│ 👤 Name: <b>Eyob Mulugeta</b>
+└─────────────────┘
+
+<b>📝 Instructions:</b>
+1️⃣ Choose payment method
+2️⃣ Send exact amount
+3️⃣ Take clear screenshot
+4️⃣ Send screenshot below ⬇️
+"""
+    bot.send_message(chat_id, payment_msg, parse_mode='HTML')
+
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_subscription_screenshot', content_types=['photo'])
+def handle_subscription_screenshot(message):
+    """Process subscription renewal screenshot"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        file_id = message.photo[-1].file_id
+        
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(chat_id, "User not found. Please register first.")
+            return
+            
+        # Admin markup for approval/rejection
+        admin_markup = InlineKeyboardMarkup()
+        admin_markup.row(
+            InlineKeyboardButton("✅ Approve Sub", callback_data=f"approve_sub_{chat_id}"),
+            InlineKeyboardButton("❌ Reject Sub", callback_data=f"reject_sub_{chat_id}")
+        )
+        
+        # Admin notification
+        admin_msg = f"""
+╔═══《 🔔 》═══╗
+║ Subscription Renewal ║
+╚═══《 💫 》═══╝
+
+👤 <b>User Details:</b>
+┌─────────────────┐
+│ Name: <b>{user.name}</b>
+│ ID: <code>{chat_id}</code>
+│ Phone: <code>{user.phone}</code>
+└─────────────────┘
+
+💰 <b>Amount:</b> $1.00 (150 ETB)
+⏰ <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+📸 Screenshot attached below
+"""
+        if ADMIN_ID:
+            bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
+            bot.send_photo(ADMIN_ID, file_id, caption="📸 Subscription Payment Screenshot")
+            
+        # User confirmation
+        bot.send_message(
+            chat_id,
+            """
+╔══════《 💰 》══════╗
+║ ✨ PAYMENT RECEIVED ✨ ║
+╚══════《 ⏳ 》══════╝
+
+<b>🌟 Thank you for your subscription payment! 🌟</b>
+
+<b>💸 Payment Information:</b>
+┏━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 💵 Amount: <code>$1.00</code>
+┃ 🇪🇹 ETB: <code>150</code> birr
+┃ 📤 Screenshot: <b>✅ Received</b>
+┃ 🔄 Status: <b>⏳ Processing</b>
+┗━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+<b>🚀 Your subscription will be renewed shortly!</b>
+""",
+            parse_mode='HTML'
+        )
+        
+        # Clear state
+        if chat_id in user_states:
+            del user_states[chat_id]
+            
+    except Exception as e:
+        logger.error(f"Error processing subscription payment: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_sub_', 'reject_sub_')))
+def handle_subscription_admin_decision(call):
+    """Handle admin approval/rejection for subscription payments"""
+    session = None
+    try:
+        parts = call.data.split('_')
+        action = parts[0]
+        chat_id = int(parts[2])
+        
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.answer_callback_query(call.id, "User not found")
+            return
+            
+        if action == 'approve':
+            # Update subscription date
+            user.subscription_date = datetime.utcnow()
+            session.commit()
+            
+            # Notify user
+            bot.send_message(
+                chat_id,
+                """
+╔══════《 💎 》══════╗
+║ ✅ SUBSCRIPTION RENEWED! ✅ ║
+╚══════《 💫 》══════╝
+
+<b>🎉 Your monthly subscription has been renewed!</b>
+
+<b>⏱️ Valid until:</b> 1 month from today
+
+<i>Thank you for continuing to use AliPay_ETH!</i>
+""",
+                parse_mode='HTML'
+            )
+            
+            # Update admin message
+            bot.edit_message_text(
+                f"✅ Subscription renewed for {user.name}!",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+            
+        elif action == 'reject':
+            bot.send_message(
+                chat_id,
+                "❌ Subscription payment rejected. Please try again with a clearer payment screenshot.",
+                parse_mode='HTML'
+            )
+            
+            bot.edit_message_text(
+                f"❌ Subscription renewal rejected for {user.name}!",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+            
+        bot.answer_callback_query(call.id, text="Processed successfully")
+    except Exception as e:
+        logger.error(f"Error in subscription admin decision: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing decision")
+    finally:
+        safe_close_session(session)
+        
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
 def handle_deposit_admin_decision(call):
     """Handle admin approval/rejection for deposits"""
@@ -1337,6 +1731,11 @@ def run_bot():
             import threading
             heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
             heartbeat_thread.start()
+            
+            # Start subscription checker in separate thread
+            subscription_thread = threading.Thread(target=run_subscription_checker, daemon=True)
+            subscription_thread.start()
+            logger.info("🔄 Subscription checker started")
 
             logger.info("🤖 Starting infinity polling...")
             bot.infinity_polling(
