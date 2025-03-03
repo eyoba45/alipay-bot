@@ -1,256 +1,130 @@
-
 #!/usr/bin/env python3
 """
-Script to clean Telegram bot locks (409 Conflict errors)
+Enhanced cleanup script to remove lock files and terminate stray processes
 """
 import os
+import signal
 import logging
 import sys
-import requests
+import psutil
 import time
+import subprocess
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+def find_bot_processes():
+    """Find all Python processes related to the bot"""
+    bot_processes = []
 
-if not TOKEN:
-    logger.error("❌ TELEGRAM_BOT_TOKEN not found!")
-    sys.exit(1)
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            # Check if this is a Python process
+            if proc.info['name'] == 'python' or proc.info['name'] == 'python3':
+                cmdline = proc.info['cmdline'] if proc.info['cmdline'] else []
 
-def clean_webhook():
-    """Delete any existing webhook"""
+                # Look for bot-related Python scripts
+                if any(script in ' '.join(cmdline) for script in ['bot.py', 'run_bot.py']):
+                    bot_processes.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+            continue
+
+    return bot_processes
+
+def kill_process_tree(pid, sig=signal.SIGTERM):
+    """Kill a process and all its children"""
     try:
-        url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=true"
-        response = requests.get(url)
-        if response.status_code == 200:
-            logger.info("✅ Webhook deleted successfully")
-            return True
-        else:
-            logger.error(f"❌ Failed to delete webhook: {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Error deleting webhook: {e}")
-        return False
+        parent = psutil.Process(pid)
+        children = parent.children(recursive=True)
 
-def get_updates_with_timeout():
-    """Get updates with timeout to clear queue"""
-    try:
-        url = f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset=-1&timeout=1&limit=1"
-        response = requests.get(url, timeout=2)
-        if response.status_code == 200:
-            logger.info("✅ GetUpdates called successfully")
-            return True
-        else:
-            logger.error(f"❌ Failed to get updates: {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Error getting updates: {e}")
-        return False
+        # Send signal to parent
+        parent.send_signal(sig)
 
-def main():
-    """Main function"""
-    logger.info("🧹 Starting cleanup process...")
-
-    # Delete webhook
-    if clean_webhook():
-        logger.info("✅ Webhook cleanup successful")
-    else:
-        logger.error("❌ Webhook cleanup failed")
-
-    # Wait a bit
-    time.sleep(1)
-
-    # Clear update queue
-    if get_updates_with_timeout():
-        logger.info("✅ Update queue cleared")
-    else:
-        logger.error("❌ Failed to clear update queue")
-
-    # Final confirmation
-    logger.info("✅ Cleanup process completed. Restart your bot now.")
-
-if __name__ == "__main__":
-    main()
-
-
-#!/usr/bin/env python3
-"""
-Clean locks and reset environment for bot deployment
-"""
-import os
-import sys
-import time
-import logging
-import subprocess
-import requests
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger(__name__)
-
-def cleanup_processes():
-    """Kill any existing bot processes"""
-    try:
-        logger.info("🔍 Checking for running bot processes...")
-        
-        # Use multiple commands to ensure thorough cleanup
-        cleanup_commands = [
-            "ps aux | grep 'python.*bot.py' | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true",
-            "pkill -9 -f 'python.*bot.py' || true",
-            "pkill -f 'telebot' || true"
-        ]
-        
-        for cmd in cleanup_commands:
+        # Send signal to children
+        for child in children:
             try:
-                result = subprocess.run(cmd, shell=True, check=False)
-                logger.warning(f"⚠️ Process cleanup returned non-zero exit code: {result.returncode}")
-            except Exception as e:
-                logger.error(f"❌ Error during process cleanup: {e}")
-        
-        # Clean up lock file if it exists
-        if os.path.exists("bot_instance.lock"):
+                child.send_signal(sig)
+            except psutil.NoSuchProcess:
+                pass
+
+        # Wait for processes to terminate
+        gone, alive = psutil.wait_procs(children + [parent], timeout=3)
+
+        # Force kill if still alive
+        if alive:
+            for p in alive:
+                try:
+                    p.kill()
+                except psutil.NoSuchProcess:
+                    pass
+
+        return len(gone) + len(alive)
+    except psutil.NoSuchProcess:
+        return 0
+
+def cleanup(force=False):
+    """Remove lock files and kill stray bot processes"""
+    logger.info("🧹 Running cleanup script...")
+
+    # First check for lock files
+    logger.info("Checking for lock files...")
+    lock_files = ["bot_runner.lock", "database_connections.lock"]
+    for lock_file in lock_files:
+        if os.path.exists(lock_file):
+            logger.info(f"Found lock file: {lock_file}")
+
+    # Kill any existing bot processes
+    logger.info("Terminating any existing bot processes...")
+    bot_processes = find_bot_processes()
+
+    if bot_processes:
+        logger.info(f"Found {len(bot_processes)} bot-related processes")
+
+        for proc in bot_processes:
             try:
-                os.remove("bot_instance.lock")
-                logger.info("✅ Removed existing lock file")
+                pid = proc.info['pid']
+                cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else 'Unknown'
+                logger.info(f"Terminating process: PID={pid}, Command={cmdline}")
+
+                killed = kill_process_tree(pid)
+                logger.info(f"Terminated {killed} processes in tree for PID {pid}")
+
             except Exception as e:
-                logger.error(f"❌ Error removing lock file: {e}")
-    
-    except Exception as e:
-        logger.error(f"❌ Error cleaning up processes: {e}")
-        return False
-    
+                logger.error(f"Error terminating process: {e}")
+    else:
+        logger.info("No bot processes found")
+
+    # Remove any Telegram bot lock files
+    logger.info("Removing any Telegram bot lock files...")
+    for lock_file in lock_files:
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+                logger.info(f"Removed lock file: {lock_file}")
+            except OSError as e:
+                logger.error(f"Error removing lock file {lock_file}: {e}")
+
+                # If force is true, try even harder to remove locks
+                if force:
+                    try:
+                        logger.warning(f"Forcefully removing lock file: {lock_file}")
+                        subprocess.run(['rm', '-f', lock_file], check=False)
+                    except Exception as e2:
+                        logger.error(f"Force removal failed: {e2}")
+
+    logger.info("✅ Cleanup completed")
     return True
 
-def clear_webhook():
-    """Clear Telegram webhook with verification"""
-    try:
-        logger.info("🔄 Clearing Telegram webhook...")
-        TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-        
-        if not TOKEN:
-            logger.error("❌ TELEGRAM_BOT_TOKEN not found in environment variables")
-            return False
-        
-        # First try - delete webhook
-        try:
-            delete_url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=true"
-            response = requests.get(delete_url, timeout=10)
-            
-            if response.status_code == 200 and response.json().get('ok'):
-                logger.info("✅ Successfully deleted webhook")
-            else:
-                logger.error(f"❌ Failed to delete webhook: {response.text}")
-                return False
-        except Exception as e:
-            logger.error(f"❌ Error deleting webhook: {e}")
-            return False
-        
-        # Second try - set empty webhook
-        try:
-            set_url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
-            response = requests.post(set_url, json={"url": ""}, timeout=10)
-            
-            if response.status_code == 200 and response.json().get('ok'):
-                logger.info("✅ Successfully reset webhook to empty")
-            else:
-                logger.error(f"❌ Failed to set empty webhook: {response.text}")
-                return False
-        except Exception as e:
-            logger.error(f"❌ Error setting empty webhook: {e}")
-            return False
-        
-        # Verify webhook status
-        try:
-            info_url = f"https://api.telegram.org/bot{TOKEN}/getWebhookInfo"
-            response = requests.get(info_url, timeout=10)
-            webhook_info = response.json()
-            logger.info(f"📊 Current webhook status: {webhook_info}")
-            
-            if response.status_code == 200 and not webhook_info.get('result', {}).get('url'):
-                logger.info("✅ Webhook cleared successfully.")
-                return True
-            else:
-                logger.warning(f"⚠️ Webhook may still be active: {webhook_info}")
-                return False
-        except Exception as e:
-            logger.error(f"❌ Error getting webhook info: {e}")
-            return False
-    
-    except Exception as e:
-        logger.error(f"❌ Error in clear_webhook: {e}")
-        return False
-
-def main():
-    """Main function"""
-    try:
-        print("🧹 Starting cleanup process...")
-        
-        # Clean up processes
-        cleanup_processes()
-        
-        # Clear webhook
-        if clear_webhook():
-            print("✅ Webhook cleared successfully.")
-        else:
-            print("⚠️ Issues clearing webhook.")
-        
-        print("✨ Environment is clean and ready to start a new bot instance")
-        return 0
-    
-    except Exception as e:
-        logger.error(f"❌ Fatal error in cleanup: {e}")
-        return 1
-
 if __name__ == "__main__":
-    sys.exit(main())
-#!/usr/bin/env python3
-"""
-Script to clean up stale lock files that might cause issues
-"""
-import os
-import logging
-import sys
-import time
-from datetime import datetime
+    # Check if force mode is requested
+    force_mode = len(sys.argv) > 1 and sys.argv[1] == '--force'
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger(__name__)
-
-def clean_lock_files():
-    """Find and clean up stale lock files"""
-    lock_files = [f for f in os.listdir('.') if f.endswith('.lock')]
-    
-    for lock_file in lock_files:
-        try:
-            # Check file age
-            file_stat = os.stat(lock_file)
-            file_age_seconds = time.time() - file_stat.st_mtime
-            
-            # If older than 10 minutes, consider it stale
-            if file_age_seconds > 600:
-                logger.warning(f"🧹 Removing stale lock file: {lock_file} (age: {file_age_seconds:.1f}s)")
-                os.remove(lock_file)
-            else:
-                logger.info(f"🔍 Recent lock file: {lock_file} (age: {file_age_seconds:.1f}s)")
-        except Exception as e:
-            logger.error(f"❌ Error processing lock file {lock_file}: {e}")
-
-if __name__ == "__main__":
-    logger.info("🔒 Starting lock file cleanup")
-    clean_lock_files()
-    logger.info("✅ Lock file cleanup completed")
+    success = cleanup(force=force_mode)
+    sys.exit(0 if success else 1)
