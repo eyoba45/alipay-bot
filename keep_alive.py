@@ -176,3 +176,101 @@ def main():
 
 if __name__ == "__main__":
     main()
+#!/usr/bin/env python3
+"""
+Keep-alive server for the Telegram bot to prevent sleeping
+"""
+import threading
+import logging
+import time
+import socket
+from flask import Flask, jsonify
+import os
+import psutil
+import json
+from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Suppress Flask's default logging
+flask_logger = logging.getLogger("werkzeug")
+flask_logger.setLevel(logging.WARNING)
+
+app = Flask(__name__)
+
+# Health metrics
+start_time = datetime.now()
+health_metrics = {
+    "uptime_seconds": 0,
+    "memory_usage_mb": 0,
+    "cpu_percent": 0,
+    "last_update": start_time.isoformat(),
+    "requests_served": 0,
+    "errors": 0
+}
+
+def update_health_metrics():
+    """Update system health metrics"""
+    try:
+        process = psutil.Process(os.getpid())
+        
+        # Update metrics
+        uptime = datetime.now() - start_time
+        health_metrics["uptime_seconds"] = uptime.total_seconds()
+        health_metrics["memory_usage_mb"] = process.memory_info().rss / 1024 / 1024
+        health_metrics["cpu_percent"] = process.cpu_percent(interval=0.1)
+        health_metrics["last_update"] = datetime.now().isoformat()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error updating health metrics: {e}")
+        health_metrics["errors"] += 1
+        return False
+
+@app.route('/')
+def home():
+    """Home route for basic ping"""
+    health_metrics["requests_served"] += 1
+    return "Bot is running!"
+
+@app.route('/health')
+def health():
+    """Health check endpoint with detailed metrics"""
+    update_health_metrics()
+    health_metrics["requests_served"] += 1
+    return jsonify(health_metrics)
+
+def start_keep_alive():
+    """Start the keep-alive server in a separate thread"""
+    port = int(os.environ.get('PORT', 8080))
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
+    logger.info(f"Keep-alive server started on port {port}")
+
+def keep_alive():
+    """Main keep-alive function to be called from the bot script"""
+    try:
+        # Start the Flask server
+        start_keep_alive()
+        
+        # Start periodic health check updates
+        def update_metrics_periodically():
+            while True:
+                update_health_metrics()
+                time.sleep(60)  # Update every minute
+                
+        threading.Thread(target=update_metrics_periodically, daemon=True).start()
+        logger.info("Started periodic health metrics updates")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error in keep_alive setup: {e}")
+        return False
+
+if __name__ == "__main__":
+    # Test the keep-alive server
+    keep_alive()
+    # Keep main thread alive
+    while True:
+        time.sleep(3600)
