@@ -1096,7 +1096,7 @@ def check_subscription(message):
                 renewal_date = "Now - Please renew"
 
             subscription_text = """
-🗓️ <b>Subscription Status</b>
+  <b>Subscription Status</b>
 
 Status: """ + status + """
 Next Payment: """ + renewal_date + """
