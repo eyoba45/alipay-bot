@@ -1097,7 +1097,7 @@ def check_subscription(message):
                 renewal_date = "Now - Please renew"
 
             subscription_text = """
-🗓️ <b>Subscription Status</b>
+\U0001F5D3️ <b>Subscription Status</b>
 
 Status: """ + status + """
 Next Payment: """ + renewal_date + """
@@ -1142,10 +1142,10 @@ def handle_order_admin_decision(call):
             bot.send_message(
                 user.telegram_id,
                 f"""
-✅ <b>Order Confirmed!</b>
+\u2705 <b>Order Confirmed!</b>
 
-📦 <b>Order #:</b> {order.order_number}
-🔄 <b>Status:</b> Confirmed
+\U0001F4E6 <b>Order #:</b> {order.order_number}
+\U0001F504 <b>Status:</b> Confirmed
 
 We'll process your order and update you when it ships.
 """,
@@ -1166,10 +1166,10 @@ We'll process your order and update you when it ships.
             bot.send_message(
                 user.telegram_id,
                 f"""
-❌ <b>Order Rejected</b>
+\u274C <b>Order Rejected</b>
 
-📦 <b>Order #:</b> {order.order_number}
-🔄 <b>Status:</b> Rejected
+\U0001F4E6 <b>Order #:</b> {order.order_number}
+\U0001F504 <b>Status:</b> Rejected
 
 Please contact support for more information.
 """,
