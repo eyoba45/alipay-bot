@@ -1314,3 +1314,102 @@ def update_order_details(call):
         bot.answer_callback_query(call.id, "Error updating order")
     finally:
         safe_close_session(session)
+
+@bot.message_handler(commands=['updateorder'])
+def update_order_details(message):
+    """Admin command to update order details and notify user"""
+    chat_id = message.chat.id
+    session = None
+    
+    # Check if the sender is admin
+    if str(chat_id) != str(ADMIN_ID):
+        bot.send_message(chat_id, "❌ This command is for admin use only.")
+        return
+    
+    try:
+        # Command format: /updateorder user_id order_number tracking_number order_id
+        parts = message.text.split()
+        
+        if len(parts) < 5:
+            bot.send_message(
+                chat_id, 
+                """
+❌ <b>Invalid format</b>
+
+Correct format:
+/updateorder [user_id] [order_number] [tracking_number] [order_id]
+
+Example:
+/updateorder 123456789 1 LY123456789CN ALI1234567890
+""", 
+                parse_mode='HTML'
+            )
+            return
+        
+        user_id = int(parts[1])
+        order_number = int(parts[2])
+        tracking_number = parts[3]
+        order_id = parts[4]
+        
+        session = get_session()
+        
+        # Get the user
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            bot.send_message(chat_id, f"❌ User with ID {user_id} not found.")
+            return
+            
+        # Get the order
+        order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
+        if not order:
+            bot.send_message(chat_id, f"❌ Order #{order_number} for user {user_id} not found.")
+            return
+            
+        # Update order details
+        order.tracking_number = tracking_number
+        order.order_id = order_id
+        order.status = 'Shipped'
+        session.commit()
+        
+        # Send notification to user
+        user_notification = f"""
+✅ <b>Order Shipped!</b>
+
+📦 <b>Order Details Updated:</b>
+┌─────────────────┐
+│ 📊 Order #: <b>{order_number}</b>
+│ 🆔 Order ID: <code>{order_id}</code>
+│ 📦 Tracking #: <code>{tracking_number}</code>
+│ 💰 Balance: $<code>{user.balance:.2f}</code>
+└─────────────────┘
+
+🔍 <b>Track your package:</b>
+https://global.cainiao.com/detail.htm?mailNoList={tracking_number}
+
+Thank you for shopping with AliPay_ETH!
+"""
+        bot.send_message(user_id, user_notification, parse_mode='HTML')
+        
+        # Confirm to admin
+        bot.send_message(
+            chat_id, 
+            f"""
+✅ <b>Order updated successfully!</b>
+
+User <b>{user.name}</b> ({user_id}) has been notified about:
+- Order #{order_number}
+- Tracking: {tracking_number}
+- Order ID: {order_id}
+- Balance: ${user.balance:.2f}
+""", 
+            parse_mode='HTML'
+        )
+        
+    except ValueError as e:
+        bot.send_message(chat_id, f"❌ Invalid input. Please check user ID and order number are numeric.")
+    except Exception as e:
+        logger.error(f"Error updating order: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(chat_id, f"❌ Error: {str(e)}")
+    finally:
+        safe_close_session(sessi
