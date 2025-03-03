@@ -1915,6 +1915,7 @@ def run_bot():
 
                 # Comprehensive database validation
                 from sqlalchemy import text, inspect
+                from database import engine
                 session = get_session()
                 session.execute(text("SELECT 1"))
 
