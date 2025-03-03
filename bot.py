@@ -1066,11 +1066,11 @@ def check_subscription(message):
                 status = "❌ Expired"
                 renewal_date = "Now - Please renew"
                 
-            subscription_text = f"""
+            subscription_text = """
 📅 <b>Subscription Status</b>
 
-Status: {status}
-Next Payment: {renewal_date}
+Status: """ + status + """
+Next Payment: """ + renewal_date + """
 Monthly Fee: $1.00 (150 ETB)
 
 To renew your subscription, use /renewsub command.
