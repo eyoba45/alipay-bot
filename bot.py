@@ -897,7 +897,6 @@ Press 'Back to Main Menu' to cancel your order.
 def process_order_link(message):
     """Process the order link"""
     chat_id = message.chat.id
-```python
     link = message.text.strip()
     session = None
 
@@ -1073,6 +1072,27 @@ We'll process your order and update you when it ships.
                 f"""
 ❌ <b>Order Rejected</b>
 
+\U0001F4E6 <b>Order #:</b> {order.order_number}
+\U0001F504 <b>Status:</b> Rejected
+
+Please contact support for more information.
+""",
+                parse_mode='HTML'
+            )
+
+            bot.edit_message_text(
+                f"❌ Order rejected!",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+
+        bot.answer_callback_query(call.id)
+
+    except Exception as e:
+        logger.error(f"Error in order admin decision: {e}")
+        bot.answer_callback_query(call.id, "Error processing decision.")
+    finally:
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
 def check_subscription(message):
