@@ -315,10 +315,8 @@ def handle_payment_screenshot(message):
                     logger.info(f"User {chat_id} already has a pending approval")
                     bot.send_message(
                         chat_id,
-                        """
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ ALREADY PENDING ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+                        f"""
+⚠️⚠️⚠️ ALREADY PENDING ⚠️⚠️⚠️
 
 <b>Your registration is already being processed!</b>
 
@@ -408,10 +406,8 @@ Please wait for admin approval. You'll be notified once your account is activate
         # Send confirmation to user - edit the previous message for faster response
         try:
             bot.edit_message_text(
-                """
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ ✨ RECEIVED! ✨ ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+                f"""
+📷📷📷 ✨ RECEIVED! ✨ 🕘🕘🕘
 
 <b>🌟 Thank you for your registration! 🌟</b>
 
@@ -491,7 +487,7 @@ Don't worry! We've saved your information. Please try again in a few moments or 
         if not registration_complete and has_monitor:
             monitor.record_registration("timeout")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_', 'reject_')) and not call.data.startswith(('approve_deposit_', 'reject_deposit_')) and not call.data.startswith(('approve_order_', 'reject_order_')))
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_', 'reject_')) and not call.data.startswith(('approve_deposit_', 'reject_deposit_', 'approve_order_', 'reject_order_')))
 def handle_admin_decision(call):
     """Handle admin approval/rejection for user registration"""
     session = None
@@ -726,7 +722,7 @@ def handle_deposit_screenshot(message):
 
         admin_markup = InlineKeyboardMarkup()
         admin_markup.row(
-            InlineKeyboardButton("✅Approve", callback_data=f"approve_deposit_{chat_id}_{deposit_amount}"),
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{chat_id}_{deposit_amount}"),
             InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{chat_id}_{deposit_amount}")
         )
 
@@ -1020,6 +1016,111 @@ def process_order_link(message):
         logger.error(f"Error processing order link: {e}")
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+def handle_deposit_admin_decision(call):
+    """Handle admin approval/rejection for deposits"""
+    session = None
+    try:
+        parts = call.data.split('_')
+        action = parts[1]
+        chat_id = int(parts[2])
+        amount = float(parts[3])
+        
+        logger.info(f"Processing deposit {action} for user {chat_id}, amount: ${amount}")
+        
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.answer_callback_query(call.id, "User not found")
+            logger.error(f"User {chat_id} not found for deposit {action}")
+            return
+            
+        pending_deposit = session.query(PendingDeposit).filter_by(user_id=user.id, amount=amount, status='Processing').first()
+        
+        if not pending_deposit:
+            bot.answer_callback_query(call.id, "No matching pending deposit found")
+            logger.warning(f"No pending deposit found for user {chat_id} with amount ${amount}")
+            return
+            
+        if action == 'deposit':
+            # Add amount to user balance
+            user.balance += amount
+            pending_deposit.status = 'Approved'
+            session.commit()
+            
+            # Notify user
+            bot.send_message(
+                chat_id,
+                f"""
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128176)}{chr(32)}{chr(128176)}{chr(32)}{chr(128176)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+║ ✅ DEPOSIT APPROVED ✅ ║
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128184)}{chr(32)}{chr(128184)}{chr(32)}{chr(128184)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+
+<b>💰 Deposit Details:</b>
+┌─────────────────┐
+│ 💵 Amount: <code>${amount:.2f}</code>
+│ 🇪🇹 ETB: <code>{int(amount * 160):,}</code> birr
+└─────────────────┘
+
+<b>💳 Account Updated:</b>
+┌─────────────────┐
+│ 💎 New Balance: <code>${user.balance:.2f}</code>
+└─────────────────┘
+
+<b>✨ You're ready to start shopping! ✨</b>
+""",
+                parse_mode='HTML'
+            )
+            
+            # Update admin message
+            bot.edit_message_text(
+                f"✅ Deposit of ${amount:.2f} approved for {user.name}",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+            
+        elif action == 'reject':
+            # Mark as rejected without changing balance
+            pending_deposit.status = 'Rejected'
+            session.commit()
+            
+            # Notify user
+            bot.send_message(
+                chat_id,
+                f"""
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(10060)}{chr(32)}{chr(10060)}{chr(32)}{chr(10060)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+║ ❌ DEPOSIT REJECTED ❌ ║
+{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+
+<b>Your deposit of ${amount:.2f} was rejected.</b>
+
+Possible reasons:
+• Payment amount didn't match
+• Payment screenshot unclear
+• Payment not received
+
+Please try again or contact support.
+""",
+                parse_mode='HTML'
+            )
+            
+            # Update admin message
+            bot.edit_message_text(
+                f"❌ Deposit of ${amount:.2f} rejected for {user.name}",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+        
+        bot.answer_callback_query(call.id, "Action processed successfully")
+        
+    except Exception as e:
+        logger.error(f"Error processing deposit decision: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing decision")
     finally:
         safe_close_session(session)
 
