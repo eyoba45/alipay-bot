@@ -29,9 +29,13 @@ def find_bot_processes():
             # Check if this is a Python process
             if proc.info['name'] == 'python' or proc.info['name'] == 'python3':
                 cmdline = proc.info['cmdline'] if proc.info['cmdline'] else []
+                cmdline_str = ' '.join(cmdline) if cmdline else ''
 
-                # Look for bot-related Python scripts
-                if any(script in ' '.join(cmdline) for script in ['bot.py', 'run_bot.py']):
+                # Look for bot-related Python scripts (expanded list)
+                if any(script in cmdline_str for script in [
+                    'bot.py', 'run_bot.py', 'forever.py', 'monitor_bot.py', 
+                    'keep_alive.py', 'simple_bot.py', 'robust_bot.py'
+                ]):
                     bot_processes.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
             continue
@@ -103,8 +107,22 @@ def cleanup(force=False):
 
     # Remove any Telegram bot lock files
     logger.info("Removing any Telegram bot lock files...")
+    lock_files = [
+        "bot_runner.lock", "database_connections.lock", 
+        "bot_instance.lock", "keep_alive.lock",
+        "telegram_bot.lock", "uptime_monitor.lock",
+        "*.lock"  # wildcard to catch any other lock files
+    ]
+    
     for lock_file in lock_files:
-        if os.path.exists(lock_file):
+        if '*' in lock_file:
+            # Handle wildcards
+            try:
+                subprocess.run(f"rm -f {lock_file}", shell=True, check=False)
+                logger.info(f"Removed lock files matching: {lock_file}")
+            except Exception as e:
+                logger.error(f"Error removing lock files matching {lock_file}: {e}")
+        elif os.path.exists(lock_file):
             try:
                 os.remove(lock_file)
                 logger.info(f"Removed lock file: {lock_file}")
