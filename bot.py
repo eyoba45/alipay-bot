@@ -218,7 +218,7 @@ def get_phone(message):
         # Create a pending approval
         session = get_session()
         existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
-        
+
         if not existing_pending:
             pending = PendingApproval(
                 telegram_id=chat_id,
@@ -232,10 +232,10 @@ def get_phone(message):
 
         # Import the Chapa payment module
         from chapa_payment import generate_registration_payment
-        
+
         # Generate payment link
         payment_link = generate_registration_payment(registration_data[chat_id])
-        
+
         if not payment_link or 'checkout_url' not in payment_link:
             # Fall back to manual payment if Chapa integration fails
             payment_msg = f"""
@@ -274,10 +274,10 @@ def get_phone(message):
         else:
             # Send Chapa payment link with inline button
             from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-            
+
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton("💳 Pay Now", url=payment_link['checkout_url']))
-            
+
             payment_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    🌟 <b>REGISTRATION DETAILS</b> 🌟  
@@ -304,13 +304,13 @@ Click the button below to pay securely with:
 <i>Your account will be automatically activated after payment!</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
-            
+
             # Store transaction reference for later verification
             user_states[chat_id] = {
                 'state': 'waiting_for_chapa_payment',
                 'tx_ref': payment_link['tx_ref']
             }
-            
+
     except Exception as e:
         logger.error(f"Error processing phone: {e}")
         logger.error(traceback.format_exc())
@@ -825,7 +825,7 @@ def send_payment_details(message, amount):
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.send_message(
                 chat_id, 
@@ -833,20 +833,20 @@ def send_payment_details(message, amount):
                 reply_markup=create_main_menu(is_registered=False)
             )
             return
-            
+
         # Import Chapa payment module
         from chapa_payment import generate_deposit_payment
-        
+
         # Create user data dict for payment
         user_data = {
             'telegram_id': chat_id,
             'name': user.name,
             'phone': user.phone
         }
-        
+
         # Generate payment link
         payment_link = generate_deposit_payment(user_data, amount)
-        
+
         if not payment_link or 'checkout_url' not in payment_link:
             # Fall back to manual payment if Chapa fails
             user_states[chat_id] = {
@@ -885,10 +885,10 @@ def send_payment_details(message, amount):
         else:
             # Use Chapa payment link with inline button
             from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-            
+
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton("💳 Pay Now", url=payment_link['checkout_url']))
-            
+
             payment_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💰 <b>DEPOSIT DETAILS</b> 💰  
@@ -910,7 +910,7 @@ Click the button below to pay securely with:
 <i>Your balance will be updated automatically after payment!</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
-            
+
             # Store transaction reference
             pending_deposit = PendingDeposit(
                 user_id=user.id,
@@ -919,7 +919,7 @@ Click the button below to pay securely with:
             )
             session.add(pending_deposit)
             session.commit()
-            
+
             # Update user state
             user_states[chat_id] = {
                 'state': 'waiting_for_chapa_payment',
@@ -1444,14 +1444,14 @@ def handle_order_admin_decision(call):
         if action == 'process':
             # Update order status
             order.status = 'Confirmed'
-            
+
             # Generate a dummy order ID if none exists (can be set manually later)
             if not order.order_id:
                 # Format: AE-{user_id}-{order_number}-{random numbers}
                 import random
                 random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
                 order.order_id = f"AE-{user.id}-{order.order_number}-{random_suffix}"
-            
+
             # Deduct order amount from user balance if amount is set
             if order.amount and order.amount > 0:
                 if user.balance >= order.amount:
@@ -1459,7 +1459,7 @@ def handle_order_admin_decision(call):
                     logger.info(f"Deducted ${order.amount} from user {user.id}'s balance for order {order.id}")
                 else:
                     logger.warning(f"Insufficient balance: User {user.id} has ${user.balance} but order {order.id} costs ${order.amount}")
-            
+
             session.commit()
 
             # Send enhanced confirmation to user with tracking instructions
@@ -1711,7 +1711,7 @@ We couldn't find Order #{order_number} in your account.
 
         if order.order_id:
             tracking_info += f"• Order ID: <code>{order.order_id}</code>\n"
-        
+
         if order.tracking_number:
             tracking_info += f"""
 <b>📱 TRACKING INFORMATION</b>
@@ -1821,41 +1821,41 @@ Our dedicated team is available 24/7 to assist you with all your shopping needs!
 def set_order_amount(message):
     """Set the amount for an order"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if chat_id != ADMIN_ID:
         logger.error(f"Unauthorized /setorderamount attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
         return
-    
+
     try:
         # Parse command: /setorderamount order_number amount
         parts = message.text.split()
         if len(parts) != 3:
             bot.reply_to(message, "Usage: /setorderamount [order_number] [amount]")
             return
-        
+
         order_number = parts[1]
         try:
             amount = float(parts[2])
         except ValueError:
             bot.reply_to(message, "Amount must be a number")
             return
-        
+
         session = get_session()
         order = session.query(Order).filter_by(order_number=order_number).first()
-        
+
         if not order:
             bot.reply_to(message, f"❌ Order #{order_number} not found")
             safe_close_session(session)
             return
-        
+
         # Update order amount
         old_amount = order.amount
         order.amount = amount
         session.commit()
-        
+
         bot.reply_to(message, f"✅ Order #{order_number} amount updated from ${old_amount:.2f} to ${amount:.2f}")
-        
+
     except Exception as e:
         logger.error(f"Error setting order amount: {e}")
         logger.error(traceback.format_exc())
@@ -1876,7 +1876,7 @@ def handle_order_admin_decision(message):
     try:
         # Extract command parts
         parts = message.text.split(maxsplit=2)
-        
+
         # Help message for command usage
         if len(parts) < 2 or parts[1].lower() == 'help':
             help_text = """
@@ -1905,7 +1905,7 @@ Example: <code>/updateorder 1 status:shipped tracking:LX123456789CN</code>
             return
 
         order_number = parts[1]
-        
+
         # Check if we have more parameters
         if len(parts) < 3:
             bot.reply_to(message, "Please specify status or field:value pairs. Use /updateorder help for instructions.")
@@ -1929,18 +1929,18 @@ Example: <code>/updateorder 1 status:shipped tracking:LX123456789CN</code>
 
         # Parse the update parameters
         update_params = parts[2]
-        
+
         # Check if this is a simple status update
         if ':' not in update_params:
             # Legacy format: /updateorder <order_id> <status>
             new_status = update_params.lower()
-            
+
             # Validate status
             valid_statuses = ['processing', 'confirmed', 'shipped', 'delivered', 'cancelled']
             if new_status not in valid_statuses:
                 bot.reply_to(message, f"Invalid status. Use one of: {', '.join(valid_statuses)}")
                 return
-                
+
             # Update only status
             order.status = new_status
             order.updated_at = datetime.utcnow()
@@ -1948,13 +1948,13 @@ Example: <code>/updateorder 1 status:shipped tracking:LX123456789CN</code>
             # New format: /updateorder <order_id> field1:value1 field2:value2
             params = update_params.split()
             updates = {}
-            
+
             for param in params:
                 if ':' not in param:
                     continue
-                    
+
                 field, value = param.split(':', 1)
-                
+
                 if field == 'status':
                     valid_statuses = ['processing', 'confirmed', 'shipped', 'delivered', 'cancelled']
                     if value.lower() not in valid_statuses:
@@ -1965,21 +1965,21 @@ Example: <code>/updateorder 1 status:shipped tracking:LX123456789CN</code>
                     updates['tracking_number'] = value
                 elif field == 'orderid':
                     updates['order_id'] = value
-            
+
             # Apply all updates
             for field, value in updates.items():
                 setattr(order, field, value)
-            
+
             order.updated_at = datetime.utcnow()
-        
+
         # Save changes
         session.commit()
-        
+
         # Prepare user notification based on status
         if hasattr(order, 'status') and order.status in ['shipped', 'delivered']:
             # Create status emoji
             status_emoji = '🚚' if order.status == 'shipped' else '📦'
-            
+
             # Enhance the notification for shipping status
             if order.status == 'shipped':
                 tracking_link = ""
@@ -2029,7 +2029,7 @@ Please let us know if you have any questions.
 
 <i>Thank you for shopping with AliPay_ETH!</i>
 """
-                
+
             # Send the notification to customer
             bot.send_message(
                 customer.telegram_id,
@@ -2062,7 +2062,7 @@ Use 🔍 <b>Track Order</b> for the latest details.
             updates_list.append(f"tracking: {order.tracking_number}")
         if order.order_id:
             updates_list.append(f"orderid: {order.order_id}")
-            
+
         updates_text = ", ".join(updates_list)
         bot.reply_to(message, f"✅ Order #{order_number} updated successfully!\n\nUpdates: {updates_text}")
 
@@ -2167,7 +2167,7 @@ def main():
 
     # Bot performance optimization settings
     bot.threaded = True  # Enable threaded mode for better concurrent handling
-    
+
     # Connection pool optimization
     try:
         from telebot.apihelper import ApiTelegramException
