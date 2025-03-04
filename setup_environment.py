@@ -79,3 +79,86 @@ if __name__ == "__main__":
     else:
         print("❌ Environment setup failed!")
         sys.exit(1)
+#!/usr/bin/env python3
+"""
+Setup environment variables for the bot
+"""
+import os
+import sys
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def check_and_set_env_variable(var_name, prompt_message=None, required=True):
+    """Check if environment variable exists, if not, prompt user for it"""
+    value = os.environ.get(var_name)
+    
+    if not value:
+        if prompt_message:
+            logger.info(prompt_message)
+            value = input(f"Enter {var_name}: ").strip()
+            if value:
+                os.environ[var_name] = value
+            elif required:
+                logger.error(f"Required environment variable {var_name} not set.")
+                return False
+        elif required:
+            logger.error(f"Required environment variable {var_name} not set.")
+            return False
+    
+    return True
+
+def main():
+    """Main function to check environment variables"""
+    logger.info("Checking environment variables...")
+    
+    # Required variables
+    required_vars = [
+        {
+            "name": "TELEGRAM_BOT_TOKEN",
+            "prompt": "Please enter your Telegram Bot Token from BotFather:"
+        },
+        {
+            "name": "ADMIN_CHAT_ID",
+            "prompt": "Please enter your Admin Telegram Chat ID:"
+        }
+    ]
+    
+    # Chapa payment integration variables
+    chapa_vars = [
+        {
+            "name": "CHAPA_SECRET_KEY",
+            "prompt": "Please enter your Chapa Secret Key (leave empty to skip Chapa integration):",
+            "required": False
+        },
+        {
+            "name": "CHAPA_WEBHOOK_SECRET",
+            "prompt": "Please enter your Chapa Webhook Secret (leave empty to skip signature verification):",
+            "required": False
+        }
+    ]
+    
+    # Check for environment variables
+    all_required_vars_set = True
+    for var in required_vars:
+        if not check_and_set_env_variable(var["name"], var.get("prompt"), var.get("required", True)):
+            all_required_vars_set = False
+    
+    # Check for Chapa variables
+    for var in chapa_vars:
+        check_and_set_env_variable(var["name"], var.get("prompt"), var.get("required", False))
+    
+    if not all_required_vars_set:
+        logger.error("Not all required environment variables were set. Please set them and try again.")
+        sys.exit(1)
+    
+    logger.info("All required environment variables are set.")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
