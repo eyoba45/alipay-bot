@@ -1065,7 +1065,7 @@ Please try again or press 'Back to Main Menu' to cancel.
             order_number=new_order_number,
             product_link=link,
             status='Processing',
-            amount=0.0  # Will be updated after review
+            amount=0.0  # Will be updated by admin when processing
         )
         session.add(new_order)
         session.commit()
@@ -1307,6 +1307,14 @@ def handle_order_admin_decision(call):
                 import random
                 random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
                 order.order_id = f"AE-{user.id}-{order.order_number}-{random_suffix}"
+            
+            # Deduct order amount from user balance if amount is set
+            if order.amount and order.amount > 0:
+                if user.balance >= order.amount:
+                    user.balance -= order.amount
+                    logger.info(f"Deducted ${order.amount} from user {user.id}'s balance for order {order.id}")
+                else:
+                    logger.warning(f"Insufficient balance: User {user.id} has ${user.balance} but order {order.id} costs ${order.amount}")
             
             session.commit()
 
@@ -1664,6 +1672,52 @@ Our dedicated team is available 24/7 to assist you with all your shopping needs!
 <i>We're committed to making your AliExpress shopping experience seamless and enjoyable!</i>
 """
     bot.send_message(message.chat.id, help_msg, parse_mode='HTML', reply_markup=help_markup)
+
+@bot.message_handler(commands=['setorderamount'])
+def set_order_amount(message):
+    """Set the amount for an order"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if chat_id != ADMIN_ID:
+        logger.error(f"Unauthorized /setorderamount attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
+        return
+    
+    try:
+        # Parse command: /setorderamount order_number amount
+        parts = message.text.split()
+        if len(parts) != 3:
+            bot.reply_to(message, "Usage: /setorderamount [order_number] [amount]")
+            return
+        
+        order_number = parts[1]
+        try:
+            amount = float(parts[2])
+        except ValueError:
+            bot.reply_to(message, "Amount must be a number")
+            return
+        
+        session = get_session()
+        order = session.query(Order).filter_by(order_number=order_number).first()
+        
+        if not order:
+            bot.reply_to(message, f"❌ Order #{order_number} not found")
+            safe_close_session(session)
+            return
+        
+        # Update order amount
+        old_amount = order.amount
+        order.amount = amount
+        session.commit()
+        
+        bot.reply_to(message, f"✅ Order #{order_number} amount updated from ${old_amount:.2f} to ${amount:.2f}")
+        
+    except Exception as e:
+        logger.error(f"Error setting order amount: {e}")
+        logger.error(traceback.format_exc())
+        bot.reply_to(message, "❌ Error setting order amount")
+    finally:
+        safe_close_session(session)
 
 @bot.message_handler(commands=['updateorder'])
 def handle_order_admin_decision(message):
