@@ -1,148 +1,105 @@
 #!/usr/bin/env python3
 """
-Enhanced cleanup script to remove lock files and terminate stray processes
+Utility to clean up lock files and terminate stray processes
 """
 import os
-import signal
-import logging
 import sys
-import psutil
-import time
+import glob
+import logging
+import signal
 import subprocess
+import time
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
 
-def find_bot_processes():
-    """Find all Python processes related to the bot"""
-    bot_processes = []
-
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            # Check if this is a Python process
-            if proc.info['name'] == 'python' or proc.info['name'] == 'python3':
-                cmdline = proc.info['cmdline'] if proc.info['cmdline'] else []
-                cmdline_str = ' '.join(cmdline) if cmdline else ''
-
-                # Look for bot-related Python scripts (expanded list)
-                if any(script in cmdline_str for script in [
-                    'bot.py', 'run_bot.py', 'forever.py', 'monitor_bot.py', 
-                    'keep_alive.py', 'simple_bot.py', 'robust_bot.py'
-                ]):
-                    bot_processes.append(proc)
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
-            continue
-
-    return bot_processes
-
-def kill_process_tree(pid, sig=signal.SIGTERM):
-    """Kill a process and all its children"""
+def get_bot_processes():
+    """Get list of python processes running the bot"""
     try:
-        parent = psutil.Process(pid)
-        children = parent.children(recursive=True)
+        result = subprocess.run(
+            ["ps", "-ef"], 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
 
-        # Send signal to parent
-        parent.send_signal(sig)
+        processes = []
+        for line in result.stdout.splitlines():
+            if "python" in line and ("bot.py" in line or "run_bot.py" in line):
+                # Skip the grep process itself and this script
+                if "clean_locks.py" not in line:
+                    processes.append(line.split()[1])  # Get PID
 
-        # Send signal to children
-        for child in children:
+        return processes
+    except Exception as e:
+        logger.error(f"Error getting bot processes: {e}")
+        return []
+
+def terminate_processes(pids):
+    """Terminate list of processes by PID"""
+    for pid in pids:
+        try:
+            logger.info(f"Terminating process {pid}")
+            os.kill(int(pid), signal.SIGTERM)
+            # Give it a moment to terminate gracefully
+            time.sleep(0.5)
+
+            # Check if process is still running
             try:
-                child.send_signal(sig)
-            except psutil.NoSuchProcess:
+                os.kill(int(pid), 0)  # Signal 0 is used to check if process exists
+                logger.warning(f"Process {pid} still running, forcing kill")
+                os.kill(int(pid), signal.SIGKILL)
+            except ProcessLookupError:
+                # Process already terminated
                 pass
 
-        # Wait for processes to terminate
-        gone, alive = psutil.wait_procs(children + [parent], timeout=3)
+        except ProcessLookupError:
+            logger.info(f"Process {pid} not found")
+        except Exception as e:
+            logger.error(f"Error terminating process {pid}: {e}")
 
-        # Force kill if still alive
-        if alive:
-            for p in alive:
+def remove_lock_files():
+    """Remove all lock files in the current directory"""
+    try:
+        lock_files = glob.glob("*.lock")
+        if lock_files:
+            logger.info(f"Removed lock files matching: {', '.join(lock_files)}")
+            for lock_file in lock_files:
                 try:
-                    p.kill()
-                except psutil.NoSuchProcess:
-                    pass
+                    os.remove(lock_file)
+                except Exception as e:
+                    logger.error(f"Error removing lock file {lock_file}: {e}")
+        else:
+            logger.info("No lock files found")
+    except Exception as e:
+        logger.error(f"Error removing lock files: {e}")
 
-        return len(gone) + len(alive)
-    except psutil.NoSuchProcess:
-        return 0
+def main():
+    """Main function to clean up lock files and processes"""
+    logger.info("🧹 Starting cleanup...")
 
-def cleanup(force=False):
-    """Remove lock files and kill stray bot processes"""
-    logger.info("🧹 Running cleanup script...")
-
-    # First check for lock files
     logger.info("Checking for lock files...")
-    lock_files = ["bot_runner.lock", "database_connections.lock"]
-    for lock_file in lock_files:
-        if os.path.exists(lock_file):
-            logger.info(f"Found lock file: {lock_file}")
 
-    # Kill any existing bot processes
+    # Terminate existing bot processes
     logger.info("Terminating any existing bot processes...")
-    bot_processes = find_bot_processes()
-
-    if bot_processes:
-        logger.info(f"Found {len(bot_processes)} bot-related processes")
-
-        for proc in bot_processes:
-            try:
-                pid = proc.info['pid']
-                cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else 'Unknown'
-                logger.info(f"Terminating process: PID={pid}, Command={cmdline}")
-
-                killed = kill_process_tree(pid)
-                logger.info(f"Terminated {killed} processes in tree for PID {pid}")
-
-            except Exception as e:
-                logger.error(f"Error terminating process: {e}")
+    bot_pids = get_bot_processes()
+    if bot_pids:
+        logger.info(f"Found {len(bot_pids)} bot processes: {', '.join(bot_pids)}")
+        terminate_processes(bot_pids)
     else:
         logger.info("No bot processes found")
 
-    # Remove any Telegram bot lock files
+    # Remove all lock files
     logger.info("Removing any Telegram bot lock files...")
-    lock_files = [
-        "bot_runner.lock", "database_connections.lock", 
-        "bot_instance.lock", "keep_alive.lock",
-        "telegram_bot.lock", "uptime_monitor.lock",
-        "*.lock"  # wildcard to catch any other lock files
-    ]
-    
-    for lock_file in lock_files:
-        if '*' in lock_file:
-            # Handle wildcards
-            try:
-                subprocess.run(f"rm -f {lock_file}", shell=True, check=False)
-                logger.info(f"Removed lock files matching: {lock_file}")
-            except Exception as e:
-                logger.error(f"Error removing lock files matching {lock_file}: {e}")
-        elif os.path.exists(lock_file):
-            try:
-                os.remove(lock_file)
-                logger.info(f"Removed lock file: {lock_file}")
-            except OSError as e:
-                logger.error(f"Error removing lock file {lock_file}: {e}")
-
-                # If force is true, try even harder to remove locks
-                if force:
-                    try:
-                        logger.warning(f"Forcefully removing lock file: {lock_file}")
-                        subprocess.run(['rm', '-f', lock_file], check=False)
-                    except Exception as e2:
-                        logger.error(f"Force removal failed: {e2}")
+    remove_lock_files()
 
     logger.info("✅ Cleanup completed")
-    return True
+    return 0
 
 if __name__ == "__main__":
-    # Check if force mode is requested
-    force_mode = len(sys.argv) > 1 and sys.argv[1] == '--force'
-
-    success = cleanup(force=force_mode)
-    sys.exit(0 if success else 1)
+    sys.exit(main())
