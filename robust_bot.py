@@ -1,6 +1,180 @@
 
 #!/usr/bin/env python3
 """
+Robust bot runner with watchdog and automatic recovery
+"""
+import os
+import sys
+import time
+import logging
+import subprocess
+import signal
+import threading
+import traceback
+import requests
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("bot_monitor.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Shutdown flag
+shutdown_requested = False
+
+def run_keep_alive():
+    """Run the keep-alive server in a separate process"""
+    try:
+        logger.info("🌐 Starting keep-alive server...")
+        subprocess.Popen([sys.executable, "keep_alive.py"], 
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT)
+        logger.info("✅ Keep-alive server started")
+        
+        # Verify keep-alive is working
+        time.sleep(3)  # Give it time to start
+        for attempt in range(5):
+            try:
+                response = requests.get('http://127.0.0.1:5000/ping', timeout=5)
+                if response.status_code == 200 and response.text == "pong":
+                    logger.info("✅ Keep-alive verified")
+                    return True
+                logger.warning(f"Keep-alive responded with {response.status_code}: {response.text}")
+            except requests.ConnectionError:
+                logger.warning(f"Keep-alive not ready (attempt {attempt+1}/5)")
+                time.sleep(1)
+        
+        logger.error("❌ Keep-alive verification failed")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error starting keep-alive: {e}")
+        logger.error(traceback.format_exc())
+        return False
+
+def run_bot():
+    """Run the main bot process and monitor it"""
+    try:
+        logger.info("🤖 Starting bot...")
+        # Clean up environment first
+        subprocess.run([sys.executable, "clean_locks.py"], check=True)
+        
+        # Start the bot
+        bot_process = subprocess.Popen(
+            [sys.executable, "bot.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
+        
+        logger.info(f"✅ Bot started with PID {bot_process.pid}")
+        
+        # Monitor the bot process
+        while bot_process.poll() is None and not shutdown_requested:
+            line = bot_process.stdout.readline()
+            if line:
+                logger.info(f"[BOT] {line.strip()}")
+            
+            # Check if there are error patterns that require immediate restart
+            if "TeleBot: Threaded polling exception" in line or "ConnectionError" in line:
+                logger.warning("⚠️ Bot encountered a connection error. Planning restart...")
+                # Give it a moment to recover on its own
+                time.sleep(5)
+                
+                # If it's still running but has connection issues, kill it for restart
+                if bot_process.poll() is None:
+                    logger.warning("🔄 Killing bot process for restart...")
+                    bot_process.terminate()
+                    time.sleep(2)
+                    if bot_process.poll() is None:
+                        bot_process.kill()
+                break
+        
+        exit_code = bot_process.returncode
+        logger.info(f"Bot exited with code {exit_code}")
+        return exit_code
+    except Exception as e:
+        logger.error(f"❌ Error running bot: {e}")
+        logger.error(traceback.format_exc())
+        return 1
+
+def check_internet_connectivity():
+    """Check if we have internet connectivity"""
+    try:
+        requests.get("https://api.telegram.org", timeout=5)
+        return True
+    except:
+        return False
+
+def signal_handler(sig, frame):
+    """Handle termination signals gracefully"""
+    global shutdown_requested
+    logger.info(f"Received signal {sig}, shutting down...")
+    shutdown_requested = True
+
+def main():
+    """Main entry point with restart logic"""
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Start keep-alive server
+    if not run_keep_alive():
+        logger.error("❌ Failed to start keep-alive. Exiting.")
+        return 1
+    
+    # Run bot with automatic restarts
+    consecutive_failures = 0
+    while not shutdown_requested:
+        # Check internet before starting
+        if not check_internet_connectivity():
+            logger.error("❌ No internet connectivity. Waiting before retry...")
+            time.sleep(30)
+            continue
+        
+        exit_code = run_bot()
+        
+        if exit_code != 0:
+            consecutive_failures += 1
+            logger.warning(f"⚠️ Bot exited with code {exit_code}. Consecutive failures: {consecutive_failures}")
+            
+            # Implement exponential backoff for repeated failures
+            if consecutive_failures > 5:
+                sleep_time = min(300, 30 * (consecutive_failures - 5))  # Max 5 minutes
+                logger.warning(f"⏱️ Waiting {sleep_time}s before next restart attempt")
+                
+                # Check if shutdown was requested during sleep
+                for _ in range(sleep_time):
+                    if shutdown_requested:
+                        break
+                    time.sleep(1)
+            else:
+                time.sleep(5)  # Short delay for first few failures
+        else:
+            # Reset failure counter on clean exit
+            consecutive_failures = 0
+            
+            # If shutdown requested or clean exit, don't restart
+            if shutdown_requested:
+                break
+            else:
+                logger.info("Bot exited cleanly. Restarting in 5 seconds...")
+                time.sleep(5)
+    
+    logger.info("👋 Shutting down bot runner")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+#!/usr/bin/env python3
+"""
 Robust Telegram Bot Runner with full functionality
 """
 import os
