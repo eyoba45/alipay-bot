@@ -45,6 +45,18 @@ class Order(Base):
     user = relationship("User", back_populates="orders")
 
     def __repr__(self):
+
+
+    def update_attributes(self, **kwargs):
+        """
+        Update attributes of the Order object
+        This helps when manually updating order attributes
+        """
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
+
         return f"<Order(id={self.id}, user_id={self.user_id}, order_number={self.order_number}, status='{self.status}', amount=${self.amount:.2f if self.amount else 0.00})>"
 
 class PendingApproval(Base):
