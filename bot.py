@@ -475,6 +475,113 @@ Don't worry! We've saved your information. Please try again in a few moments or 
         if not registration_complete and has_monitor:
             monitor.record_registration("timeout")
 
+@bot.callback_query_handler(func=lambda call: call.data in ["tutorials", "faqs", "sub_benefits"])
+def handle_info_buttons(call):
+    """Handle information buttons like tutorials, FAQs, and subscription benefits"""
+    try:
+        if call.data == "tutorials":
+            tutorials_msg = """
+✨ <b>HOW TO USE ALIPAY_ETH BOT</b> ✨
+
+<b>🔹 STEP 1: REGISTER</b>
+• Click 🔑 Register
+• Follow the prompts to create your account
+• Pay the $1 registration fee
+
+<b>🔹 STEP 2: DEPOSIT FUNDS</b>
+• Click 💰 Deposit
+• Choose your deposit amount
+• Send payment via CBE or TeleBirr
+• Submit screenshot for verification
+
+<b>🔹 STEP 3: PLACE ORDERS</b>
+• Find products on AliExpress
+• Copy the product link
+• Click 📦 Submit Order
+• Paste the link and confirm
+
+<b>🔹 STEP 4: TRACK SHIPMENTS</b>
+• Click 🔍 Track Order
+• Enter your order number
+• View status and tracking information
+
+<i>Our system makes shopping on AliExpress simple and hassle-free!</i>
+"""
+            bot.answer_callback_query(call.id)
+            bot.send_message(
+                call.message.chat.id,
+                tutorials_msg,
+                parse_mode='HTML'
+            )
+
+        elif call.data == "faqs":
+            faqs_msg = """
+✨ <b>FREQUENTLY ASKED QUESTIONS</b> ✨
+
+<b>❓ How do I place an order?</b>
+Simply click "📦 Submit Order" and paste your AliExpress product link.
+
+<b>❓ How long does shipping take?</b>
+Delivery usually takes 15-30 days depending on the product and location.
+
+<b>❓ How do I track my order?</b>
+Use the "🔍 Track Order" button and enter your order number.
+
+<b>❓ What payment methods are accepted?</b>
+We accept Commercial Bank (CBE) and TeleBirr for deposits.
+
+<b>❓ Is there a minimum order amount?</b>
+No, you can order products of any value as long as you have sufficient balance.
+
+<b>❓ How do I renew my subscription?</b>
+Click on "📅 Subscription" and use the renewal button.
+
+<i>More questions? Contact our support team!</i>
+"""
+            bot.answer_callback_query(call.id)
+            bot.send_message(
+                call.message.chat.id,
+                faqs_msg,
+                parse_mode='HTML'
+            )
+
+        elif call.data == "sub_benefits":
+            benefits_msg = """
+✨ <b>PREMIUM MEMBERSHIP BENEFITS</b> ✨
+
+<b>🌟 Enjoy these exclusive perks:</b>
+
+• 🛍️ <b>Unlimited Shopping</b>
+  Access to thousands of AliExpress products
+
+• 🚚 <b>Priority Shipping</b>
+  Faster order processing & delivery
+
+• 💰 <b>Special Discounts</b>
+  Member-only deals and promotions
+
+• 🔔 <b>Order Notifications</b>
+  Real-time updates on your packages
+
+• 👨‍💼 <b>Dedicated Support</b>
+  Premium customer service access
+
+• 🎁 <b>Referral Bonuses</b>
+  Earn rewards for inviting friends
+
+<i>All this for just $1/month!</i>
+"""
+            bot.answer_callback_query(call.id)
+            bot.send_message(
+                call.message.chat.id,
+                benefits_msg,
+                parse_mode='HTML'
+            )
+    except Exception as e:
+        logger.error(f"Error handling info buttons: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing your request")
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_', 'reject_')) and not call.data.startswith(('approve_deposit_', 'reject_deposit_', 'approve_order_', 'reject_order_')))
 def handle_admin_decision(call):
     """Handle admin approval/rejection for user registration"""
@@ -808,7 +915,7 @@ def submit_order(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
-            bot.send_message(chat_id, "Please register first to submit an order.", reply_markup=create_main_menu(is_registered=False))
+            bot.send_message(chat_id, "Please register first to submit anorder.", reply_markup=create_main_menu(is_registered=False))
             return
 
         # Check if user has enough balance
@@ -1286,36 +1393,36 @@ Track: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}
 @bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
 def help_center(message):
     """Enhanced help center with beautiful formatting"""
-    
+
     # Create fancy help center keyboard with direct contact options
     help_markup = InlineKeyboardMarkup(row_width=2)
+    help_markup.add(
+        InlineKeyboardButton("✨ Tutorials ✨", callback_data="tutorials"),
+        InlineKeyboardButton("❓ FAQs ❓", callback_data="faqs")
+    )
     help_markup.add(
         InlineKeyboardButton("💬 Chat with Support", url="https://t.me/alipay_help_center"),
         InlineKeyboardButton("📱 Contact Admin", url="https://t.me/alipay_eth_admin")
     )
-    help_markup.add(
-        InlineKeyboardButton("📚 Tutorials", callback_data="tutorials"),
-        InlineKeyboardButton("❓ FAQs", callback_data="faqs")
-    )
-    
+
     help_msg = """
-<b>💫 WELCOME TO HELP CENTER 💫</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🌟 <b>WELCOME TO HELP CENTER</b> 🌟  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>✨ Need assistance? We've got you covered! ✨</b>
 
-╔══════ <b>QUICK COMMANDS</b> ══════╗
-║ • 🏠 <code>/start</code> - Reset bot         ║
-║ • 🔑 <code>Register</code> - Join now        ║
-║ • 💰 <code>Deposit</code> - Add funds        ║
-║ • 📦 <code>Submit</code> - New order         ║
-╚═════════════════════════╝
+<b>📚 QUICK COMMANDS</b>
+• 🏠 <code>/start</code> - Reset bot
+• 🔑 <code>Register</code> - Join now
+• 💰 <code>Deposit</code> - Add funds
+• 📦 <code>Submit</code> - New order
 
-╔══════ <b>SUPPORT GUIDE</b> ══════╗
-║ • 📊 Order Status - Check progress  ║
-║ • 🔍 Track Order - Follow shipment  ║
-║ • 💳 Balance - View your funds      ║
-║ • 📅 Subscription - Manage account  ║
-╚═════════════════════════╝
+<b>📱 SUPPORT GUIDE</b>
+• 📊 Order Status - Check progress
+• 🔍 Track Order - Follow shipment
+• 💳 Balance - View your funds
+• 📅 Subscription - Manage account
 
 <b>💎 PREMIUM SUPPORT 💎</b>
 Our dedicated team is available 24/7 to assist you with all your shopping needs! Click the buttons below for instant support.
@@ -1613,7 +1720,7 @@ Please use the 💰 Deposit option to add funds.
         user.balance -= 1.0
         user.subscription_date = datetime.utcnow()
         user.last_subscription_reminder = None  # Reset reminder
-        
+
         try:
             session.commit()
             bot.answer_callback_query(call.id, "Subscription renewed successfully!")
@@ -1681,82 +1788,3 @@ def handle_subscription_benefits(call):
     except Exception as e:
         logger.error(f"Error showing subscription benefits: {e}")
         bot.answer_callback_query(call.id, "Error showing benefits")
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "faqs")
-def handle_faqs(call):
-    """Handle FAQs button click"""
-    try:
-        faqs_msg = """
-<b>📚 FREQUENTLY ASKED QUESTIONS 📚</b>
-
-<b>❓ How do I place an order?</b>
-Simply click "📦 Submit Order" and paste your AliExpress product link.
-
-<b>❓ How long does shipping take?</b>
-Delivery usually takes 15-30 days depending on the product and location.
-
-<b>❓ How do I track my order?</b>
-Use the "🔍 Track Order" button and enter your order number.
-
-<b>❓ What payment methods are accepted?</b>
-We accept Commercial Bank (CBE) and TeleBirr for deposits.
-
-<b>❓ Is there a minimum order amount?</b>
-No, you can order products of any value as long as you have sufficient balance.
-
-<b>❓ How do I renew my subscription?</b>
-Click on "📅 Subscription" and use the renewal button.
-
-<i>More questions? Contact our support team!</i>
-"""
-        bot.answer_callback_query(call.id)
-        bot.send_message(
-            call.message.chat.id,
-            faqs_msg,
-            parse_mode='HTML'
-        )
-    except Exception as e:
-        logger.error(f"Error showing FAQs: {e}")
-        bot.answer_callback_query(call.id, "Error showing FAQs")
-
-@bot.callback_query_handler(func=lambda call: call.data == "tutorials")
-def handle_tutorials(call):
-    """Handle tutorials button click"""
-    try:
-        tutorials_msg = """
-<b>📱 HOW TO USE ALIPAY_ETH BOT 📱</b>
-
-<b>🔹 STEP 1: REGISTER</b>
-• Click 🔑 Register
-• Follow the prompts to create your account
-• Pay the $1 registration fee
-
-<b>🔹 STEP 2: DEPOSIT FUNDS</b>
-• Click 💰 Deposit
-• Choose your deposit amount
-• Send payment via CBE or TeleBirr
-• Submit screenshot for verification
-
-<b>🔹 STEP 3: PLACE ORDERS</b>
-• Find products on AliExpress
-• Copy the product link
-• Click 📦 Submit Order
-• Paste the link and confirm
-
-<b>🔹 STEP 4: TRACK SHIPMENTS</b>
-• Click 🔍 Track Order
-• Enter your order number
-• View status and tracking information
-
-<i>Our system makes shopping on AliExpress simple and hassle-free!</i>
-"""
-        bot.answer_callback_query(call.id)
-        bot.send_message(
-            call.message.chat.id,
-            tutorials_msg,
-            parse_mode='HTML'
-        )
-    except Exception as e:
-        logger.error(f"Error showing tutorials: {e}")
-        bot.answer_callback_query(call.id, "Error showing tutorials")
