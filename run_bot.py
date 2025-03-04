@@ -1,221 +1,284 @@
-#!/usr/bin/env python3
-"""Script to run the Telegram bot with uptime server and optimized reliability"""
 
+#!/usr/bin/env python3
+"""
+Reliable Telegram Bot Runner with automatic recovery
+"""
 import os
 import sys
 import time
 import subprocess
-import signal
 import logging
-import threading
-from datetime import datetime
+import signal
+import psutil
 import traceback
-# Added import for keep_alive function
-from keep_alive import keep_alive
+import threading
+import fcntl
+import requests
+from datetime import datetime
 
-# Configure logging with more detailed format
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - [%(threadName)s]',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("bot_uptime.log")
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
 
 # Global variables
 bot_process = None
-last_restart = datetime.now()
-restart_count = 0
-max_restarts_per_hour = 5
+shutdown_requested = False
+lock_file = None
 
-# Lock to prevent concurrent operations
-process_lock = threading.Lock()
-
-# Pre-flight checks
-def run_preflight_checks():
-    """Run checks before starting the bot"""
-    logger.info("🔍 Running pre-flight checks...")
+def signal_handler(sig, frame):
+    """Handle termination signals properly"""
+    global shutdown_requested, bot_process
     
-    # Check database connectivity
-    try:
-        import database
-        db_ok = database.check_db_connection()
-        if not db_ok:
-            logger.error("❌ Database pre-flight check failed")
-            # Try to reset connection pool
-            database.reset_connection_pool()
-        else:
-            logger.info("✅ Database pre-flight check passed")
-    except Exception as e:
-        logger.error(f"❌ Database import error: {e}")
-        logger.error(traceback.format_exc())
+    logger.info(f"Received signal {sig}, shutting down gracefully...")
+    shutdown_requested = True
     
-    # Check Telegram API connectivity
-    try:
-        import requests
-        token = os.environ.get('TELEGRAM_BOT_TOKEN')
-        if not token:
-            logger.error("❌ TELEGRAM_BOT_TOKEN not found")
-            return False
-            
-        response = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=5)
-        if response.status_code == 200:
-            logger.info(f"✅ Telegram API check passed: {response.json()['result']['username']}")
-        else:
-            logger.error(f"❌ Telegram API check failed: {response.status_code}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Telegram API check error: {e}")
-        logger.error(traceback.format_exc())
-        return False
-        
-    # Clean up stale lock files
-    try:
-        subprocess.run(["python", "clean_locks.py"], check=True)
-    except Exception as e:
-        logger.error(f"❌ Lock file cleanup error: {e}")
-    
-    logger.info("✅ Pre-flight checks completed")
-    return True
-
-def cleanup_environment():
-    """Clean up any existing bot processes or lock files"""
-    global bot_process
-    try:
-        print("🧹 Cleaning up environment...")
-
-        # First try to stop our own process if running
-        if bot_process:
-            try:
-                bot_process.terminate()
-                time.sleep(1)
-                if bot_process.poll() is None:
-                    bot_process.kill()
-                print("✅ Stopped existing bot process")
-            except Exception as e:
-                print(f"❌ Error stopping bot process: {e}")
-
-        # Run the cleanup script
-        print("🧹 Starting cleanup process...")
+    # Terminate bot if running
+    if bot_process and bot_process.poll() is None:
         try:
-            subprocess.run(
-                [sys.executable, "clean_locks.py"],
-                check=True,
-                timeout=30
-            )
-            print("✅ Cleanup completed")
-        except subprocess.SubprocessError as e:
-            print(f"⚠️ Cleanup script error: {e}")
-
-        # Extra safety: force kill any remaining processes
-        print("🔍 Checking for running bot processes...")
-        try:
-            # More comprehensive cleanup
-            kill_commands = [
-                "pkill -f 'python.*bot.py' || true",
-                "pkill -f 'monitor_bot.py' || true", 
-                "pkill -f 'telebot' || true"
-            ]
+            os.killpg(os.getpgid(bot_process.pid), signal.SIGTERM)
+            logger.info("Sent SIGTERM to bot process group")
             
-            for cmd in kill_commands:
-                subprocess.run(cmd, shell=True, check=False)
+            # Wait up to 5 seconds for graceful termination
+            for _ in range(10):
+                if bot_process.poll() is not None:
+                    break
+                time.sleep(0.5)
                 
-            time.sleep(2)  # Allow processes to terminate
+            # Force kill if still running
+            if bot_process.poll() is None:
+                os.killpg(os.getpgid(bot_process.pid), signal.SIGKILL)
+                logger.info("Sent SIGKILL to bot process group")
         except Exception as e:
-            print(f"⚠️ Process cleanup error: {e}")
+            logger.error(f"Error terminating bot: {e}")
+    
+    # Release lock file
+    if lock_file:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            lock_file.close()
+            if os.path.exists("bot_runner.lock"):
+                os.remove("bot_runner.lock")
+            logger.info("Released lock file")
+        except Exception as e:
+            logger.error(f"Error releasing lock: {e}")
+    
+    logger.info("Shutdown complete")
+    sys.exit(0)
 
-        # Verify no bot processes are running
-        time.sleep(1)
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
+def run_cleanup():
+    """Run cleanup to ensure no duplicate processes"""
+    try:
+        logger.info("Running cleanup...")
+        result = subprocess.run(
+            [sys.executable, "clean_locks.py"], 
+            capture_output=True, 
+            text=True,
+            check=False  # Don't raise exception on non-zero exit
+        )
+        
+        if result.returncode != 0:
+            logger.error(f"Cleanup script returned error code {result.returncode}")
+            logger.error(f"Stdout: {result.stdout}")
+            logger.error(f"Stderr: {result.stderr}")
+            return False
+        
+        logger.info("Cleanup completed successfully")
+        return True
     except Exception as e:
-        print(f"❌ Error during environment cleanup: {e}")
+        logger.error(f"Failed to run cleanup: {e}")
+        return False
+
+def acquire_lock():
+    """Ensure only one instance of the runner is active"""
+    global lock_file
+    
+    try:
+        # Create lock file
+        lock_file = open("bot_runner.lock", "w")
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            logger.info("Acquired exclusive lock")
+            return True
+        except IOError:
+            logger.error("Another instance is already running")
+            lock_file.close()
+            return False
+    except Exception as e:
+        logger.error(f"Error with lock file: {e}")
+        return False
+
+def verify_telegram_token():
+    """Verify that the Telegram token is valid and working"""
+    token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    if not token:
+        logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
+        return False
+    
+    try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{token}/getMe",
+            timeout=10
+        )
+        
+        if response.status_code == 200 and response.json().get('ok'):
+            bot_info = response.json().get('result', {})
+            logger.info(f"Verified Telegram token for @{bot_info.get('username', 'Unknown')}")
+            return True
+        else:
+            logger.error(f"Invalid Telegram token: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Error verifying Telegram token: {e}")
+        return False
 
 def start_bot():
-    """Start the bot with monitoring"""
+    """Start the bot process with proper monitoring"""
+    global bot_process
+    
+    if not run_cleanup():
+        logger.error("Failed to clean up environment, proceeding with caution")
+    
+    # Set up environment variables here if needed
+    env = os.environ.copy()
+    
     try:
-        logger.info("🚀 Starting bot...")
-
-        # Start the uptime server
-        keep_alive()
-        logger.info("✅ Uptime server started on port 8080")
-
-        # Start the bot process  - using original cleanup method
-        cleanup_environment()
-        
-        # Verify Telegram setup first
-        print("🔍 Checking Telegram bot configuration...")
-        try:
-            check_result = subprocess.run(
-                [sys.executable, "check_telegram_setup.py"],
-                check=False,
-                timeout=30,
-                capture_output=True,
-                text=True
-            )
-            print(check_result.stdout)
-            
-            if "configured correctly" not in check_result.stdout:
-                print("❌ Telegram bot is not configured correctly. Please check your token.")
-                return False
-        except Exception as e:
-            print(f"⚠️ Error checking Telegram setup: {e}")
-
-        # Start the monitor process with environment variables
-        env = os.environ.copy()
-        env['PYTHONUNBUFFERED'] = '1'  # Ensure output is not buffered
-        
-        global bot_process
+        # Start bot in its own process group
+        logger.info("Starting bot process...")
         bot_process = subprocess.Popen(
-            [sys.executable, "monitor_bot.py"],
+            [sys.executable, "bot.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1,
-            env=env,
-            preexec_fn=os.setsid  # Create a new process group
+            text=True,
+            preexec_fn=os.setsid  # Create new process group
         )
-
-        print(f"✅ Bot monitor started with PID: {bot_process.pid}")
-
-        # Monitor the output
-        while True:
-            output = bot_process.stdout.readline()
-            if not output and bot_process.poll() is not None:
-                if bot_process.returncode != 0:
-                    print(f"⚠️ Bot monitor process exited with error code: {bot_process.returncode}")
-                    return False
-                print("✅ Bot monitor process completed successfully")
-                return True
+        
+        logger.info(f"Bot started with PID {bot_process.pid}")
+        
+        # Monitor the bot process
+        start_time = time.time()
+        stdout_lines = []
+        
+        while not shutdown_requested:
+            # Check if process is still running
+            if bot_process.poll() is not None:
+                exit_code = bot_process.poll()
                 
-            if output:
-                print(output.strip())
-
+                # Collect any remaining output
+                remaining_output, _ = bot_process.communicate()
+                if remaining_output:
+                    for line in remaining_output.splitlines():
+                        stdout_lines.append(line)
+                        logger.info(f"Bot output: {line}")
+                
+                # Log the exit event
+                logger.error(f"Bot process exited with code {exit_code}")
+                logger.error(f"Last output lines: {stdout_lines[-10:] if stdout_lines else 'No output'}")
+                
+                # Break the monitoring loop
+                return False
+            
+            # Read output without blocking
+            while True:
+                line = bot_process.stdout.readline()
+                if not line:
+                    break
+                    
+                line = line.strip()
+                if line:
+                    stdout_lines.append(line)
+                    logger.info(f"Bot: {line}")
+            
+            # Prevent excessive CPU usage
             time.sleep(0.1)
-
-    except KeyboardInterrupt:
-        print("👋 Shutting down bot...")
-        cleanup_environment()
-        return False
+        
+        return True
+    
     except Exception as e:
-        print(f"❌ Error running bot: {e}")
-        cleanup_environment()
+        logger.error(f"Error in start_bot: {e}")
         return False
+
+def main():
+    """Main function with improved restart logic"""
+    global shutdown_requested
+    
+    logger.info("🚀 Bot runner starting...")
+    
+    # Verify we have exclusive access
+    if not acquire_lock():
+        logger.error("Failed to acquire lock, exiting")
+        return 1
+    
+    # Verify Telegram token
+    if not verify_telegram_token():
+        logger.warning("Failed to verify Telegram token, proceeding anyway")
+    
+    # Start the bot with restart capability
+    max_restarts = 5
+    restart_count = 0
+    restart_delay = 10  # Initial delay in seconds
+    
+    while not shutdown_requested and restart_count < max_restarts:
+        logger.info(f"Starting bot (attempt {restart_count + 1}/{max_restarts})")
+        
+        start_time = time.time()
+        success = start_bot()
+        run_time = time.time() - start_time
+        
+        if shutdown_requested:
+            break
+        
+        # Handle bot exit
+        restart_count += 1
+        
+        # If the bot ran for more than 5 minutes, reset the restart counter
+        if run_time > 300:
+            logger.info(f"Bot ran for {run_time:.1f} seconds, resetting restart counter")
+            restart_count = 0
+            restart_delay = 10
+        else:
+            # Implement exponential backoff for quick failures
+            logger.warning(f"Bot failed after only {run_time:.1f} seconds")
+            restart_delay = min(300, restart_delay * 2)
+        
+        if restart_count < max_restarts:
+            logger.info(f"Restarting bot in {restart_delay} seconds...")
+            
+            # Wait for the delay period, checking for shutdown request
+            delay_start = time.time()
+            while time.time() - delay_start < restart_delay and not shutdown_requested:
+                time.sleep(1)
+        else:
+            logger.error(f"Maximum restart attempts ({max_restarts}) reached, giving up")
+    
+    # Cleanup before exit
+    if lock_file:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            lock_file.close()
+            if os.path.exists("bot_runner.lock"):
+                os.remove("bot_runner.lock")
+        except:
+            pass
+    
+    return 0
 
 if __name__ == "__main__":
-    start_bot()
-
-
-# Dummy keep_alive.py and bot.py files for Replit execution
-
-# keep_alive.py
-def keep_alive():
-    print("Keep-alive function running...")
-    # Add your keep-alive logic here (e.g., using Flask or similar)
-
-
-# bot.py
-def run_bot():
-    print("Bot running...")
-    # Add your Telegram bot logic here
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        signal_handler(signal.SIGINT, None)
+    except Exception as e:
+        logger.critical(f"Unhandled exception: {e}")
+        logger.critical(traceback.format_exc())
+        sys.exit(1)
