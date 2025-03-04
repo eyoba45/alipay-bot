@@ -1,248 +1,142 @@
 #!/usr/bin/env python3
 """
-Forever script to keep the bot running continuously with proper signal handling
+Forever runner script with improved error handling
 """
 import os
 import sys
 import time
-import signal
 import logging
 import subprocess
+import signal
 import traceback
-import requests
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("bot_uptime.log")
+        logging.FileHandler("bot_uptime.log"),
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Global variables
-bot_process = None
+# Global flag for shutdown
 shutdown_requested = False
 
 def signal_handler(sig, frame):
-    """Handle termination signals gracefully"""
-    global shutdown_requested, bot_process
-
-    logger.info(f"Received signal {sig}, shutting down gracefully...")
+    """Handle termination signals"""
+    global shutdown_requested
+    logger.info(f"Received signal {sig}, initiating shutdown...")
     shutdown_requested = True
 
-    if bot_process:
-        try:
-            logger.info("Sending termination signal to bot process...")
-            # Send SIGTERM to allow for graceful shutdown
-            if hasattr(bot_process, 'pid'):
-                os.kill(bot_process.pid, signal.SIGTERM)
+def run_clean_locks():
+    """Run the clean_locks script to ensure clean environment"""
+    logger.info("🧹 Running cleanup...")
+    try:
+        subprocess.run([sys.executable, "clean_locks.py"], check=True)
+        logger.info("✅ Cleanup completed")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"❌ Cleanup failed with code {e.returncode}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in cleanup: {e}")
+        logger.error(traceback.format_exc())
+        return False
 
-            # Give the process some time to terminate gracefully
-            for _ in range(5):  # Wait up to 5 seconds
-                if bot_process.poll() is not None:
-                    logger.info("Bot process terminated gracefully")
-                    break
-                time.sleep(1)
+def start_bot():
+    """Start the bot process and monitor it"""
+    logger.info("🚀 Starting bot process...")
 
-            # Force kill if still running
-            if bot_process.poll() is None:
-                logger.warning("Bot process did not terminate gracefully, forcing...")
-                if hasattr(bot_process, 'pid'):
-                    os.kill(bot_process.pid, signal.SIGKILL)
-        except Exception as e:
-            logger.error(f"Error terminating bot process: {e}")
+    try:
+        process = subprocess.Popen(
+            [sys.executable, "bot.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
 
-    logger.info("Shutdown complete")
-    sys.exit(0)
+        logger.info(f"✅ Bot started with PID {process.pid}")
 
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+        # Read and log output
+        while process.poll() is None and not shutdown_requested:
+            line = process.stdout.readline()
+            if line:
+                print(line.strip())  # Echo to console
+                if "ERROR" in line or "Exception" in line:
+                    logger.error(f"⚠️ Bot error: {line.strip()}")
 
-def run_bot_with_restart():
-    """Run the bot with automatic restart on failure"""
-    global bot_process
+        # Check exit status
+        exit_code = process.returncode
+        if exit_code is not None:
+            logger.info(f"Bot exited with code {exit_code}")
+            if exit_code != 0:
+                logger.error(f"❌ Bot exited with error code {exit_code}")
 
-    restart_count = 0
-    max_restarts = 15  # Increased restart attempts
+        return exit_code
+    except Exception as e:
+        logger.error(f"❌ Error starting bot: {e}")
+        logger.error(traceback.format_exc())
+        return 1
 
-    while not shutdown_requested and restart_count < max_restarts:
-        try:
-            # Run the clean_locks.py script first
-            logger.info("Cleaning up any lock files...")
-            subprocess.run([sys.executable, "clean_locks.py"], 
-                          check=True, 
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT)
+def main():
+    """Main runner with restart logic"""
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
-            logger.info("Starting bot process...")
+    failures = 0
 
-            # Start the bot process
-            env = os.environ.copy()
-            env['PYTHONUNBUFFERED'] = '1'  # Ensure output is not buffered
+    while not shutdown_requested:
+        # Run cleanup before starting
+        if not run_clean_locks():
+            logger.error("❌ Critical: Cleanup failed. Waiting 30s before retry...")
+            time.sleep(30)
+            continue
 
-            # Try to check for syntax errors before starting the bot
-            try:
-                logger.info("Checking for syntax errors before starting bot...")
-                result = subprocess.run(
-                    [sys.executable, "-c", "import ast; ast.parse(open('bot.py', 'r', encoding='utf-8').read())"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode != 0:
-                    logger.error(f"⚠️ Syntax check failed: {result.stderr}")
-                    logger.error("❌ Unable to start bot due to syntax errors. Please fix and try again.")
-                    time.sleep(10)
-                    continue
-                logger.info("✅ No syntax errors detected")
-            except Exception as e:
-                logger.warning(f"⚠️ Syntax check failed: {e}")
-                
-            # Start the actual bot process
-            bot_process = subprocess.Popen(
-                [sys.executable, "bot.py"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
-                env=env
-            )
+        # Start the bot
+        exit_code = start_bot()
 
-            logger.info(f"Bot process started with PID: {bot_process.pid}")
-
-            # Monitor the output
-            while not shutdown_requested:
-                output = bot_process.stdout.readline()
-                if not output and bot_process.poll() is not None:
-                    break
-                if output:
-                    print(output.strip())
-
-            # Check if the process exited
-            if bot_process.poll() is not None:
-                exit_code = bot_process.returncode
-                logger.warning(f"Bot process exited with code: {exit_code}")
-
-                if shutdown_requested:
-                    logger.info("Shutdown was requested, not restarting")
-                    break
-
-                restart_count += 1
-
-                # Exponential backoff for restarts
-                wait_time = min(60, 5 * (2 ** min(restart_count, 5)))
-                logger.info(f"Restarting in {wait_time} seconds (attempt {restart_count}/{max_restarts})...")
-                time.sleep(wait_time)
-
-        except KeyboardInterrupt:
-            logger.info("Keyboard interrupt received, shutting down...")
+        # Handle restart logic
+        if shutdown_requested:
+            logger.info("👋 Shutdown requested, exiting")
             break
-        except Exception as e:
-            logger.error(f"Error in bot runner: {traceback.format_exc()}")
-            restart_count += 1
+
+        if exit_code != 0:
+            failures += 1
+
+            # Exponential backoff for repeated failures
+            wait_time = min(300, 5 * (2 ** min(failures, 6)))
+            logger.warning(f"⚠️ Bot failed, attempt {failures}. Waiting {wait_time}s before restart...")
+
+            # Deep clean if many failures
+            if failures > 3:
+                logger.warning("🧨 Multiple failures detected. Performing deep cleanup...")
+                try:
+                    # Kill all python processes (except this one)
+                    os.system(f"pkill -9 -f 'python' -P 1")
+                    os.system("rm -f *.lock")
+                except Exception as e:
+                    logger.error(f"❌ Deep cleanup error: {e}")
+
+            # Wait before retry
+            time.sleep(wait_time)
+        else:
+            # Reset failure counter on clean exit
+            failures = 0
+            logger.info("Bot exited normally. Restarting in 5s...")
             time.sleep(5)
 
-    if restart_count >= max_restarts:
-        logger.error(f"Exceeded maximum restart attempts ({max_restarts}), giving up")
-
-def clear_webhook():
-    """Clear any existing webhook"""
-    TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-    if not TOKEN:
-        logger.error("❌ TELEGRAM_BOT_TOKEN not set")
-        return False
-
-    try:
-        logger.info("🔄 Clearing Telegram webhook...")
-        url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=true"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            logger.info("✅ Webhook cleared successfully")
-            return True
-        else:
-            logger.error(f"❌ Failed to clear webhook: {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Error clearing webhook: {e}")
-        return False
-
-def cleanup_environment():
-    """Clean up any existing bot processes"""
-    try:
-        logger.info("🧹 Cleaning environment...")
-
-        # Kill any existing bot processes
-        cleanup_commands = [
-            "pkill -9 -f 'python.*bot.py' || true",
-            "pkill -9 -f 'telebot' || true",
-            "rm -f *.lock || true"
-        ]
-
-        for cmd in cleanup_commands:
-            try:
-                subprocess.run(cmd, shell=True, check=False)
-            except Exception as e:
-                logger.error(f"Cleanup command error: {e}")
-
-        # Clear webhook
-        clear_webhook()
-
-        time.sleep(2)  # Give processes time to fully terminate
-        logger.info("✅ Environment cleaned")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Error during cleanup: {e}")
-        return False
-
-def verify_telegram_connection():
-    """Verify that we can connect to Telegram API"""
-    try:
-        TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-        if not TOKEN:
-            logger.error("❌ TELEGRAM_BOT_TOKEN not set")
-            return False
-
-        # Check for ADMIN_CHAT_ID and set default if missing
-        if not os.environ.get('ADMIN_CHAT_ID'):
-            logger.warning("⚠️ ADMIN_CHAT_ID not found, setting default value")
-            os.environ['ADMIN_CHAT_ID'] = '1234567890'  # Set a default value
-
-        # Check for DATABASE_URL and set default if missing
-        if not os.environ.get('DATABASE_URL'):
-            logger.warning("⚠️ DATABASE_URL not found, setting default value")
-            os.environ['DATABASE_URL'] = 'sqlite:///bot.db'  # Use SQLite by default
-
-        logger.info("🔑 Testing Telegram API connection...")
-        response = requests.get(f"https://api.telegram.org/bot{TOKEN}/getMe", timeout=10)
-
-        if response.status_code == 200:
-            bot_info = response.json().get('result', {})
-            logger.info(f"✅ Telegram API connection verified: @{bot_info.get('username', 'unknown')}")
-            return True
-        else:
-            logger.error(f"❌ Telegram API connection failed: {response.status_code}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Telegram API test failed: {e}")
-        return False
-
 if __name__ == "__main__":
-    logger.info("Starting bot runner...")
+    logger.info("🔄 Forever runner starting")
     try:
-        # Import keep_alive if available
-        try:
-            from keep_alive import keep_alive
-            keep_alive()
-            logger.info("Keep-alive server started")
-        except ImportError:
-            logger.warning("Keep-alive module not found, continuing without it")
-
-        run_bot_with_restart()
+        main()
+    except KeyboardInterrupt:
+        logger.info("👋 User requested shutdown")
     except Exception as e:
-        logger.critical(f"Critical error in main: {traceback.format_exc()}")
+        logger.error(f"❌ Fatal error in runner: {e}")
+        logger.error(traceback.format_exc())
     finally:
-        logger.info("Bot runner exiting")
+        logger.info("👋 Forever runner exiting")
