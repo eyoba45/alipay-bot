@@ -115,7 +115,7 @@ def start_message(message):
             del registration_data[chat_id]
 
         welcome_msg = """
-:✨ <b>Welcome to AliPay_ETH!</b> ✨
+✨ <b>Welcome to AliPay_ETH!</b> ✨
 
 Your trusted Ethiopian payment solution for AliExpress shopping!
 
@@ -214,42 +214,30 @@ def get_phone(message):
         user_states[chat_id] = 'waiting_for_payment'
 
         payment_msg = f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(12381)}{chr(32)}{chr(12381)}{chr(32)}{chr(12381)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ Registration ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+Registration Details
+User Details:
+Name: {registration_data[chat_id]['name']}
+Phone: <code>{registration_data[chat_id]['phone']}</code>
+Address: {registration_data[chat_id]['address']}
 
-<b>👤 User Details:</b>
-┌─────────────────┐
-│ 📛 {registration_data[chat_id]['name']}
-│ 📱 <code>{registration_data[chat_id]['phone']}</code>
-│ 📍 {registration_data[chat_id]['address']}
-└─────────────────┘
+Registration Fee:
+USD: <code>$1.00</code>
+ETB: <code>150</code>
 
-<b>💰 Registration Fee:</b>
-┌─────────────────┐
-│ 🇺🇸 <code>$1.00</code> USD
-│ 🇪🇹 <code>150</code> ETB
-└─────────────────┘
+Choose Payment Method:
+Commercial Bank (CBE)
+Account: <code>1000547241316</code>
+Name: Eyob Mulugeta
 
-<b>💳 Choose Payment Method:</b>
+TeleBirr Mobile Money
+Number: <code>0986693062</code>
+Name: Eyob Mulugeta
 
-🏦 <b>Commercial Bank (CBE)</b>
-┌─────────────────┐
-│ 💠 Account: <code>1000547241316</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-📱 <b>TeleBirr Mobile Money</b>
-┌─────────────────┐
-│ 💠 Number: <code>0986693062</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-<b>📝 Instructions:</b>
-1️⃣ Choose your preferred method above
-2️⃣ Send exactly <code>150 ETB</code>
-3️⃣ Take a clear screenshot
-4️⃣ Send the screenshot below ⬇️
+Instructions:
+1. Choose your preferred method above
+2. Send exactly <code>150 ETB</code>
+3. Take a clear screenshot
+4. Send the screenshot below ⬇️
 """
         bot.send_message(chat_id, payment_msg, parse_mode='HTML')
     except Exception as e:
@@ -371,23 +359,19 @@ Please wait for admin approval. You'll be notified once your account is activate
 
         # Admin notification
         admin_msg = f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ New User! ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+New User!
 
-<b>👤 User Information:</b>
-┌─────────────────┐
-│ Name: <b>{registration_data[chat_id]['name']}</b>
-│ Address: {registration_data[chat_id]['address']}
-│ Phone: <code>{registration_data[chat_id]['phone']}</code>
-│ ID: <code>{chat_id}</code>
-└─────────────────┘
+User Information:
+Name: <b>{registration_data[chat_id]['name']}</b>
+Address: {registration_data[chat_id]['address']}
+Phone: <code>{registration_data[chat_id]['phone']}</code>
+ID: <code>{chat_id}</code>
 
-<b>💳 Registration Fee:</b> $1 (150 ETB)
-📸 Payment screenshot attached below
-⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Registration Fee: $1 (150 ETB)
+Payment screenshot attached below
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-<b>Please verify the payment and approve or reject.</b>
+Please verify the payment and approve or reject.
 """
         # Send admin notification with retry
         admin_notify_success = False
@@ -427,9 +411,7 @@ Please wait for admin approval. You'll be notified once your account is activate
             bot.send_message(
                 chat_id,
                 """
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(128247)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ ✨ RECEIVED! ✨ ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+✨ RECEIVED! ✨ 
 
 <b>🌟 Thank you for your registration! 🌟</b>
 
@@ -530,12 +512,10 @@ def handle_admin_decision(call):
 Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
 
 <b>📱 Your Services:</b>
-┌─────────────────┐
-│ 💰 <b>Deposit</b> - Add funds to your account
-│ 📦 <b>Submit Order</b> - Place AliExpress orders
-│ 📊 <b>Order Status</b> - Track your orders
-│ 💳 <b>Balance</b> - Check your current balance
-└─────────────────┘
+• 💰 <b>Deposit</b> - Add funds to your account
+• 📦 <b>Submit Order</b> - Place AliExpress orders
+• 📊 <b>Order Status</b> - Track your orders
+• 💳 <b>Balance</b> - Check your current balance
 
 Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
@@ -668,35 +648,25 @@ def send_payment_details(message, amount):
     }
 
     payment_msg = f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║   Deposit   ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+Deposit Details
+Amount Due:
+USD: <code>${amount:,.2f}</code>
+ETB: <code>{birr_amount:,}</code>
 
-<b>💰 Amount Due:</b>
-┌─────────────────┐
-│ 🇺🇸 <code>${amount:,.2f}</code> USD
-│ 🇪🇹 <code>{birr_amount:,}</code> ETB
-└─────────────────┘
+Payment Methods:
+Commercial Bank (CBE)
+Account: <code>1000547241316</code>
+Name: Eyob Mulugeta
 
-<b>💳 Payment Methods:</b>
+TeleBirr
+Number: <code>0986693062</code>
+Name: Eyob Mulugeta
 
-🏦 <b>Commercial Bank (CBE)</b>
-┌─────────────────┐
-│ 💠 Account: <code>1000547241316</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-📱 <b>TeleBirr</b>
-┌─────────────────┐
-│ 💠 Number: <code>0986693062</code>
-│ 👤 Name: <b>Eyob Mulugeta</b>
-└─────────────────┘
-
-<b>📝 Instructions:</b>
-1️⃣ Choose payment method
-2️⃣ Send exact amount
-3️⃣ Take clear screenshot
-4️⃣ Send screenshot below ⬇️
+Instructions:
+1. Choose payment method
+2. Send exact amount
+3. Take clear screenshot
+4. Send screenshot below ⬇️
 """
     bot.send_message(chat_id, payment_msg, parse_mode='HTML')
 
@@ -727,25 +697,19 @@ def handle_deposit_screenshot(message):
         )
 
         admin_msg = f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ New Deposit ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+New Deposit
 
-👤 <b>User Details:</b>
-┌─────────────────┐
-│ Name: <b>{user.name}</b>
-│ ID: <code>{chat_id}</code>
-│ Phone: <code>{user.phone}</code>
-└─────────────────┘
+User Details:
+Name: <b>{user.name}</b>
+ID: <code>{chat_id}</code>
+Phone: <code>{user.phone}</code>
 
-💰 <b>Amount:</b>
-┌─────────────────┐
-│ USD: <code>${deposit_amount:,.2f}</code>
-│ ETB: <code>{birr_amount:,}</code>
-└─────────────────┘
+Amount:
+USD: <code>${deposit_amount:,.2f}</code>
+ETB: <code>{birr_amount:,}</code>
 
-⏰ <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-📸 Screenshot attached below
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Screenshot attached below
 """
         if ADMIN_ID:
             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
@@ -755,29 +719,23 @@ def handle_deposit_screenshot(message):
         bot.send_message(
             chat_id,
             f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(128179)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ ✨ DEPOSIT RECEIVED ✨ ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(128336)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+✨ DEPOSIT RECEIVED ✨
 
-<b>🌟 Thank you for your deposit! 🌟</b>
+🌟 Thank you for your deposit! 🌟
 
-<b>💸 Deposit Information:</b>
-┏━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 💵 Amount: `$ {deposit_amount:,.2f}
-┃ 🇪🇹 ETB: <code>{birr_amount:,}</code> birr
-┃ 📤 Screenshot: <b>✅ Received</b>
-┃ 🔄 Status: <b>⏳ Processing</b>
-┗━━━━━━━━━━━━━━━━━━━━━━━━┛
+Deposit Information:
+Amount: `$ {deposit_amount:,.2f}
+ETB: <code>{birr_amount:,}</code> birr
+Screenshot: ✅ Received
+Status: ⏳ Processing
 
-<b>🚀 What happens next?</b>
-┏━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 1️⃣ Quick verification of payment
-┃ 2️⃣ Your balance will be updated
-┃ 3️⃣ You'll receive confirmation
-┃ 4️⃣ Start shopping immediately!
-┗━━━━━━━━━━━━━━━━━━━━━━━━┛
+What happens next?
+1. Quick verification of payment
+2. Your balance will be updated
+3. You'll receive confirmation
+4. Start shopping immediately!
 
-<i>💫 Your AliExpress shopping adventure is just moments away!</i>
+Your AliExpress shopping adventure is just moments away!
 """,
             parse_mode='HTML'
         )
@@ -865,9 +823,7 @@ Click 💰 Deposit to add funds.
         bot.send_message(
             chat_id,
             """
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 📦 <b>NEW ORDER</b> 📦
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
 
 <b>🌟 Ready to shop on AliExpress? 🌟</b>
 
@@ -958,29 +914,23 @@ def process_order_link(message):
         )
 
         admin_msg = f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ New Order! ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+New Order!
 
-👤 <b>Customer Details:</b>
-┌─────────────────┐
-│ 📛 Name: <b>{user.name}</b>
-│ 📱 Phone: <code>{user.phone}</code>
-│ 📍 Address: {user.address}
-│ 🆔 User ID: <code>{chat_id}</code>
-└─────────────────┘
+Customer Details:
+Name: <b>{user.name}</b>
+Phone: <code>{user.phone}</code>
+Address: {user.address}
+User ID: <code>{chat_id}</code>
 
-💰 <b>Financial Details:</b>
-┌─────────────────┐
-│ 💳 Balance: $<code>{user.balance:.2f}</code>
-│ 🛒 Order #: {new_order_number}
-└─────────────────┘
+Financial Details:
+Balance: $<code>{user.balance:.2f}</code>
+Order #: {new_order_number}
 
 
-🔗 <b>Product Link:</b>
+Product Link:
 <code>{link}</code>
 
-⏰ <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
         if ADMIN_ID:
             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
@@ -989,21 +939,19 @@ def process_order_link(message):
         bot.send_message(
             chat_id,
             f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-    💫 <b>ORDER RECEIVED!</b> 💫
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(127891)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+💫 <b>ORDER RECEIVED!</b> 💫
 
 🎉 <b>Order #{new_order_number} successfully placed!</b> 🎉
 
-<b>Your AliExpress item is being processed right now.</b>
+Your AliExpress item is being processed right now.
 
-<i>Please wait while we prepare your:</i>
+Please wait while we prepare your:
 🔹 <b>Order ID</b>
 🔹 <b>Tracking Number</b>
 
-<b>We'll notify you as soon as these are ready!</b>
+We'll notify you as soon as these are ready!
 
-<i>Thank you for shopping with AliPay_ETH - Your Ethiopian gateway to AliExpress!</i>
+Thank you for shopping with AliPay_ETH - Your Ethiopian gateway to AliExpress!
 """,
             parse_mode='HTML',
             reply_markup=create_main_menu(is_registered=True)
@@ -1029,75 +977,67 @@ def handle_deposit_admin_decision(call):
         deposit_marker = parts[1]  # This will be "deposit"
         chat_id = int(parts[2])
         amount = float(parts[3])
-        
+
         logger.info(f"Processing deposit {action} for user {chat_id}, amount: ${amount}")
-        
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.answer_callback_query(call.id, "User not found")
             logger.error(f"User {chat_id} not found for deposit {action}")
             return
-            
+
         pending_deposit = session.query(PendingDeposit).filter_by(user_id=user.id, amount=amount, status='Processing').first()
-        
+
         if not pending_deposit:
             bot.answer_callback_query(call.id, "No matching pending deposit found")
             logger.warning(f"No pending deposit found for user {chat_id} with amount ${amount}")
             return
-            
+
         if action == 'approve':
             # Add amount to user balance
             user.balance += amount
             pending_deposit.status = 'Approved'
             session.commit()
-            
+
             # Notify user
             bot.send_message(
                 chat_id,
                 f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128176)}{chr(32)}{chr(128176)}{chr(32)}{chr(128176)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ ✅ DEPOSIT APPROVED ✅ ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128184)}{chr(32)}{chr(128184)}{chr(32)}{chr(128184)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+✅ DEPOSIT APPROVED ✅
 
-<b>💰 Deposit Details:</b>
-┌─────────────────┐
-│ 💵 Amount: <code>${amount:.2f}</code>
-│ 🇪🇹 ETB: <code>{int(amount * 160):,}</code> birr
-└─────────────────┘
+💰 Deposit Details:
+Amount: <code>${amount:.2f}</code>
+ETB: <code>{int(amount * 160):,}</code> birr
 
-<b>💳 Account Updated:</b>
-┌─────────────────┐
-│ 💎 New Balance: <code>${user.balance:.2f}</code>
-└─────────────────┘
+💳 Account Updated:
+New Balance: <code>${user.balance:.2f}</code>
 
-<b>✨ You're ready to start shopping! ✨</b>
+✨ You're ready to start shopping! ✨
 """,
                 parse_mode='HTML'
             )
-            
+
             # Update admin message
             bot.edit_message_text(
                 f"✅ Deposit of ${amount:.2f} approved for {user.name}",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
-            
+
         elif action == 'reject':
             # Mark as rejected without changing balance
             pending_deposit.status = 'Rejected'
             session.commit()
-            
+
             # Notify user
             bot.send_message(
                 chat_id,
                 f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(10060)}{chr(32)}{chr(10060)}{chr(32)}{chr(10060)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ ❌ DEPOSIT REJECTED ❌ ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+❌ DEPOSIT REJECTED ❌
 
-<b>Your deposit of ${amount:.2f} was rejected.</b>
+Your deposit of ${amount:.2f} was rejected.
 
 Possible reasons:
 • Payment amount didn't match
@@ -1108,16 +1048,16 @@ Please try again or contact support.
 """,
                 parse_mode='HTML'
             )
-            
+
             # Update admin message
             bot.edit_message_text(
                 f"❌ Deposit of ${amount:.2f} rejected for {user.name}",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
-        
+
         bot.answer_callback_query(call.id, "Action processed successfully")
-        
+
     except Exception as e:
         logger.error(f"Error processing deposit decision: {e}")
         logger.error(traceback.format_exc())
@@ -1149,10 +1089,10 @@ def handle_order_admin_decision(call):
             bot.send_message(
                 user.telegram_id,
                 f"""
-\u2705 <b>Order Confirmed!</b>
+✅ Order Confirmed!
 
-\U0001F4E6 <b>Order #:</b> {order.order_number}
-\U0001F504 <b>Status:</b> Confirmed
+Order #: {order.order_number}
+Status: Confirmed
 
 We'll process your order and update you when it ships.
 """,
@@ -1173,10 +1113,10 @@ We'll process your order and update you when it ships.
             bot.send_message(
                 user.telegram_id,
                 f"""
-\u274C <b>Order Rejected</b>
+❌ Order Rejected
 
-\U0001F4E6 <b>Order #:</b> {order.order_number}
-\U0001F504 <b>Status:</b> Rejected
+Order #: {order.order_number}
+Status: Rejected
 
 Please contact support for more information.
 """,
@@ -1233,13 +1173,12 @@ Click 📦 Submit Order to place your first order!
             status_emoji = "🔄" if order.status == "Processing" else "✅" if order.status == "Confirmed" else "🚚" if order.status == "Shipped" else "❌"
             status_msg += f"""
 <b>Order #{order.order_number}</b>
-┌─────────────────┐
-│ 🔄 Status: {status_emoji} {order.status}
-│ 📅 Date: {order.created_at.strftime('%Y-%m-%d')}
+Status: {status_emoji} {order.status}
+Date: {order.created_at.strftime('%Y-%m-%d')}
 """
             if order.tracking_number:
-                status_msg += f"│ 📦 Tracking: <code>{order.tracking_number}</code>\n"
-            status_msg += "└─────────────────┘\n"
+                status_msg += f"Tracking: <code>{order.tracking_number}</code>\n"
+            status_msg += "\n"
 
         bot.send_message(chat_id, status_msg, parse_mode='HTML')
 
@@ -1300,22 +1239,19 @@ def process_order_tracking(message):
 🔍 <b>Order Details</b>
 
 📦 <b>Order #{order.order_number}</b>
-┌─────────────────┐
-│ 🔄 Status: {order.status}
-│ 📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
+Status: {order.status}
+Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
 """
 
         if order.tracking_number:
-            tracking_info += f"""│ 📦 Tracking: <code>{order.tracking_number}</code>
-│ 🔗 Track: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}
+            tracking_info += f"""Tracking: <code>{order.tracking_number}</code>
+Track: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}
 """
         else:
-            tracking_info += "│ 📦 Tracking: Not available yet\n"
+            tracking_info += "Tracking: Not available yet\n"
 
         if order.order_id:
-            tracking_info += f"│ 🛒 Order ID: <code>{order.order_id}</code>\n"
-
-        tracking_info += "└─────────────────┘"
+            tracking_info += f"Order ID: <code>{order.order_id}</code>\n"
 
         bot.send_message(chat_id, tracking_info, parse_mode='HTML')
 
@@ -1334,31 +1270,23 @@ def process_order_tracking(message):
 def help_center(message):
     """Help center button"""
     help_msg = """
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(65039)}{chr(32)}{chr(65039)}{chr(32)}{chr(65039)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ Help Center ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(127775)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+Help Center
 
-📱 <b>Contact Support</b>
-┌─────────────────┐
-│ 👤 <b>@alipay_help_center</b>
-└─────────────────┘
+Contact Support
+👤 @alipay_help_center
 
-📖 <b>Quick Guide:</b>
-┌─────────────────┐
-│ • /start - Reset bot
-│ • 🔑 Register - Join now
-│ • 💰Deposit - Add funds
-│ • 📦 Submit - New order
-└─────────────────┘
+Quick Guide:
+• /start - Reset bot
+• 🔑 Register - Join now
+• 💰Deposit - Add funds
+• 📦 Submit - New order
 
-🌟 <b>Need Help?</b>
-┌─────────────────┐
-│ • Orders: 📊 Status
-│ • Track: 🔍 Package
-│ • Money: 💳 Balance
-└─────────────────┘
+Need Help?
+• Orders: 📊 Status
+• Track: 🔍 Package
+• Money: 💳 Balance
 
-:✨ We're here to help!
+✨ We're here to help!
 """
     bot.send_message(message.chat.id, help_msg, parse_mode='HTML')
 
@@ -1407,11 +1335,9 @@ def handle_order_admin_decision(message):
             bot.send_message(
                 customer.telegram_id,
                 f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128373)}{chr(32)}{chr(128373)}{chr(32)}{chr(128373)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ Order Update ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+Order Update
 
-<b>Order #{order.order_number}</b>
+Order #{order.order_number}
 Status: <b>{new_status.upper()}</b>
 
 Thank you for using AliPay_ETH!
@@ -1457,14 +1383,12 @@ def check_subscription_status():
                             bot.send_message(
                                 user.telegram_id,
                                 """
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(9888)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ SUBSCRIPTION ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+SUBSCRIPTION
 
-<b>Your subscription has expired!</b>
+Your subscription has expired!
 
-• Expired: {-days_remaining} days ago
-• Renew now to continue using AliPay_ETH
+Expired: {-days_remaining} days ago
+Renew now to continue using AliPay_ETH
 
 Use the 💳 <b>Subscription</b> menu to renew.
 """,
@@ -1475,14 +1399,12 @@ Use the 💳 <b>Subscription</b> menu to renew.
                             bot.send_message(
                                 user.telegram_id,
                                 f"""
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(9987)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
-║ REMINDER ║
-{chr(91)}{chr(91)}{chr(91)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(128197)}{chr(32)}{chr(93)}{chr(93)}{chr(93)}
+REMINDER
 
-<b>Subscription ending soon!</b>
+Subscription ending soon!
 
-• Days remaining: {days_remaining}
-• Renew now to avoid interruption
+Days remaining: {days_remaining}
+Renew now to avoid interruption
 
 Use the 💳 <b>Subscription</b> menu to renew.
 """,
@@ -1538,4 +1460,87 @@ def main():
     logger.info("Bot shutdown complete")
 
 if __name__ == "__main__":
+    # Start the subscription checker in a separate thread
+    subscription_thread = threading.Thread(target=run_subscription_checker)
+    subscription_thread.daemon = True
+    subscription_thread.start()
     main()
+
+@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
+def check_subscription(message):
+    """Check user's subscription status"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+
+        if not user:
+            bot.send_message(chat_id, "Please register first to check your subscription.", reply_markup=create_main_menu(is_registered=False))
+            return
+
+        # Calculate subscription status
+        now = datetime.utcnow()
+        if user.subscription_date:
+            days_passed = (now - user.subscription_date).days
+            days_remaining = 30 - days_passed
+
+            if days_remaining > 0:
+                status = f"Active ({days_remaining} days remaining)"
+                renew_date = (user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')
+            else:
+                status = "Expired"
+                renew_date = "Renewal needed"
+
+            # Create subscription renewal buttons
+            markup = InlineKeyboardMarkup()
+            markup.row(
+                InlineKeyboardButton("Renew 1 Month ($1)", callback_data="renew_1")
+            )
+
+            # Prepare a cleaner message without the chr() characters
+            subscription_msg = f"""
+╔══════════════════╗
+║   SUBSCRIPTION   ║
+╚══════════════════╝
+
+📱 <b>Status:</b> {status}
+📆 <b>Next renewal:</b> {renew_date}
+💲 <b>Monthly fee:</b> $1.00
+
+To renew your subscription, click the button below:
+"""
+            bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
+        else:
+            bot.send_message(chat_id, "No subscription information found. Please contact support.")
+    except Exception as e:
+        logger.error(f"Error checking subscription: {e}")
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data == "renew_1")
+def handle_subscription_renewal(call):
+    """Handle subscription renewal"""
+    chat_id = call.message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        if not user:
+            bot.answer_callback_query(call.id, "User not found.")
+            return
+
+        user.subscription_date = datetime.utcnow()
+        session.commit()
+        bot.answer_callback_query(call.id, "Subscription renewed successfully!")
+        bot.edit_message_text(
+            "Subscription renewed successfully!",
+            chat_id=chat_id,
+            message_id=call.message.message_id
+        )
+    except Exception as e:
+        logger.error(f"Error renewing subscription: {e}")
+        bot.answer_callback_query(call.id, "Error renewing subscription.")
+    finally:
+        safe_close_session(session)
