@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-Utility to clean up lock files and terminate stray processes
+Clean up any existing bot processes and lock files
 """
 import os
 import sys
-import glob
 import logging
-import signal
 import subprocess
 import time
 
@@ -18,88 +16,57 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def get_bot_processes():
-    """Get list of python processes running the bot"""
+def cleanup():
+    """Clean up any existing bot processes and lock files"""
     try:
-        result = subprocess.run(
-            ["ps", "-ef"], 
+        # Kill any running bot processes
+        logger.info("Terminating any existing bot processes...")
+        commands = [
+            "pkill -f 'python.*bot.py' || true",
+            "pkill -f 'telebot' || true",
+            "rm -f *.lock || true",
+            "rm -f *.pid || true"
+        ]
+
+        for cmd in commands:
+            subprocess.run(cmd, shell=True, check=False)
+
+        # Give processes time to terminate
+        time.sleep(2)
+
+        # Check if any bot processes are still running
+        ps_check = subprocess.run(
+            "ps aux | grep 'python.*bot.py' | grep -v grep || true", 
+            shell=True, 
             capture_output=True, 
-            text=True, 
-            check=True
+            text=True
         )
 
-        processes = []
-        for line in result.stdout.splitlines():
-            if "python" in line and ("bot.py" in line or "run_bot.py" in line):
-                # Skip the grep process itself and this script
-                if "clean_locks.py" not in line:
-                    processes.append(line.split()[1])  # Get PID
+        if ps_check.stdout.strip():
+            logger.warning("Some bot processes are still running. Attempting force kill...")
+            subprocess.run("pkill -9 -f 'python.*bot.py' || true", shell=True, check=False)
+            time.sleep(1)
 
-        return processes
-    except Exception as e:
-        logger.error(f"Error getting bot processes: {e}")
-        return []
+        # Verify all processes are terminated
+        final_check = subprocess.run(
+            "ps aux | grep 'python.*bot.py' | grep -v grep | wc -l", 
+            shell=True, 
+            capture_output=True, 
+            text=True
+        )
 
-def terminate_processes(pids):
-    """Terminate list of processes by PID"""
-    for pid in pids:
-        try:
-            logger.info(f"Terminating process {pid}")
-            os.kill(int(pid), signal.SIGTERM)
-            # Give it a moment to terminate gracefully
-            time.sleep(0.5)
-
-            # Check if process is still running
-            try:
-                os.kill(int(pid), 0)  # Signal 0 is used to check if process exists
-                logger.warning(f"Process {pid} still running, forcing kill")
-                os.kill(int(pid), signal.SIGKILL)
-            except ProcessLookupError:
-                # Process already terminated
-                pass
-
-        except ProcessLookupError:
-            logger.info(f"Process {pid} not found")
-        except Exception as e:
-            logger.error(f"Error terminating process {pid}: {e}")
-
-def remove_lock_files():
-    """Remove all lock files in the current directory"""
-    try:
-        lock_files = glob.glob("*.lock")
-        if lock_files:
-            logger.info(f"Removed lock files matching: {', '.join(lock_files)}")
-            for lock_file in lock_files:
-                try:
-                    os.remove(lock_file)
-                except Exception as e:
-                    logger.error(f"Error removing lock file {lock_file}: {e}")
+        if int(final_check.stdout.strip()) == 0:
+            logger.info("All bot processes successfully terminated")
         else:
-            logger.info("No lock files found")
+            logger.warning(f"Warning: {final_check.stdout.strip()} bot processes still running")
+
+        return True
     except Exception as e:
-        logger.error(f"Error removing lock files: {e}")
-
-def main():
-    """Main function to clean up lock files and processes"""
-    logger.info("🧹 Starting cleanup...")
-
-    logger.info("Checking for lock files...")
-
-    # Terminate existing bot processes
-    logger.info("Terminating any existing bot processes...")
-    bot_pids = get_bot_processes()
-    if bot_pids:
-        logger.info(f"Found {len(bot_pids)} bot processes: {', '.join(bot_pids)}")
-        terminate_processes(bot_pids)
-    else:
-        logger.info("No bot processes found")
-
-    # Remove all lock files
-    logger.info("Removing any Telegram bot lock files...")
-    remove_lock_files()
-
-    logger.info("✅ Cleanup completed")
-    return 0
+        logger.error(f"Error during cleanup: {e}")
+        return False
 
 if __name__ == "__main__":
-    sys.exit(main())
+    logger.info("Starting cleanup...")
+    success = cleanup()
+    logger.info(f"Cleanup {'successful' if success else 'failed'}")
+    sys.exit(0 if success else 1)
