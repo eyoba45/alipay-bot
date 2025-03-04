@@ -11,44 +11,28 @@ import requests
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
 def create_payment(amount, currency, callback_url):
     """Create a new payment with Chapa"""
-    secret_key = os.environ.get('CHAPA_SECRET_KEY')
-    if not secret_key:
-        logger.error("Chapa secret key not set!")
-        return None
+    # Implement your logic for creating a payment with Chapa
+    pass  # Replace with actual implementation
 
-    headers = {
-        'Authorization': f'Bearer {secret_key}',
-        'Content-Type': 'application/json'
-    }
-    
-    payment_data = {
-        'amount': amount,
-        'currency': currency,
-        'callback_url': callback_url,
-        'metadata': {
-            'description': 'Payment for services',
-        }
-    }
-
+def generate_deposit_payment(user_data):
+    """Generate a deposit payment link for the user."""
     try:
-        response = requests.post(
-            'https://chapa.co/api/v1/transaction/initialize',
-            json=payment_data,
-            headers=headers
-        )
-        
-        if response.status_code == 200:
-            logger.info("Payment created successfully!")
-            return response.json()
-        else:
-            logger.error(f"Failed to create payment: {response.text}")
-            return None
+        amount = user_data.get('amount', 0)  # Get the deposit amount
+        currency = user_data.get('currency', 'USD')  # Default to USD
+        callback_url = user_data.get('callback_url', 'https://your.callback.url')  # Set your callback URL
+
+        # Create the payment and return the response
+        payment_response = create_payment(amount, currency, callback_url)
+        if payment_response and 'checkout_url' in payment_response:
+            return payment_response  # Return the payment link
+
+        logger.error("Failed to generate deposit payment.")
+        return None
     except Exception as e:
-        logger.error(f"Error creating payment: {e}")
+        logger.error(f"Error generating deposit payment: {e}")
         return None
