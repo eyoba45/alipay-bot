@@ -14,21 +14,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 def create_payment(amount, currency, callback_url):
     """Create a new payment with Chapa"""
     try:
-        url = "https://api.chapa.co/v1/transaction/initialize"  # Ensure this URL is correct
-        # Construct the payload according to the API documentation
+        url = "https://api.chapa.co/payment"
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('CHAPA_SECRET_KEY')}",
+            "Content-Type": "application/json"
+        }
         payload = {
             "amount": amount,
             "currency": currency,
             "callback_url": callback_url
         }
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
-        logger.info(f"Create payment response: {response_data}")  # Log the response
-        return response_data  # Ensure to return the correct data
+        logger.info(f"Create payment response: {response_data}")
+        return response_data
     except Exception as e:
         logger.error(f"Error creating payment: {e}")
         return None
