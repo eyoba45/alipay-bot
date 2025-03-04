@@ -1029,7 +1029,12 @@ New Balance: <code>${user.balance:.2f}</code>
         elif action == 'reject':
             # Mark as rejected without changing balance
             pending_deposit.status = 'Rejected'
-            session.commit()
+            try:
+                session.commit()
+            except Exception as commit_error:
+                logger.error(f"Error committing rejection: {commit_error}")
+                session.rollback()
+                raise
 
             # Notify user
             bot.send_message(
@@ -1498,7 +1503,7 @@ def check_subscription(message):
                 InlineKeyboardButton("Renew 1 Month ($1)", callback_data="renew_1")
             )
 
-            # Prepare a cleaner message without the chr() characters
+            # Clean subscription message with proper formatting
             subscription_msg = f"""
 ╔══════════════════╗
 ║   SUBSCRIPTION   ║
@@ -1531,16 +1536,51 @@ def handle_subscription_renewal(call):
             bot.answer_callback_query(call.id, "User not found.")
             return
 
+        # Check if user has enough balance for subscription
+        if user.balance < 1.0:
+            bot.answer_callback_query(call.id, "Insufficient balance. Please deposit funds first.")
+            bot.send_message(
+                chat_id,
+                """
+❌ <b>Insufficient Balance</b>
+
+You need at least $1.00 in your account to renew your subscription.
+Please use the 💰 Deposit option to add funds.
+""",
+                parse_mode='HTML'
+            )
+            return
+
+        # Deduct subscription fee and update date
+        user.balance -= 1.0
         user.subscription_date = datetime.utcnow()
-        session.commit()
-        bot.answer_callback_query(call.id, "Subscription renewed successfully!")
-        bot.edit_message_text(
-            "Subscription renewed successfully!",
-            chat_id=chat_id,
-            message_id=call.message.message_id
-        )
+        user.last_subscription_reminder = None  # Reset reminder
+        
+        try:
+            session.commit()
+            bot.answer_callback_query(call.id, "Subscription renewed successfully!")
+            bot.edit_message_text(
+                f"""
+✅ <b>Subscription Renewed!</b>
+
+Your subscription has been renewed for 1 month.
+New expiry date: {(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}
+Current balance: ${user.balance:.2f}
+
+Thank you for using AliPay_ETH!
+""",
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                parse_mode='HTML'
+            )
+        except Exception as commit_error:
+            logger.error(f"Error committing subscription renewal: {commit_error}")
+            session.rollback()
+            bot.answer_callback_query(call.id, "Database error, please try again.")
+            return
     except Exception as e:
         logger.error(f"Error renewing subscription: {e}")
+        logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error renewing subscription.")
     finally:
         safe_close_session(session)
