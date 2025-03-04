@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def create_payment(amount, currency, callback_url):
     """Create a new payment with Chapa"""
     try:
-        url = "https://api.chapa.co/payment"
+        url = "https://api.chapa.co/v1/transaction/initialize"
         headers = {
             "Authorization": f"Bearer {os.environ.get('CHAPA_SECRET_KEY')}",
             "Content-Type": "application/json"
