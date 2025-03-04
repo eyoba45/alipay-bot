@@ -3,6 +3,7 @@ import os
 import logging
 import time
 import traceback
+import sys
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from contextlib import contextmanager
@@ -10,62 +11,79 @@ from models import Base, User, Order
 from filelock import FileLock
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set!")
+    logger.error("DATABASE_URL environment variable is not set!")
+    # Provide fallback to SQLite for development
+    logger.warning("Using SQLite as fallback - this is not recommended for production")
+    DATABASE_URL = "sqlite:///alipay_eth.db"
 
 # Connection pool monitoring lock
-db_lock = FileLock("database_connections.lock")
+db_lock = FileLock("database_connections.lock", timeout=30)
 
 # Create engine with optimized connection handling for deployment
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=20,        # Increased for better concurrency
-    max_overflow=30,     # Increased overflow for high traffic periods
-    pool_timeout=3,      # Reduced timeout for faster error detection
-    pool_recycle=30,     # More aggressive recycling to prevent stale connections
-    pool_pre_ping=True,  # Keep pre-ping enabled for connection validation
-    connect_args={
-        "keepalives": 1,
-        "keepalives_idle": 15,  # Reduced idle time for more responsive connections
-        "keepalives_interval": 5,  # More frequent keepalive checks
-        "keepalives_count": 5,
-        "connect_timeout": 3,  # Faster connection timeout
-        "application_name": "alipay_eth_telebot",
-        "sslmode": "require"  # Keep SSL mode enabled
-    }
-)
+try:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,        
+        max_overflow=20,     
+        pool_timeout=10,      
+        pool_recycle=300,    
+        pool_pre_ping=True,  # Keep pre-ping enabled for connection validation
+        connect_args={
+            "connect_timeout": 10,
+            "application_name": "alipay_eth_telebot"
+        }
+    )
+    logger.info("Database engine created successfully")
+except Exception as e:
+    logger.error(f"Failed to create database engine: {e}")
+    logger.error(traceback.format_exc())
+    sys.exit(1)
 
 # Create scoped session
 session_factory = sessionmaker(bind=engine)
 Session = scoped_session(session_factory)
 
-def init_db():
+def init_db(retry=True, max_retries=5):
     """Initialize the database, creating all tables with retry logic"""
-    max_retries = 5
     retry_delay = 1
     
     for attempt in range(max_retries):
         try:
             Base.metadata.create_all(engine)
             logger.info("✅ Database tables created successfully")
-            return
+            return True
         except Exception as e:
             logger.error(f"❌ Error creating database tables (attempt {attempt+1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
+            if retry and attempt < max_retries - 1:
+                logger.info(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
                 retry_delay *= 2  # Exponential backoff
             else:
+                logger.error(traceback.format_exc())
+                if not retry:
+                    return False
                 raise
+    
+    return False
 
 def get_session():
     """Get a new database session with performance logging"""
-    session = Session()
-    return session
+    try:
+        session = Session()
+        return session
+    except Exception as e:
+        logger.error(f"Error creating session: {e}")
+        logger.error(traceback.format_exc())
+        raise
 
 @contextmanager
 def session_scope():
@@ -83,11 +101,11 @@ def session_scope():
 
 def safe_close_session(session):
     """Safely close a database session"""
-    try:
-        if session:
+    if session:
+        try:
             session.close()
-    except Exception as e:
-        logger.error(f"Error closing database session: {e}")
+        except Exception as e:
+            logger.error(f"Error closing database session: {e}")
 
 def with_retry(func):
     """Decorator for retrying database operations"""
@@ -116,23 +134,34 @@ def with_retry(func):
     return wrapper
 
 def check_db_connection():
-    """Test database connection with diagnostics"""
+    """Test database connection with diagnostics and autorecovery"""
     start_time = time.time()
     session = None
-    try:
-        session = get_session()
-        # Simple quick query to test connectivity
-        result = session.execute("SELECT 1").fetchone()
-        elapsed = time.time() - start_time
-        logger.info(f"✅ Database connection test successful ({elapsed:.3f}s)")
-        return True
-    except Exception as e:
-        elapsed = time.time() - start_time
-        logger.error(f"❌ Database connection test failed ({elapsed:.3f}s): {e}")
-        logger.error(traceback.format_exc())
-        return False
-    finally:
-        safe_close_session(session)
+    
+    for attempt in range(3):  # Try up to 3 times
+        try:
+            session = get_session()
+            # Simple quick query to test connectivity
+            from sqlalchemy import text
+            result = session.execute(text("SELECT 1")).fetchone()
+            elapsed = time.time() - start_time
+            logger.info(f"✅ Database connection test successful ({elapsed:.3f}s)")
+            return True
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Database connection test failed (attempt {attempt+1}/3, {elapsed:.3f}s): {e}")
+            
+            if attempt < 2:  # If not the last attempt
+                logger.info("🔄 Resetting connection pool and retrying...")
+                safe_close_session(session)
+                reset_connection_pool()  # Try to reset the pool
+                time.sleep(2 * (attempt + 1))  # Increasing backoff
+            else:
+                logger.error(traceback.format_exc())
+        finally:
+            safe_close_session(session)
+    
+    return False
 
 def reset_connection_pool():
     """Reset the database connection pool in case of issues"""
