@@ -907,7 +907,7 @@ def join_community(message):
 
 @bot.message_handler(func=lambda msg: msg.text == '📦 Submit Order')
 def submit_order(message):
-    """Handle submit order button"""
+    """Handle submit order button with enhanced UI"""
     chat_id = message.chat.id
     session = None
     try:
@@ -915,7 +915,17 @@ def submit_order(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
-            bot.send_message(chat_id, "Please register first to submit anorder.", reply_markup=create_main_menu(is_registered=False))
+            bot.send_message(
+                chat_id, 
+                """
+⚠️ <b>Registration Required</b>
+
+You need to register first before placing orders.
+Click 🔑 Register to create your account.
+""", 
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=False)
+            )
             return
 
         # Check if user has enough balance
@@ -923,10 +933,16 @@ def submit_order(message):
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Insufficient Balance</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>INSUFFICIENT BALANCE</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-You need to add funds to your account before placing an order.
-Click 💰 Deposit to add funds.
+<b>💰 Your current balance:</b> $0.00
+
+You need to add funds to your account before placing an order. 
+Click 💰 <b>Deposit</b> to add funds and start shopping!
+
+<i>Our payment options include CBE and TeleBirr for your convenience.</i>
 """,
                 parse_mode='HTML'
             )
@@ -942,31 +958,41 @@ Click 💰 Deposit to add funds.
         bot.send_message(
             chat_id,
             """
-📦 <b>NEW ORDER</b> 📦
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🛍️ <b>NEW ALIEXPRESS ORDER</b> 🛍️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>🌟 Ready to shop on AliExpress? 🌟</b>
+<b>💰 Your current balance:</b> $<code>{:.2f}</code>
 
-✅ <b>Just paste your product link below!</b>
+<b>🔍 HOW TO ORDER:</b>
+
+1️⃣ Go to AliExpress and find your product
+2️⃣ Copy the complete product URL
+3️⃣ Paste the link below
+4️⃣ Our team will process your order immediately
+
+<b>✨ PASTE YOUR LINK BELOW:</b>
 
 Example:
 <code>https://www.aliexpress.com/item/12345.html</code>
 
-<i>Our team is ready to process your order immediately!</i>
+<i>💫 We handle everything for you - payment, shipping, and tracking! 💫</i>
 
 Press 'Back to Main Menu' to cancel your order.
-""",
+""".format(user.balance),
             parse_mode='HTML',
             reply_markup=back_markup
         )
     except Exception as e:
         logger.error(f"Error in submit order: {e}")
+        logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_link')
 def process_order_link(message):
-    """Process the order link"""
+    """Process the order link with enhanced UI and reliability"""
     chat_id = message.chat.id
     link = message.text.strip()
     session = None
@@ -992,16 +1018,35 @@ def process_order_link(message):
             logger.error(f"Error returning to main menu: {e}")
             if chat_id in user_states:
                 del user_states[chat_id]
-            bot.send_message(chat_id, "🏠 Back to main menu",reply_markup=create_main_menu(is_registered=True))
+            bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
             return
         finally:
             safe_close_session(session)
 
+    # First, send immediate acknowledgment
+    processing_msg = bot.send_message(
+        chat_id,
+        "⏳ <b>Processing your order...</b>",
+        parse_mode='HTML'
+    )
+
     # Basic validation of the link
     if not link.startswith('http') or 'aliexpress' not in link.lower():
-        bot.send_message(
-            chat_id,
-            "❌ <b>Invalid Link</b>\n\nPlease provide a valid AliExpress product link that starts with 'http' and contains 'aliexpress'.\n\nOr press 'Back to Main Menu' to cancel.",
+        bot.edit_message_text(
+            """
+❌ <b>INVALID LINK DETECTED</b>
+
+Please provide a valid AliExpress product link that:
+• Starts with 'http' or 'https'
+• Contains 'aliexpress' in the URL
+
+<b>Example:</b>
+<code>https://www.aliexpress.com/item/1005006383458726.html</code>
+
+Please try again or press 'Back to Main Menu' to cancel.
+""",
+            chat_id=chat_id,
+            message_id=processing_msg.message_id,
             parse_mode='HTML'
         )
         return
@@ -1025,54 +1070,78 @@ def process_order_link(message):
         session.add(new_order)
         session.commit()
 
-        # Notify admin about the new order
+        # Extract product title from link for better display (if possible)
+        product_display = link.split('/item/')[-1].split('.html')[0] if '/item/' in link else "AliExpress Product"
+
+        # Notify admin about the new order with improved formatting
         admin_markup = InlineKeyboardMarkup()
         admin_markup.row(
             InlineKeyboardButton("✅ Process", callback_data=f"process_order_{new_order.id}"),
             InlineKeyboardButton("❌ Reject", callback_data=f"reject_order_{new_order.id}")
         )
+        admin_markup.row(
+            InlineKeyboardButton("🔗 View Product", url=link)
+        )
 
         admin_msg = f"""
-New Order!
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🛍️ <b>NEW ORDER RECEIVED</b> 🛍️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Customer Details:
-Name: <b>{user.name}</b>
-Phone: <code>{user.phone}</code>
-Address: {user.address}
-User ID: <code>{chat_id}</code>
+<b>📋 CUSTOMER DETAILS:</b>
+• Name: <b>{user.name}</b>
+• Phone: <code>{user.phone}</code>
+• Address: {user.address}
+• User ID: <code>{chat_id}</code>
 
-Financial Details:
-Balance: $<code>{user.balance:.2f}</code>
-Order #: {new_order_number}
+<b>💰 FINANCIAL DETAILS:</b>
+• Balance: $<code>{user.balance:.2f}</code>
+• Order #: <code>{new_order_number}</code>
 
-
-Product Link:
+<b>🔗 PRODUCT LINK:</b>
 <code>{link}</code>
 
-Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>⏰ TIME:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+<i>Please review and process this order</i>
 """
         if ADMIN_ID:
             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
 
-        # Notify user about order submission with simple, beautiful design
+        # Notify user about order submission with enhanced beautiful design
+        bot.edit_message_text(
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🎉 <b>ORDER PLACED SUCCESSFULLY!</b> 🎉  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+✨ Your AliExpress order request has been received! ✨
+
+<b>📦 ORDER DETAILS:</b>
+• Order Number: <code>{new_order_number}</code>
+• Status: <b>Processing</b>
+• Time: {datetime.now().strftime('%I:%M %p, %d %b %Y')}
+
+<b>🔍 WHAT HAPPENS NEXT?</b>
+1️⃣ Our team will process your order immediately
+2️⃣ You'll receive confirmation when approved
+3️⃣ Your order ID will be generated
+4️⃣ Tracking details will be provided when shipped
+
+<b>📱 STAY UPDATED:</b>
+Use "<b>🔍 Track Order</b>" button anytime to check your order status!
+
+<i>Thank you for shopping with AliPay_ETH - Your Ethiopian gateway to AliExpress!</i>
+""",
+            chat_id=chat_id,
+            message_id=processing_msg.message_id,
+            parse_mode='HTML'
+        )
+
+        # Send main menu
         bot.send_message(
             chat_id,
-            f"""
-💫 <b>ORDER RECEIVED!</b> 💫
-
-🎉 <b>Order #{new_order_number} successfully placed!</b> 🎉
-
-Your AliExpress item is being processed right now.
-
-Please wait while we prepare your:
-🔹 <b>Order ID</b>
-🔹 <b>Tracking Number</b>
-
-We'll notify you as soon as these are ready!
-
-Thank you for shopping with AliPay_ETH - Your Ethiopian gateway to AliExpress!
-""",
-            parse_mode='HTML',
+            "What would you like to do next?",
             reply_markup=create_main_menu(is_registered=True)
         )
 
@@ -1082,9 +1151,32 @@ Thank you for shopping with AliPay_ETH - Your Ethiopian gateway to AliExpress!
     except Exception as e:
         logger.error(f"Error processing order link: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        try:
+            bot.edit_message_text(
+                """
+❌ <b>ERROR PROCESSING ORDER</b>
+
+Sorry, we encountered an error while processing your order. 
+Please try again in a few moments.
+
+If the issue persists, please contact our support team.
+""",
+                chat_id=chat_id,
+                message_id=processing_msg.message_id,
+                parse_mode='HTML'
+            )
+        except Exception:
+            # Fallback if edit fails
+            bot.send_message(
+                chat_id,
+                "Sorry, there was an error. Please try again.",
+                reply_markup=create_main_menu(is_registered=True)
+            )
     finally:
+        # Always clean up
         safe_close_session(session)
+        if chat_id in user_states:
+            del user_states[chat_id]
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
 def handle_deposit_admin_decision(call):
@@ -1191,7 +1283,7 @@ Please try again or contact support.
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
 def handle_order_admin_decision(call):
-    """Handle admin approval/rejection for orders"""
+    """Handle admin approval/rejection for orders with enhanced user notifications"""
     session = None
     try:
         action, order_id = call.data.split('_order_')
@@ -1208,25 +1300,61 @@ def handle_order_admin_decision(call):
         if action == 'process':
             # Update order status
             order.status = 'Confirmed'
+            
+            # Generate a dummy order ID if none exists (can be set manually later)
+            if not order.order_id:
+                # Format: AE-{user_id}-{order_number}-{random numbers}
+                import random
+                random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
+                order.order_id = f"AE-{user.id}-{order.order_number}-{random_suffix}"
+            
             session.commit()
 
+            # Send enhanced confirmation to user with tracking instructions
             bot.send_message(
                 user.telegram_id,
                 f"""
-✅ Order Confirmed!
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>ORDER CONFIRMED!</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Order #: {order.order_number}
-Status: Confirmed
+🎁 <b>Congratulations!</b> Your order has been processed!
 
-We'll process your order and update you when it ships.
+📦 <b>Order Details:</b>
+• Order #: <code>{order.order_number}</code>
+• Order ID: <code>{order.order_id}</code>
+• Status: <b>Confirmed</b>
+• Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
+
+🔍 <b>Track Your Order:</b>
+Use the "<b>🔍 Track Order</b>" button anytime to get 
+the latest status and tracking information!
+
+📱 <b>What's Next?</b>
+• We'll process your order right away
+• You'll receive shipping confirmation soon
+• All updates will be available in tracking
+
+<i>Thank you for shopping with AliPay_ETH!</i>
 """,
                 parse_mode='HTML'
             )
 
+            # Update admin message with more details
             bot.edit_message_text(
-                "✅ Order processed!",
+                f"""
+✅ <b>Order Processed Successfully!</b>
+
+Order #: {order.order_number}
+Order ID: <code>{order.order_id}</code>
+Customer: {user.name}
+Phone: <code>{user.phone}</code>
+
+<i>Order has been confirmed and customer has been notified.</i>
+""",
                 chat_id=call.message.chat.id,
-                message_id=call.message.message_id
+                message_id=call.message.message_id,
+                parse_mode='HTML'
             )
 
         elif action == 'reject':
@@ -1234,29 +1362,54 @@ We'll process your order and update you when it ships.
             order.status = 'Rejected'
             session.commit()
 
+            # Enhanced rejection message
             bot.send_message(
                 user.telegram_id,
                 f"""
-❌ Order Rejected
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>ORDER REJECTED</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Order #: {order.order_number}
-Status: Rejected
+We regret to inform you that your order could not be processed.
 
-Please contact support for more information.
+📦 <b>Order Details:</b>
+• Order #: <code>{order.order_number}</code>
+• Status: <b>Rejected</b>
+
+<b>Possible reasons:</b>
+• Out of stock item
+• Pricing discrepancy
+• Shipping restrictions
+• Payment issues
+
+Please contact our support team for assistance or place a new order.
+
+<i>We apologize for any inconvenience caused.</i>
 """,
                 parse_mode='HTML'
             )
 
+            # Update admin message
             bot.edit_message_text(
-                f"❌ Order rejected!",
+                f"""
+❌ <b>Order Rejected</b>
+
+Order #: {order.order_number}
+Customer: {user.name}
+Phone: <code>{user.phone}</code>
+
+<i>Customer has been notified of the rejection.</i>
+""",
                 chat_id=call.message.chat.id,
-                message_id=call.message.message_id
+                message_id=call.message.message_id,
+                parse_mode='HTML'
             )
 
-        bot.answer_callback_query(call.id)
+        bot.answer_callback_query(call.id, "Order processed successfully")
 
     except Exception as e:
         logger.error(f"Error in order admin decision: {e}")
+        logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing decision.")
     finally:
         safe_close_session(session)
@@ -1332,61 +1485,142 @@ Example: 1
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
 def process_order_tracking(message):
-    """Process the order number for tracking"""
+    """Process the order number for tracking with enhanced visualization"""
     chat_id = message.chat.id
     session = None
 
     try:
         order_number = int(message.text.strip())
 
+        # Send immediate acknowledgment to improve user experience
+        processing_msg = bot.send_message(
+            chat_id,
+            "🔎 <b>Searching for your order...</b>",
+            parse_mode='HTML'
+        )
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
-            bot.send_message(chat_id, "Please register first to track orders.", reply_markup=create_main_menu(is_registered=False))
+            bot.edit_message_text(
+                "Please register first to track orders.",
+                chat_id=chat_id,
+                message_id=processing_msg.message_id,
+                reply_markup=create_main_menu(is_registered=False)
+            )
             return
 
         # Find the order
         order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
 
         if not order:
-            bot.send_message(
-                chat_id,
-                f"❌ Order #{order_number} not found. Please check the number and try again.",
+            bot.edit_message_text(
+                f"""
+❌ <b>Order Not Found</b>
+
+We couldn't find Order #{order_number} in your account.
+• Check if the order number is correct
+• Make sure the order belongs to your account
+• Try again with a different order number
+
+<i>Need help? Use the ❓ Help Center button.</i>
+""",
+                chat_id=chat_id,
+                message_id=processing_msg.message_id,
                 parse_mode='HTML'
             )
             del user_states[chat_id]
             return
 
-        # Show detailed order information
+        # Get status emoji
+        status_emoji = {
+            'Processing': '⏳',
+            'Confirmed': '✅',
+            'Shipped': '🚚',
+            'Delivered': '📦',
+            'Rejected': '❌',
+            'Cancelled': '🚫'
+        }.get(order.status, '🔄')
+
+        # Show detailed order information with enhanced styling
+        product_link_short = order.product_link[:40] + "..." if len(order.product_link) > 40 else order.product_link
+
         tracking_info = f"""
-🔍 <b>Order Details</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔍 <b>ORDER TRACKING</b> 🔍  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-📦 <b>Order #{order.order_number}</b>
-Status: {order.status}
-Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
+<b>📦 ORDER DETAILS</b>
+• Number: <code>{order.order_number}</code>
+• Status: {status_emoji} <b>{order.status}</b>
+• Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
 """
-
-        if order.tracking_number:
-            tracking_info += f"""Tracking: <code>{order.tracking_number}</code>
-Track: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}
-"""
-        else:
-            tracking_info += "Tracking: Not available yet\n"
 
         if order.order_id:
-            tracking_info += f"Order ID: <code>{order.order_id}</code>\n"
+            tracking_info += f"• Order ID: <code>{order.order_id}</code>\n"
+        
+        if order.tracking_number:
+            tracking_info += f"""
+<b>📱 TRACKING INFORMATION</b>
+• Tracking #: <code>{order.tracking_number}</code>
+• Track URL: <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">Click to track</a>
+"""
+        else:
+            tracking_info += """
+<b>📱 TRACKING INFORMATION</b>
+• Tracking #: <i>Not available yet</i>
+• <i>You'll be notified when your package ships</i>
+"""
 
-        bot.send_message(chat_id, tracking_info, parse_mode='HTML')
+        tracking_info += f"""
+<b>🔗 PRODUCT INFORMATION</b>
+• <a href="{order.product_link}">View Product</a>
+
+<i>Your order status will be updated automatically.
+Please contact support if you have any questions.</i>
+"""
+
+        # Add inline keyboard for tracking link if available
+        markup = None
+        if order.tracking_number:
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton(
+                "🔍 Track Package Online",
+                url=f"https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}"
+            ))
+
+        bot.edit_message_text(
+            tracking_info,
+            chat_id=chat_id,
+            message_id=processing_msg.message_id,
+            parse_mode='HTML',
+            reply_markup=markup,
+            disable_web_page_preview=True
+        )
 
         # Reset state
         del user_states[chat_id]
 
     except ValueError:
-        bot.send_message(chat_id, "❌ Invalid order number. Please enter a number.")
+        bot.send_message(
+            chat_id,
+            """
+❌ <b>Invalid Input</b>
+
+Please enter a valid order number (numbers only).
+Example: <code>1</code>
+""",
+            parse_mode='HTML'
+        )
     except Exception as e:
         logger.error(f"Error tracking order: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "Sorry, there was an error. Please try again.",
+            reply_markup=create_main_menu(is_registered=True)
+        )
     finally:
         safe_close_session(session)
 
@@ -1433,7 +1667,7 @@ Our dedicated team is available 24/7 to assist you with all your shopping needs!
 
 @bot.message_handler(commands=['updateorder'])
 def handle_order_admin_decision(message):
-    """Handle order status updates from admin"""
+    """Handle comprehensive order status updates from admin"""
     chat_id = message.chat.id
 
     # Check if user is admin
@@ -1442,55 +1676,202 @@ def handle_order_admin_decision(message):
         return
 
     try:
-        # Extract order ID and new status from command
-        parts = message.text.split()
+        # Extract command parts
+        parts = message.text.split(maxsplit=2)
+        
+        # Help message for command usage
+        if len(parts) < 2 or parts[1].lower() == 'help':
+            help_text = """
+<b>Order Update Commands:</b>
+
+<b>Basic update:</b>
+/updateorder <order_number> <status>
+Example: <code>/updateorder 1 shipped</code>
+
+<b>Update with details:</b>
+/updateorder <order_number> <field>:<value> [<field>:<value>...]
+Example: <code>/updateorder 1 status:shipped tracking:LX123456789CN</code>
+
+<b>Valid status values:</b> processing, confirmed, shipped, delivered, cancelled
+
+<b>Valid fields:</b>
+• status - Order status
+• tracking - Tracking number
+• orderid - AliExpress order ID
+
+<b>Examples:</b>
+<code>/updateorder 2 status:shipped tracking:LX123456789CN orderid:9283746563</code>
+<code>/updateorder 3 tracking:LX987654321CN</code>
+"""
+            bot.reply_to(message, help_text, parse_mode='HTML')
+            return
+
+        order_number = parts[1]
+        
+        # Check if we have more parameters
         if len(parts) < 3:
-            bot.reply_to(message, "Usage: /updateorder <order_id> <status>")
+            bot.reply_to(message, "Please specify status or field:value pairs. Use /updateorder help for instructions.")
             return
 
-        order_id = parts[1]
-        new_status = parts[2].lower()
-
-        # Validate status
-        valid_statuses = ['processing', 'shipped', 'delivered', 'cancelled']
-        if new_status not in valid_statuses:
-            bot.reply_to(message, f"Invalid status. Use one of: {', '.join(valid_statuses)}")
-            return
-
+        # Get the session and find the order
         session = get_session()
-        order = session.query(Order).filter_by(order_number=order_id).first()
+        order = session.query(Order).filter_by(order_number=order_number).first()
 
         if not order:
-            bot.reply_to(message, f"Order {order_id} not found")
+            bot.reply_to(message, f"❌ Order #{order_number} not found")
             safe_close_session(session)
             return
 
-        # Update order status
-        order.status = new_status
-        order.updated_at = datetime.utcnow()
-        session.commit()
-
-        # Notify customer
+        # Get the user
         customer = session.query(User).filter_by(id=order.user_id).first()
-        if customer:
+        if not customer:
+            bot.reply_to(message, f"❌ User for Order #{order_number} not found")
+            safe_close_session(session)
+            return
+
+        # Parse the update parameters
+        update_params = parts[2]
+        
+        # Check if this is a simple status update
+        if ':' not in update_params:
+            # Legacy format: /updateorder <order_id> <status>
+            new_status = update_params.lower()
+            
+            # Validate status
+            valid_statuses = ['processing', 'confirmed', 'shipped', 'delivered', 'cancelled']
+            if new_status not in valid_statuses:
+                bot.reply_to(message, f"Invalid status. Use one of: {', '.join(valid_statuses)}")
+                return
+                
+            # Update only status
+            order.status = new_status
+            order.updated_at = datetime.utcnow()
+        else:
+            # New format: /updateorder <order_id> field1:value1 field2:value2
+            params = update_params.split()
+            updates = {}
+            
+            for param in params:
+                if ':' not in param:
+                    continue
+                    
+                field, value = param.split(':', 1)
+                
+                if field == 'status':
+                    valid_statuses = ['processing', 'confirmed', 'shipped', 'delivered', 'cancelled']
+                    if value.lower() not in valid_statuses:
+                        bot.reply_to(message, f"Invalid status '{value}'. Use one of: {', '.join(valid_statuses)}")
+                        return
+                    updates['status'] = value.lower()
+                elif field == 'tracking':
+                    updates['tracking_number'] = value
+                elif field == 'orderid':
+                    updates['order_id'] = value
+            
+            # Apply all updates
+            for field, value in updates.items():
+                setattr(order, field, value)
+            
+            order.updated_at = datetime.utcnow()
+        
+        # Save changes
+        session.commit()
+        
+        # Prepare user notification based on status
+        if hasattr(order, 'status') and order.status in ['shipped', 'delivered']:
+            # Create status emoji
+            status_emoji = '🚚' if order.status == 'shipped' else '📦'
+            
+            # Enhance the notification for shipping status
+            if order.status == 'shipped':
+                tracking_link = ""
+                if order.tracking_number:
+                    tracking_link = f"""
+• <b>Track your package:</b>
+  <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">Click here to track</a>
+"""
+
+                notification = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   {status_emoji} <b>ORDER SHIPPED!</b> {status_emoji}  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Great news! Your order is on its way to you!
+
+<b>📦 Order Details:</b>
+• Order #: <code>{order.order_number}</code>
+• Status: <b>SHIPPED</b>
+• Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+{f"• Tracking #: <code>{order.tracking_number}</code>" if order.tracking_number else ""}
+{tracking_link}
+
+<b>Expected delivery:</b> 15-30 days
+
+You can check your order status anytime using the
+"🔍 Track Order" button.
+
+<i>Thank you for shopping with AliPay_ETH!</i>
+"""
+            else:  # delivered
+                notification = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   {status_emoji} <b>ORDER DELIVERED!</b> {status_emoji}  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your order has been marked as delivered!
+
+<b>📦 Order Details:</b>
+• Order #: <code>{order.order_number}</code>
+• Status: <b>DELIVERED</b>
+• Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+We hope you enjoy your purchase!
+Please let us know if you have any questions.
+
+<i>Thank you for shopping with AliPay_ETH!</i>
+"""
+                
+            # Send the notification to customer
+            bot.send_message(
+                customer.telegram_id,
+                notification,
+                parse_mode='HTML',
+                disable_web_page_preview=True
+            )
+        else:
+            # Simple update notification for other status changes
             bot.send_message(
                 customer.telegram_id,
                 f"""
-Order Update
+<b>Order Update</b>
 
-Order #{order.order_number}
-Status: <b>{new_status.upper()}</b>
+Your Order #{order.order_number} has been updated:
+• Status: <b>{order.status.upper()}</b>
+{f"• Tracking #: <code>{order.tracking_number}</code>" if hasattr(order, 'tracking_number') and order.tracking_number else ""}
+{f"• Order ID: <code>{order.order_id}</code>" if hasattr(order, 'order_id') and order.order_id else ""}
 
-Thank you for using AliPay_ETH!
+Use 🔍 <b>Track Order</b> for the latest details.
 """,
                 parse_mode='HTML'
             )
 
-        bot.reply_to(message, f"✅ Order {order_id} updated to {new_status}")
+        # Confirm to admin
+        updates_list = []
+        if 'status' in locals() and locals()['status']:
+            updates_list.append(f"status: {order.status}")
+        if order.tracking_number:
+            updates_list.append(f"tracking: {order.tracking_number}")
+        if order.order_id:
+            updates_list.append(f"orderid: {order.order_id}")
+            
+        updates_text = ", ".join(updates_list)
+        bot.reply_to(message, f"✅ Order #{order_number} updated successfully!\n\nUpdates: {updates_text}")
 
     except Exception as e:
         logger.error(f"Error updating order: {e}")
-        bot.reply_to(message, "❌ Error updating order")
+        logger.error(traceback.format_exc())
+        bot.reply_to(message, "❌ Error updating order. Use /updateorder help for instructions.")
     finally:
         safe_close_session(session)
 
@@ -1576,7 +1957,7 @@ def run_subscription_checker():
         time.sleep(24 * 60 * 60)
 
 def main():
-    """Main function to start the bot"""
+    """Main function to start the bot with optimized performance"""
     logger.info("🚀 Starting bot in polling mode...")
 
     # Delete any existing webhook
@@ -1586,17 +1967,32 @@ def main():
     except Exception as e:
         logger.error(f"Error clearing webhook: {e}")
 
+    # Bot performance optimization settings
+    bot.threaded = True  # Enable threaded mode for better concurrent handling
+    
+    # Connection pool optimization
+    try:
+        from telebot.apihelper import ApiTelegramException
+        logger.info("Applying telebot connection pool optimization...")
+        telebot.apihelper.SESSION_TIME_TO_LIVE = 5 * 60  # 5 minutes session TTL
+        telebot.apihelper.RETRY_ON_ERROR = True
+        telebot.apihelper.CONNECT_TIMEOUT = 5.0  # Reduce connection timeout
+        telebot.apihelper.READ_TIMEOUT = 7.0  # Slightly longer read timeout
+        logger.info("Telebot connection optimizations applied")
+    except Exception as optimization_error:
+        logger.warning(f"Could not apply all performance optimizations: {optimization_error}")
+
     # Start polling with recovery
     while not shutdown_requested:
         try:
             logger.info("Starting polling...")
-            bot.polling(none_stop=True, timeout=60, interval=1)
+            bot.polling(none_stop=True, timeout=30, interval=0.25)  # More responsive polling
         except Exception as e:
             if shutdown_requested:
                 break
             logger.error(f"Polling error: {e}")
-            logger.info("Restarting in 5 seconds...")
-            time.sleep(5)
+            logger.info("Restarting in 3 seconds...")
+            time.sleep(3)  # Quicker recovery
 
     logger.info("Bot shutdown complete")
 
