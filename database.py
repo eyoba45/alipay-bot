@@ -30,18 +30,28 @@ db_lock = FileLock("database_connections.lock", timeout=30)
 
 # Create engine with optimized connection handling for deployment
 try:
-    engine = create_engine(
-        DATABASE_URL,
-        pool_size=10,        
-        max_overflow=20,     
-        pool_timeout=10,      
-        pool_recycle=300,    
-        pool_pre_ping=True,  # Keep pre-ping enabled for connection validation
-        connect_args={
-            "connect_timeout": 10,
-            "application_name": "alipay_eth_telebot"
-        }
-    )
+    # Handle both SQLite and PostgreSQL connection types
+    if DATABASE_URL.startswith('sqlite'):
+        connect_args = {'check_same_thread': False}
+        engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            connect_args=connect_args
+        )
+    else:
+        # PostgreSQL optimized settings
+        engine = create_engine(
+            DATABASE_URL,
+            pool_size=5,         # Reduced from 10 to prevent connection issues
+            max_overflow=10,     # Reduced from 20
+            pool_timeout=20,     # Increased from 10
+            pool_recycle=300,    
+            pool_pre_ping=True,  # Keep pre-ping enabled for connection validation
+            connect_args={
+                "connect_timeout": 10,
+                "application_name": "alipay_eth_telebot"
+            }
+        )
     logger.info("Database engine created successfully")
 except Exception as e:
     logger.error(f"Failed to create database engine: {e}")
