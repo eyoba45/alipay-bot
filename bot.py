@@ -194,8 +194,9 @@ def get_address(message):
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_phone')
 def get_phone(message):
-    """Process phone and request payment"""
+    """Process phone and request payment using Chapa"""
     chat_id = message.chat.id
+    session = None
     try:
         phone = message.text.strip().replace(" ", "")
 
@@ -211,9 +212,33 @@ def get_phone(message):
             return
 
         registration_data[chat_id]['phone'] = phone
+        registration_data[chat_id]['telegram_id'] = chat_id
         user_states[chat_id] = 'waiting_for_payment'
 
-        payment_msg = f"""
+        # Create a pending approval
+        session = get_session()
+        existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
+        
+        if not existing_pending:
+            pending = PendingApproval(
+                telegram_id=chat_id,
+                name=registration_data[chat_id]['name'],
+                phone=registration_data[chat_id]['phone'],
+                address=registration_data[chat_id]['address']
+            )
+            session.add(pending)
+            session.commit()
+            logger.info(f"Added pending approval for user {chat_id}")
+
+        # Import the Chapa payment module
+        from chapa_payment import generate_registration_payment
+        
+        # Generate payment link
+        payment_link = generate_registration_payment(registration_data[chat_id])
+        
+        if not payment_link or 'checkout_url' not in payment_link:
+            # Fall back to manual payment if Chapa integration fails
+            payment_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    🌟 <b>REGISTRATION DETAILS</b> 🌟  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -245,9 +270,50 @@ def get_phone(message):
 
 <i>Join thousands of satisfied members shopping on AliExpress with ETB!</i>
 """
-        bot.send_message(chat_id, payment_msg, parse_mode='HTML')
+            bot.send_message(chat_id, payment_msg, parse_mode='HTML')
+        else:
+            # Send Chapa payment link with inline button
+            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+            
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("💳 Pay Now", url=payment_link['checkout_url']))
+            
+            payment_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🌟 <b>REGISTRATION DETAILS</b> 🌟  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>👤 YOUR INFORMATION:</b>
+• Name: <b>{registration_data[chat_id]['name']}</b>
+• Phone: <code>{registration_data[chat_id]['phone']}</code>
+• Address: <i>{registration_data[chat_id]['address']}</i>
+
+<b>💎 REGISTRATION FEE:</b>
+• USD: <code>$1.00</code>
+• ETB: <code>150</code>
+
+<b>✨ EASY PAYMENT OPTIONS ✨</b>
+
+Click the button below to pay securely with:
+• Credit/Debit Card
+• TeleBirr
+• CBE Birr
+• HelloCash
+• And more payment options!
+
+<i>Your account will be automatically activated after payment!</i>
+"""
+            bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
+            
+            # Store transaction reference for later verification
+            user_states[chat_id] = {
+                'state': 'waiting_for_chapa_payment',
+                'tx_ref': payment_link['tx_ref']
+            }
+            
     except Exception as e:
         logger.error(f"Error processing phone: {e}")
+        logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
@@ -751,16 +817,44 @@ Example: Enter 12 for $12 (1,920 birr)
     send_payment_details(message, amount)
 
 def send_payment_details(message, amount):
-    """Send payment instructions"""
+    """Send payment instructions with Chapa integration"""
     chat_id = message.chat.id
     birr_amount = int(amount * 160)
+    session = None
 
-    user_states[chat_id] = {
-        'state': 'waiting_for_deposit_screenshot',
-        'deposit_amount': amount
-    }
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id, 
+                "❌ You need to register first before making a deposit.", 
+                reply_markup=create_main_menu(is_registered=False)
+            )
+            return
+            
+        # Import Chapa payment module
+        from chapa_payment import generate_deposit_payment
+        
+        # Create user data dict for payment
+        user_data = {
+            'telegram_id': chat_id,
+            'name': user.name,
+            'phone': user.phone
+        }
+        
+        # Generate payment link
+        payment_link = generate_deposit_payment(user_data, amount)
+        
+        if not payment_link or 'checkout_url' not in payment_link:
+            # Fall back to manual payment if Chapa fails
+            user_states[chat_id] = {
+                'state': 'waiting_for_deposit_screenshot',
+                'deposit_amount': amount
+            }
 
-    payment_msg = f"""
+            payment_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💰 <b>DEPOSIT DETAILS</b> 💰  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -787,7 +881,57 @@ def send_payment_details(message, amount):
 
 <i>Your funds will be available immediately after verification!</i>
 """
-    bot.send_message(chat_id, payment_msg, parse_mode='HTML')
+            bot.send_message(chat_id, payment_msg, parse_mode='HTML')
+        else:
+            # Use Chapa payment link with inline button
+            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+            
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("💳 Pay Now", url=payment_link['checkout_url']))
+            
+            payment_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>DEPOSIT DETAILS</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>💵 Amount Due:</b>
+• USD: <code>${amount:,.2f}</code>
+• ETB: <code>{birr_amount:,}</code>
+
+<b>✨ SECURE PAYMENT OPTIONS ✨</b>
+
+Click the button below to pay securely with:
+• Credit/Debit Card
+• TeleBirr
+• CBE Birr
+• HelloCash
+• And more payment options!
+
+<i>Your balance will be updated automatically after payment!</i>
+"""
+            bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
+            
+            # Store transaction reference
+            pending_deposit = PendingDeposit(
+                user_id=user.id,
+                amount=amount,
+                status='Processing'
+            )
+            session.add(pending_deposit)
+            session.commit()
+            
+            # Update user state
+            user_states[chat_id] = {
+                'state': 'waiting_for_chapa_payment',
+                'tx_ref': payment_link['tx_ref'],
+                'deposit_amount': amount
+            }
+    except Exception as e:
+        logger.error(f"Error generating payment details: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(chat_id, "Sorry, there was an error processing your request. Please try again.")
+    finally:
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_deposit_screenshot', content_types=['photo'])
 def handle_deposit_screenshot(message):
