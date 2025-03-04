@@ -1,7 +1,6 @@
-
 #!/usr/bin/env python3
 """
-Start script with cleanup - combines clean_locks.py with bot start
+Consolidated bot starter with cleanup and keep-alive server
 """
 import os
 import sys
@@ -9,9 +8,7 @@ import time
 import logging
 import subprocess
 import signal
-import fcntl
-import psutil
-from threading import Thread
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -21,10 +18,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Set up signal handling
+# Global flags
 shutdown_requested = False
 bot_process = None
-lock_file = None
 
 def signal_handler(sig, frame):
     """Handle termination signals"""
@@ -35,8 +31,8 @@ def signal_handler(sig, frame):
 
 def cleanup_and_exit():
     """Clean up resources and exit"""
-    global bot_process, lock_file
-    
+    global bot_process
+
     # Stop bot process if running
     if bot_process:
         try:
@@ -48,211 +44,137 @@ def cleanup_and_exit():
                     bot_process.kill()
         except Exception as e:
             logger.error(f"Error stopping bot process: {e}")
-    
-    # Release lock file
-    if lock_file:
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
-            lock_file.close()
-            logger.info("Released lock file")
-        except Exception as e:
-            logger.error(f"Error releasing lock: {e}")
-    
+
     logger.info("Shutdown complete")
     sys.exit(0)
 
-def clean_lock_files():
-    """Remove all lock files"""
-    logger.info("Checking for lock files...")
-    try:
-        lock_count = 0
-        for file in os.listdir('.'):
-            if file.endswith('.lock'):
-                try:
-                    os.remove(file)
-                    lock_count += 1
-                except Exception as e:
-                    logger.error(f"Error removing lock file {file}: {e}")
-        
-        logger.info(f"Removed {lock_count} lock files")
-        return True
-    except Exception as e:
-        logger.error(f"Error cleaning lock files: {e}")
-        return False
-
-def find_and_terminate_bot_processes():
-    """Find and terminate any existing bot processes"""
-    logger.info("Terminating any existing bot processes...")
-    
-    # List of bot-related scripts
-    bot_scripts = ['bot.py', 'run_bot.py', 'forever.py', 'monitor_bot.py', 
-                  'keep_alive.py', 'simple_bot.py', 'robust_bot.py']
-    
-    terminated_count = 0
-    my_pid = os.getpid()
-    
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            # Skip our own process
-            if proc.pid == my_pid:
-                continue
-                
-            # Check if this is a Python process
-            if proc.info['name'] in ['python', 'python3']:
-                cmdline = proc.info['cmdline'] if proc.info['cmdline'] else []
-                cmdline_str = ' '.join(cmdline) if cmdline else ''
-                
-                # Check if it's running any of our bot scripts
-                if any(script in cmdline_str for script in bot_scripts):
-                    logger.info(f"Terminating bot process: {proc.pid} ({cmdline_str})")
-                    proc.terminate()
-                    terminated_count += 1
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-    
-    if terminated_count == 0:
-        logger.info("No bot processes found")
-    else:
-        logger.info(f"Terminated {terminated_count} bot processes")
-        # Give processes time to terminate
-        time.sleep(1)
-    
-    return True
-
-def acquire_lock():
-    """Acquire an exclusive lock"""
-    global lock_file
-    
-    try:
-        lock_file = open("bot_runner.lock", "w")
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            logger.info("Acquired exclusive lock")
-            return True
-        except IOError:
-            logger.error("Another instance is already running")
-            lock_file.close()
-            lock_file = None
-            return False
-    except Exception as e:
-        logger.error(f"Error with lock file: {e}")
-        return False
-
-def verify_telegram_token():
-    """Verify that the Telegram bot token is valid"""
-    token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    if not token:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
-        return False
-    
-    logger.info("Verifying Telegram token...")
-    try:
-        import requests
-        response = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
-        if response.status_code == 200 and response.json().get('ok'):
-            bot_info = response.json().get('result', {})
-            logger.info(f"Verified Telegram token for @{bot_info.get('username')}")
-            return True
-        else:
-            logger.error(f"Invalid Telegram token: {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"Error verifying Telegram token: {e}")
-        return False
-
 def start_keep_alive():
-    """Start the keep-alive server"""
+    """Start the keep-alive server in a separate thread"""
     try:
         from keep_alive import keep_alive
         logger.info("Starting keep-alive server...")
         keep_alive()
+        logger.info("Keep-alive server started")
         return True
     except Exception as e:
         logger.error(f"Error starting keep-alive server: {e}")
         return False
 
-def run_bot(max_attempts=5):
-    """Run the bot with multiple retry attempts"""
+def run_cleanup():
+    """Run the cleanup script"""
+    try:
+        logger.info("Cleaning up any lock files...")
+        result = subprocess.run(
+            [sys.executable, "clean_locks.py"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        logger.info("Cleanup completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Cleanup failed with exit code {e.returncode}")
+        logger.error(f"Output: {e.output}")
+        return False
+    except Exception as e:
+        logger.error(f"Error running cleanup: {e}")
+        return False
+
+def run_bot():
+    """Run the bot with proper error handling"""
     global bot_process
-    
-    for attempt in range(1, max_attempts + 1):
-        if shutdown_requested:
-            return False
-            
-        logger.info(f"Starting bot (attempt {attempt}/{max_attempts})")
-        try:
-            # Run cleanup first
-            logger.info("Running cleanup...")
-            subprocess.run([sys.executable, "clean_locks.py"], check=True)
-            
-            # Start the bot
-            logger.info("Starting bot process...")
-            bot_process = subprocess.Popen(
-                [sys.executable, "bot.py"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True
-            )
-            
-            # Wait for process to finish or be terminated
-            return_code = bot_process.wait()
-            
-            if shutdown_requested:
-                logger.info("Shutdown requested, not restarting bot")
-                return False
-                
-            if return_code == 0:
-                logger.info("Bot process exited normally")
-                return True
-            else:
-                logger.error(f"Bot process exited with code {return_code}")
-                
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error in subprocess: {e}")
-        except Exception as e:
-            logger.error(f"Error starting bot: {e}")
-            
-        # Wait before retry
-        if attempt < max_attempts:
-            wait_time = min(60, 5 * 2**attempt)
-            logger.info(f"Waiting {wait_time}s before retry...")
-            time.sleep(wait_time)
-    
-    logger.error(f"Failed to start bot after {max_attempts} attempts")
-    return False
+
+    try:
+        logger.info("Starting bot process...")
+        # Start the bot
+        bot_process = subprocess.Popen(
+            [sys.executable, "bot.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+
+        # Monitor the bot process output
+        for line in bot_process.stdout:
+            print(line, end='')
+
+        # Wait for process to finish or be terminated
+        return_code = bot_process.wait()
+        logger.info(f"Bot process exited with code {return_code}")
+
+        return return_code == 0
+
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+        return False
+
+def verify_environment():
+    """Verify that required environment variables are set"""
+    required_vars = ['TELEGRAM_BOT_TOKEN', 'DATABASE_URL']
+    missing_vars = [var for var in required_vars if not os.environ.get(var)]
+
+    if missing_vars:
+        logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+        return False
+
+    logger.info("Environment variables verified")
+    return True
 
 def main():
     """Main function"""
     # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
-    logger.info("🧹 Starting cleanup...")
-    
-    # Clean up existing processes and lock files
-    find_and_terminate_bot_processes()
-    clean_lock_files()
-    
-    # Acquire lock to ensure only one instance runs
-    if not acquire_lock():
-        logger.error("Failed to acquire lock, exiting")
-        return 1
-        
+
+    logger.info("Starting bot runner...")
+
     # Verify environment
-    if not verify_telegram_token():
-        logger.error("Failed to verify Telegram token, exiting")
-        cleanup_and_exit()
+    if not verify_environment():
+        logger.error("Failed to verify environment, exiting")
         return 1
-    
+
+    # Run cleanup
+    if not run_cleanup():
+        logger.warning("Cleanup had issues, but continuing...")
+
     # Start the keep-alive server
     start_keep_alive()
-    
-    # Start the bot
-    success = run_bot()
-    
-    # Clean up and exit
-    cleanup_and_exit()
-    return 0 if success else 1
+
+    # Run the bot
+    max_restarts = 5
+    restart_count = 0
+    restart_delay = 10  # seconds
+
+    while not shutdown_requested and restart_count < max_restarts:
+        logger.info(f"Starting bot (attempt {restart_count + 1}/{max_restarts})")
+
+        start_time = time.time()
+        success = run_bot()
+        run_time = time.time() - start_time
+
+        if shutdown_requested:
+            break
+
+        # Handle bot exit
+        restart_count += 1
+
+        # If the bot ran for more than 5 minutes, reset the restart counter
+        if run_time > 300:
+            logger.info(f"Bot ran for {run_time:.1f} seconds, resetting restart counter")
+            restart_count = 0
+            restart_delay = 10
+        else:
+            # Implement exponential backoff for quick failures
+            logger.warning(f"Bot failed after only {run_time:.1f} seconds")
+            restart_delay = min(300, restart_delay * 2)
+
+        if restart_count < max_restarts:
+            logger.info(f"Restarting bot in {restart_delay} seconds...")
+            time.sleep(restart_delay)
+
+    logger.info("Bot runner exiting")
+    return 0
 
 if __name__ == "__main__":
     try:
