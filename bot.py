@@ -214,30 +214,36 @@ def get_phone(message):
         user_states[chat_id] = 'waiting_for_payment'
 
         payment_msg = f"""
-Registration Details
-User Details:
-Name: {registration_data[chat_id]['name']}
-Phone: <code>{registration_data[chat_id]['phone']}</code>
-Address: {registration_data[chat_id]['address']}
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🌟 <b>REGISTRATION DETAILS</b> 🌟  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Registration Fee:
-USD: <code>$1.00</code>
-ETB: <code>150</code>
+<b>👤 YOUR INFORMATION:</b>
+• Name: <b>{registration_data[chat_id]['name']}</b>
+• Phone: <code>{registration_data[chat_id]['phone']}</code>
+• Address: <i>{registration_data[chat_id]['address']}</i>
 
-Choose Payment Method:
-Commercial Bank (CBE)
-Account: <code>1000547241316</code>
-Name: Eyob Mulugeta
+<b>💎 REGISTRATION FEE:</b>
+• USD: <code>$1.00</code>
+• ETB: <code>150</code>
 
-TeleBirr Mobile Money
-Number: <code>0986693062</code>
-Name: Eyob Mulugeta
+<b>💳 SELECT PAYMENT METHOD:</b>
 
-Instructions:
-1. Choose your preferred method above
-2. Send exactly <code>150 ETB</code>
-3. Take a clear screenshot
-4. Send the screenshot below ⬇️
+<b>🏦 Commercial Bank (CBE)</b>
+• Account: <code>1000547241316</code>
+• Name: <code>Eyob Mulugeta</code>
+
+<b>📱 TeleBirr Mobile Money</b>
+• Number: <code>0986693062</code>
+• Name: <code>Eyob Mulugeta</code>
+
+<b>📱 HOW TO COMPLETE:</b>
+1️⃣ Select your preferred payment option
+2️⃣ Transfer exactly <code>150 ETB</code>
+3️⃣ Capture a clear screenshot of confirmation
+4️⃣ Send the screenshot below ⬇️
+
+<i>Join thousands of satisfied members shopping on AliExpress with ETB!</i>
 """
         bot.send_message(chat_id, payment_msg, parse_mode='HTML')
     except Exception as e:
@@ -648,25 +654,31 @@ def send_payment_details(message, amount):
     }
 
     payment_msg = f"""
-Deposit Details
-Amount Due:
-USD: <code>${amount:,.2f}</code>
-ETB: <code>{birr_amount:,}</code>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>DEPOSIT DETAILS</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Payment Methods:
-Commercial Bank (CBE)
-Account: <code>1000547241316</code>
-Name: Eyob Mulugeta
+<b>💵 Amount Due:</b>
+• USD: <code>${amount:,.2f}</code>
+• ETB: <code>{birr_amount:,}</code>
 
-TeleBirr
-Number: <code>0986693062</code>
-Name: Eyob Mulugeta
+<b>✅ PAYMENT OPTIONS ✅</b>
 
-Instructions:
-1. Choose payment method
-2. Send exact amount
-3. Take clear screenshot
-4. Send screenshot below ⬇️
+<b>🏦 Commercial Bank (CBE)</b>
+• Account: <code>1000547241316</code>
+• Name: <code>Eyob Mulugeta</code>
+
+<b>📱 TeleBirr Mobile Money</b>
+• Number: <code>0986693062</code>
+• Name: <code>Eyob Mulugeta</code>
+
+<b>📸 NEXT STEPS 📸</b>
+1️⃣ Choose your preferred payment method
+2️⃣ Send <b>exactly</b> <code>{birr_amount:,} ETB</code>
+3️⃣ Take a clear screenshot of confirmation
+4️⃣ Send your screenshot below ⬇️
+
+<i>Your funds will be available immediately after verification!</i>
 """
     bot.send_message(chat_id, payment_msg, parse_mode='HTML')
 
@@ -1273,27 +1285,44 @@ Track: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}
 
 @bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
 def help_center(message):
-    """Help center button"""
+    """Enhanced help center with beautiful formatting"""
+    
+    # Create fancy help center keyboard with direct contact options
+    help_markup = InlineKeyboardMarkup(row_width=2)
+    help_markup.add(
+        InlineKeyboardButton("💬 Chat with Support", url="https://t.me/alipay_help_center"),
+        InlineKeyboardButton("📱 Contact Admin", url="https://t.me/alipay_eth_admin")
+    )
+    help_markup.add(
+        InlineKeyboardButton("📚 Tutorials", callback_data="tutorials"),
+        InlineKeyboardButton("❓ FAQs", callback_data="faqs")
+    )
+    
     help_msg = """
-Help Center
+<b>💫 WELCOME TO HELP CENTER 💫</b>
 
-Contact Support
-👤 @alipay_help_center
+<b>✨ Need assistance? We've got you covered! ✨</b>
 
-Quick Guide:
-• /start - Reset bot
-• 🔑 Register - Join now
-• 💰Deposit - Add funds
-• 📦 Submit - New order
+╔══════ <b>QUICK COMMANDS</b> ══════╗
+║ • 🏠 <code>/start</code> - Reset bot         ║
+║ • 🔑 <code>Register</code> - Join now        ║
+║ • 💰 <code>Deposit</code> - Add funds        ║
+║ • 📦 <code>Submit</code> - New order         ║
+╚═════════════════════════╝
 
-Need Help?
-• Orders: 📊 Status
-• Track: 🔍 Package
-• Money: 💳 Balance
+╔══════ <b>SUPPORT GUIDE</b> ══════╗
+║ • 📊 Order Status - Check progress  ║
+║ • 🔍 Track Order - Follow shipment  ║
+║ • 💳 Balance - View your funds      ║
+║ • 📅 Subscription - Manage account  ║
+╚═════════════════════════╝
 
-✨ We're here to help!
+<b>💎 PREMIUM SUPPORT 💎</b>
+Our dedicated team is available 24/7 to assist you with all your shopping needs! Click the buttons below for instant support.
+
+<i>We're committed to making your AliExpress shopping experience seamless and enjoyable!</i>
 """
-    bot.send_message(message.chat.id, help_msg, parse_mode='HTML')
+    bot.send_message(message.chat.id, help_msg, parse_mode='HTML', reply_markup=help_markup)
 
 @bot.message_handler(commands=['updateorder'])
 def handle_order_admin_decision(message):
@@ -1473,7 +1502,7 @@ if __name__ == "__main__":
 
 @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
 def check_subscription(message):
-    """Check user's subscription status"""
+    """Check user's subscription status with enhanced visual appeal"""
     chat_id = message.chat.id
     session = None
     try:
@@ -1481,7 +1510,11 @@ def check_subscription(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
-            bot.send_message(chat_id, "Please register first to check your subscription.", reply_markup=create_main_menu(is_registered=False))
+            bot.send_message(
+                chat_id, 
+                "✨ Please register first to access premium subscription features! ✨", 
+                reply_markup=create_main_menu(is_registered=False)
+            )
             return
 
         # Calculate subscription status
@@ -1491,36 +1524,61 @@ def check_subscription(message):
             days_remaining = 30 - days_passed
 
             if days_remaining > 0:
+                # Active subscription
+                status_emoji = "✅"
                 status = f"Active ({days_remaining} days remaining)"
                 renew_date = (user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')
+                status_color = "green"
             else:
+                # Expired subscription
+                status_emoji = "⚠️"
                 status = "Expired"
                 renew_date = "Renewal needed"
+                status_color = "red"
 
-            # Create subscription renewal buttons
-            markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton("Renew 1 Month ($1)", callback_data="renew_1")
+            # Create attractive subscription renewal buttons
+            markup = InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                InlineKeyboardButton("💫 Renew 1 Month ($1) 💫", callback_data="renew_1")
+            )
+            markup.add(
+                InlineKeyboardButton("🎁 View Premium Benefits", callback_data="sub_benefits")
             )
 
-            # Clean subscription message with proper formatting
+            # Enhanced fancy subscription message with better formatting
             subscription_msg = f"""
-╔══════════════════╗
-║   SUBSCRIPTION   ║
-╚══════════════════╝
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✨ <b>PREMIUM SUBSCRIPTION</b> ✨  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-📱 <b>Status:</b> {status}
-📆 <b>Next renewal:</b> {renew_date}
-💲 <b>Monthly fee:</b> $1.00
+{status_emoji} <b>Status:</b> <code>{status}</code>
 
-To renew your subscription, click the button below:
+📆 <b>Next renewal:</b> <code>{renew_date}</code>
+💎 <b>Monthly fee:</b> <code>$1.00</code> (150 ETB)
+👑 <b>Benefits:</b> Full access to all premium features
+
+<b>Keep your subscription active to enjoy:</b>
+• 🛍️ Unlimited AliExpress shopping
+• 💰 Special discounts
+• 🎯 Priority order processing
+• 🌟 Premium customer support
+
+<i>Click below to renew your membership!</i>
 """
             bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
         else:
-            bot.send_message(chat_id, "No subscription information found. Please contact support.")
+            bot.send_message(
+                chat_id, 
+                "✨ No subscription information found. Please contact our support team for assistance. ✨",
+                parse_mode='HTML'
+            )
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        bot.send_message(
+            chat_id, 
+            "⚠️ <b>Oops!</b> We encountered a temporary glitch. Please try again in a moment. ⚠️",
+            parse_mode='HTML'
+        )
     finally:
         safe_close_session(session)
 
@@ -1584,3 +1642,121 @@ Thank you for using AliPay_ETH!
         bot.answer_callback_query(call.id, "Error renewing subscription.")
     finally:
         safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data == "sub_benefits")
+def handle_subscription_benefits(call):
+    """Handle subscription benefits button"""
+    try:
+        benefits_msg = """
+✨ <b>PREMIUM MEMBERSHIP BENEFITS</b> ✨
+
+<b>🌟 Enjoy these exclusive perks:</b>
+
+• 🛍️ <b>Unlimited Shopping</b>
+  Access to thousands of AliExpress products
+
+• 🚚 <b>Priority Shipping</b>
+  Faster order processing & delivery
+
+• 💰 <b>Special Discounts</b>
+  Member-only deals and promotions
+
+• 🔔 <b>Order Notifications</b>
+  Real-time updates on your packages
+
+• 👨‍💼 <b>Dedicated Support</b>
+  Premium customer service access
+
+• 🎁 <b>Referral Bonuses</b>
+  Earn rewards for inviting friends
+
+<i>All this for just $1/month!</i>
+"""
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            benefits_msg,
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error showing subscription benefits: {e}")
+        bot.answer_callback_query(call.id, "Error showing benefits")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "faqs")
+def handle_faqs(call):
+    """Handle FAQs button click"""
+    try:
+        faqs_msg = """
+<b>📚 FREQUENTLY ASKED QUESTIONS 📚</b>
+
+<b>❓ How do I place an order?</b>
+Simply click "📦 Submit Order" and paste your AliExpress product link.
+
+<b>❓ How long does shipping take?</b>
+Delivery usually takes 15-30 days depending on the product and location.
+
+<b>❓ How do I track my order?</b>
+Use the "🔍 Track Order" button and enter your order number.
+
+<b>❓ What payment methods are accepted?</b>
+We accept Commercial Bank (CBE) and TeleBirr for deposits.
+
+<b>❓ Is there a minimum order amount?</b>
+No, you can order products of any value as long as you have sufficient balance.
+
+<b>❓ How do I renew my subscription?</b>
+Click on "📅 Subscription" and use the renewal button.
+
+<i>More questions? Contact our support team!</i>
+"""
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            faqs_msg,
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error showing FAQs: {e}")
+        bot.answer_callback_query(call.id, "Error showing FAQs")
+
+@bot.callback_query_handler(func=lambda call: call.data == "tutorials")
+def handle_tutorials(call):
+    """Handle tutorials button click"""
+    try:
+        tutorials_msg = """
+<b>📱 HOW TO USE ALIPAY_ETH BOT 📱</b>
+
+<b>🔹 STEP 1: REGISTER</b>
+• Click 🔑 Register
+• Follow the prompts to create your account
+• Pay the $1 registration fee
+
+<b>🔹 STEP 2: DEPOSIT FUNDS</b>
+• Click 💰 Deposit
+• Choose your deposit amount
+• Send payment via CBE or TeleBirr
+• Submit screenshot for verification
+
+<b>🔹 STEP 3: PLACE ORDERS</b>
+• Find products on AliExpress
+• Copy the product link
+• Click 📦 Submit Order
+• Paste the link and confirm
+
+<b>🔹 STEP 4: TRACK SHIPMENTS</b>
+• Click 🔍 Track Order
+• Enter your order number
+• View status and tracking information
+
+<i>Our system makes shopping on AliExpress simple and hassle-free!</i>
+"""
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            tutorials_msg,
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error showing tutorials: {e}")
+        bot.answer_callback_query(call.id, "Error showing tutorials")
