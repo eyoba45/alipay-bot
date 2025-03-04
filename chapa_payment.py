@@ -19,7 +19,7 @@ def create_payment(amount, currency, callback_url):
     # Implement your logic for creating a payment with Chapa
     pass  # Replace with actual implementation
 
-def generate_deposit_payment(user_data):
+def generate_deposit_payment(user_data, amount):
     """Generate a deposit payment link for the user."""
     try:
         currency = user_data.get('currency', 'USD')  # Default to USD
