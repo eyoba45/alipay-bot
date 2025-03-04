@@ -22,17 +22,14 @@ def create_payment(amount, currency, callback_url):
 def generate_deposit_payment(user_data):
     """Generate a deposit payment link for the user."""
     try:
-        amount = user_data.get('amount', 0)  # Get the deposit amount
         currency = user_data.get('currency', 'USD')  # Default to USD
         callback_url = user_data.get('callback_url', 'https://your.callback.url')  # Set your callback URL
-
-        # Create the payment and return the response
         payment_response = create_payment(amount, currency, callback_url)
         if payment_response and 'checkout_url' in payment_response:
             return payment_response  # Return the payment link
-
         logger.error("Failed to generate deposit payment.")
         return None
     except Exception as e:
         logger.error(f"Error generating deposit payment: {e}")
         return None
+   
