@@ -249,8 +249,7 @@ def get_phone(message):
 • Address: <i>{registration_data[chat_id]['address']}</i>
 
 <b>💎 REGISTRATION FEE:</b>
-• USD: <code>$1.00</code>
-• ETB: <code>150</code>
+• ETB: <code>150</code> birr
 
 <b>💳 SELECT PAYMENT METHOD:</b>
 
@@ -289,8 +288,7 @@ def get_phone(message):
 • Address: <i>{registration_data[chat_id]['address']}</i>
 
 <b>💎 REGISTRATION FEE:</b>
-• USD: <code>$1.00</code>
-• ETB: <code>150</code>
+• ETB: <code>150</code> birr
 
 <b>✨ EASY PAYMENT OPTIONS ✨</b>
 
@@ -439,7 +437,7 @@ Address: {registration_data[chat_id]['address']}
 Phone: <code>{registration_data[chat_id]['phone']}</code>
 ID: <code>{chat_id}</code>
 
-Registration Fee: $1 (150 ETB)
+Registration Fee: 150 ETB
 Payment screenshot attached below
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -552,7 +550,7 @@ def handle_info_buttons(call):
 <b>🔹 STEP 1: REGISTER</b>
 • Click 🔑 Register
 • Follow the prompts to create your account
-• Pay the $1 registration fee
+• Pay the 150 birr registration fee
 
 <b>🔹 STEP 2: DEPOSIT FUNDS</b>
 • Click 💰 Deposit
@@ -820,7 +818,8 @@ Examples:
         )
         user_states[chat_id] = 'waiting_for_custom_amount'
         return
-  # Extract amount from button text - handles format like "$5 (800 birr)"
+
+    # Extract amount from button text - handles format like "$5 (800 birr)"
     if '(' in message.text and ')' in message.text:
         # Extract dollar amount from the start of the string
         amount_text = message.text.split('(')[0].strip()
@@ -834,7 +833,6 @@ Examples:
             "❌ Invalid amount format. Please try again.",
             parse_mode='HTML'
         )
-   
 
 def send_payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
@@ -924,7 +922,7 @@ def send_payment_details(message, amount):
 • TeleBirr
 • CBE Birr
 • HelloCash
-• Amole
+•Amole
 • Credit/Debit Cards
 • And more!
 
@@ -962,13 +960,13 @@ def process_custom_amount(message):
     try:
         # Check if user entered birr or USD amount
         amount_text = message.text.strip()
-        
+
         # Remove any non-numeric characters
         clean_amount = ''.join(c for c in amount_text if c.isdigit() or c == '.')
-        
+
         # Determine if the amount is in USD or birr based on user input
         is_usd = '$' in amount_text or 'usd' in amount_text.lower() or 'dollar' in amount_text.lower()
-        
+
         if is_usd:
             # User entered USD, store as USD
             usd_amount = float(clean_amount)
