@@ -102,7 +102,7 @@ def generate_deposit_payment(user_data, amount):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
+            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook%22",
             return_url=f"https://t.me/ali_paybot"
         )
 
@@ -152,7 +152,7 @@ def generate_registration_payment(user_data):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
+            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook%22",
             return_url=f"https://t.me/ali_paybot"
         )
 
