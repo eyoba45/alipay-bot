@@ -759,12 +759,12 @@ Select how much you'd like to deposit:
 """
     menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     menu.add(
-        KeyboardButton('800 birr'),
-        KeyboardButton('1,600 birr')
+        KeyboardButton('800 birr ($5)'),
+        KeyboardButton('1,600 birr ($10)')
     )
     menu.add(
-        KeyboardButton('2,400 birr'),
-        KeyboardButton('3,200 birr')
+        KeyboardButton('2,400 birr ($15)'),
+        KeyboardButton('3,200 birr ($20)')
     )
     menu.add(KeyboardButton('Customize'))
     menu.add(KeyboardButton('Back to Main Menu'))
@@ -952,10 +952,10 @@ def process_custom_amount(message):
         # Remove any non-numeric characters
         amount_text = ''.join(c for c in message.text if c.isdigit())
         birr_amount = int(amount_text)
-        
+
         # Convert birr to USD (for internal tracking)
         usd_amount = birr_amount / 160
-        
+
         # Check if amount is reasonable
         if birr_amount < 100:
             bot.send_message(
@@ -968,7 +968,7 @@ Please enter an amount of at least 100 birr.
                 parse_mode='HTML'
             )
             return
-            
+
         if birr_amount > 100000:
             bot.send_message(
                 chat_id,
@@ -981,10 +981,10 @@ For larger deposits, please contact support.
                 parse_mode='HTML'
             )
             return
-            
+
         # Send payment details with the custom amount
         send_payment_details(message, usd_amount)
-        
+
     except ValueError:
         bot.send_message(
             chat_id,
