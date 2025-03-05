@@ -192,35 +192,42 @@ def process_deposit_payment(data):
                 logger.warning(f"User {telegram_id} not found")
                 return
                 
-            # Update user balance
-            user.balance += amount
+            # Convert birr to USD for internal tracking (1 USD = 160 birr)
+            usd_amount = amount / 160
+            
+            # Update user balance with USD value
+            user.balance += usd_amount
             
             # Add a record of the deposit
             deposit = PendingDeposit(
                 user_id=user.id,
-                amount=amount,
+                amount=usd_amount,
                 status='Approved'
             )
             session.add(deposit)
             session.commit()
             
-            logger.info(f"Deposit of ${amount} processed for user {telegram_id}")
+            logger.info(f"Deposit of {amount} birr (${usd_amount:.2f}) processed for user {telegram_id}")
             
             # Notify user
             from bot import bot
             bot.send_message(
                 telegram_id,
                 f"""
-✅ DEPOSIT APPROVED ✅
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-💰 Deposit Details:
-Amount: <code>${amount:.2f}</code>
-ETB: <code>{int(amount * 160):,}</code> birr
+<b>💰 DEPOSIT DETAILS:</b>
+• Amount: <code>{int(amount):,}</code> birr
+• USD Value: ${usd_amount:.2f}
 
-💳 Account Updated:
-New Balance: <code>${user.balance:.2f}</code>
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
 
-✨ You're ready to start shopping! ✨
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
 """,
                 parse_mode='HTML'
             )
