@@ -90,7 +90,7 @@ def generate_deposit_payment(user_data, amount):
             elif phone.startswith('0'):
                 phone_number = '+251' + phone[1:]
 
-        # Convert to birr for payment (1 USD = 160 ETB)
+        # Amount is already in USD, convert to birr for payment (1 USD = 160 ETB)
         birr_amount = float(amount) * 160
 
         # Create the payment
