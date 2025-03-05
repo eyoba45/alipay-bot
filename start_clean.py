@@ -83,6 +83,10 @@ def run_webhook_server():
         log_thread = threading.Thread(target=log_output, daemon=True)
         log_thread.start()
 
+        # Give the webhook server time to start up
+        time.sleep(2)
+        logger.info("Chapa webhook server started")
+        
         return webhook_process
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
