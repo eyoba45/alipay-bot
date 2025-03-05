@@ -759,19 +759,19 @@ Select how much you'd like to deposit:
 """
     menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     menu.add(
-        KeyboardButton('800 birr ($5)'),
-        KeyboardButton('1,600 birr ($10)')
+        KeyboardButton('$5 (800 birr)'),
+        KeyboardButton('$10 (1,600 birr)')
     )
     menu.add(
-        KeyboardButton('2,400 birr ($15)'),
-        KeyboardButton('3,200 birr ($20)')
+        KeyboardButton('$15 (2,400 birr)'),
+        KeyboardButton('$20 (3,200 birr)')
     )
     menu.add(KeyboardButton('Customize'))
     menu.add(KeyboardButton('Back to Main Menu'))
 
     bot.send_message(chat_id, deposit_msg, reply_markup=menu, parse_mode='HTML')
 
-@bot.message_handler(func=lambda msg: msg.text in ['800 birr ($5)', '1,600 birr ($10)', '2,400 birr ($15)', '3,200 birr ($20)', 'Customize', 'Back to Main Menu'])
+@bot.message_handler(func=lambda msg: msg.text in ['$5 (800 birr)', '$10 (1,600 birr)', '$15 (2,400 birr)', '$20 (3,200 birr)', 'Customize', 'Back to Main Menu'])
 def handle_deposit_amount(message):
     """Handle deposit amount selection"""
     chat_id = message.chat.id
@@ -809,26 +809,28 @@ def handle_deposit_amount(message):
    💰 <b>CUSTOM DEPOSIT</b> 💰  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Enter amount in <b>birr</b>.
-Example: Enter <code>2000</code> for 2,000 birr ($12.50)
+Enter amount in <b>USD</b> or <b>birr</b>.
+Examples:
+• Enter <code>$10</code> for $10 (1,600 birr)
+• Enter <code>1600</code> for 1,600 birr ($10)
 
-<i>Only enter the number without currency symbol.</i>
+<i>You can optionally include $ or "usd" for dollar amounts.</i>
 """,
             parse_mode='HTML'
         )
         user_states[chat_id] = 'waiting_for_custom_amount'
         return
 
-    # Extract amount from button text - now in birr format
-    birr_text = message.text.split(' ')[0].replace(',', '')
-    birr_amount = int(birr_text)
-    # Use birr amount directly for Chapa payment
-    send_payment_details(message, birr_amount)
+    # Extract amount from button text - in dollar format from button like "800 birr ($5)"
+    amount_text = message.text.split('(')[1].split(')')[0]
+    amount = float(amount_text.replace('$', ''))
+    # Use dollar amount for payment
+    send_payment_details(message, amount)
 
 def send_payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
     chat_id = message.chat.id
-    birr_amount = int(amount * 160)
+    birr_amount = int(float(amount) * 160)
     session = None
 
     try:
@@ -949,12 +951,23 @@ def process_custom_amount(message):
     """Process custom deposit amount in birr"""
     chat_id = message.chat.id
     try:
+        # Check if user entered birr or USD amount
+        amount_text = message.text.strip()
+        
         # Remove any non-numeric characters
-        amount_text = ''.join(c for c in message.text if c.isdigit())
-        birr_amount = int(amount_text)
-
-        # Convert birr to USD (for internal tracking)
-        usd_amount = birr_amount / 160
+        clean_amount = ''.join(c for c in amount_text if c.isdigit() or c == '.')
+        
+        # Determine if the amount is in USD or birr based on user input
+        is_usd = '$' in amount_text or 'usd' in amount_text.lower() or 'dollar' in amount_text.lower()
+        
+        if is_usd:
+            # User entered USD, store as USD
+            usd_amount = float(clean_amount)
+            birr_amount = int(usd_amount * 160)
+        else:
+            # User entered birr, convert to USD
+            birr_amount = int(float(clean_amount))
+            usd_amount = birr_amount / 160
 
         # Check if amount is reasonable
         if birr_amount < 100:
