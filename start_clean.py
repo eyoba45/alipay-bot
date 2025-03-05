@@ -9,6 +9,7 @@ import time
 import subprocess
 import signal
 import threading
+import traceback
 
 # Configure logging
 logging.basicConfig(
@@ -86,7 +87,7 @@ def run_webhook_server():
         # Give the webhook server time to start up
         time.sleep(2)
         logger.info("Chapa webhook server started")
-        
+
         return webhook_process
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
@@ -153,10 +154,18 @@ def main():
         logger.error("Failed to start bot process")
         return 1
 
-    # Run the webhook server if Chapa is configured
-    webhook_process = run_webhook_server()
-    if webhook_process:
-        processes.append(('webhook', webhook_process))
+    # Always start webhook server to capture payments
+    logger.info("Starting webhook server...")
+    try:
+        from chapa_webhook import run_webhook_server
+        webhook_thread = threading.Thread(target=run_webhook_server)
+        webhook_thread.daemon = True
+        webhook_thread.start()
+        logger.info("Webhook server started successfully")
+    except Exception as e:
+        logger.error(f"Error starting webhook server: {e}")
+        logger.error(traceback.format_exc())
+
 
     # Run the payment verifier if Chapa is configured
     verifier_process = run_payment_verifier()
