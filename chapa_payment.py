@@ -90,16 +90,19 @@ def generate_deposit_payment(user_data, amount):
             elif phone.startswith('0'):
                 phone_number = '+251' + phone[1:]
 
+        # Use birr amount directly - these are already in birr when displayed to user
+        birr_amount = amount
+
         # Create the payment
         response = create_payment(
-            amount=amount,
+            amount=birr_amount,
             currency="ETB",
             email=email,
             first_name=first_name,
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
+            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
             return_url=f"https://t.me/ali_paybot"
         )
 
@@ -149,7 +152,7 @@ def generate_registration_payment(user_data):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
+            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
             return_url=f"https://t.me/ali_paybot"
         )
 
