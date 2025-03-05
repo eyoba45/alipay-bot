@@ -20,7 +20,7 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
 
         # Format amount as string
         amount_str = str(amount)
-        
+
         # Build payload according to Chapa documentation
         payload = {
             "amount": amount_str,
@@ -30,11 +30,11 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
             "last_name": last_name,
             "tx_ref": tx_ref
         }
-        
+
         # Add phone_number if provided
         if phone_number:
             payload["phone_number"] = phone_number
-            
+
         # Add callback_url if provided
         if callback_url:
             payload["callback_url"] = callback_url
@@ -42,7 +42,7 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
         # Add return_url if provided
         if return_url:
             payload["return_url"] = return_url
-            
+
         # Add customization for better user experience (with shorter title)
         payload["customization"] = {
             "title": "AliPay ETH",
@@ -79,7 +79,7 @@ def generate_deposit_payment(user_data, amount):
         name_parts = user_data['name'].split()
         first_name = name_parts[0]
         last_name = name_parts[-1] if len(name_parts) > 1 else "User"
-        
+
         # Format phone number if available
         phone_number = None
         if 'phone' in user_data and user_data['phone']:
@@ -90,8 +90,8 @@ def generate_deposit_payment(user_data, amount):
             elif phone.startswith('0'):
                 phone_number = '+251' + phone[1:]
 
-        # Use birr amount directly - these are already in birr when displayed to user
-        birr_amount = amount
+        # Convert to birr for payment (1 USD = 160 ETB)
+        birr_amount = amount * 160
 
         # Create the payment
         response = create_payment(
@@ -102,7 +102,7 @@ def generate_deposit_payment(user_data, amount):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook%22",
+            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
             return_url=f"https://t.me/ali_paybot"
         )
 
@@ -132,7 +132,7 @@ def generate_registration_payment(user_data):
         name_parts = user_data['name'].split()
         first_name = name_parts[0]
         last_name = name_parts[-1] if len(name_parts) > 1 else "User"
-        
+
         # Format phone number if available
         phone_number = None
         if 'phone' in user_data and user_data['phone']:
@@ -152,7 +152,7 @@ def generate_registration_payment(user_data):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook%22",
+            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
             return_url=f"https://t.me/ali_paybot"
         )
 
