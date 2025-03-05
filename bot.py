@@ -751,25 +751,27 @@ def deposit_funds(message):
     """Handle deposit button"""
     chat_id = message.chat.id
     deposit_msg = """
-💰 <b>Choose Deposit Amount</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>CHOOSE DEPOSIT AMOUNT</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 Select how much you'd like to deposit:
 """
     menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     menu.add(
-        KeyboardButton('$5 (800 birr)'),
-        KeyboardButton('$10 (1,600 birr)')
+        KeyboardButton('800 birr'),
+        KeyboardButton('1,600 birr')
     )
     menu.add(
-        KeyboardButton('$15 (2,400 birr)'),
-        KeyboardButton('$20 (3,200 birr)')
+        KeyboardButton('2,400 birr'),
+        KeyboardButton('3,200 birr')
     )
     menu.add(KeyboardButton('Customize'))
     menu.add(KeyboardButton('Back to Main Menu'))
 
     bot.send_message(chat_id, deposit_msg, reply_markup=menu, parse_mode='HTML')
 
-@bot.message_handler(func=lambda msg: msg.text in ['$5 (800 birr)', '$10 (1,600 birr)', '$15 (2,400 birr)', '$20 (3,200 birr)', 'Customize', 'Back to Main Menu'])
+@bot.message_handler(func=lambda msg: msg.text in ['800 birr ($5)', '1,600 birr ($10)', '2,400 birr ($15)', '3,200 birr ($20)', 'Customize', 'Back to Main Menu'])
 def handle_deposit_amount(message):
     """Handle deposit amount selection"""
     chat_id = message.chat.id
@@ -803,18 +805,25 @@ def handle_deposit_amount(message):
         bot.send_message(
             chat_id,
             """
-💰 <b>Custom Deposit</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>CUSTOM DEPOSIT</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Enter amount in USD (1 USD = 160 birr).
-Example: Enter 12 for $12 (1,920 birr)
+Enter amount in <b>birr</b>.
+Example: Enter <code>2000</code> for 2,000 birr ($12.50)
+
+<i>Only enter the number without currency symbol.</i>
 """,
             parse_mode='HTML'
         )
         user_states[chat_id] = 'waiting_for_custom_amount'
         return
 
-    amount = int(message.text.split('$')[1].split(' ')[0])
-    send_payment_details(message, amount)
+    # Extract amount from button text - now in birr format
+    birr_text = message.text.split(' ')[0].replace(',', '')
+    birr_amount = int(birr_text)
+    # Use birr amount directly for Chapa payment
+    send_payment_details(message, birr_amount)
 
 def send_payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
@@ -856,30 +865,30 @@ def send_payment_details(message, amount):
 
             payment_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>DEPOSIT DETAILS</b> 💰  
+   💸 <b>DEPOSIT DETAILS</b> 💸  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>💵 Amount Due:</b>
-• USD: <code>${amount:,.2f}</code>
-• ETB: <code>{birr_amount:,}</code>
+<b>💵 AMOUNT TO PAY:</b>
+• <code>{birr_amount:,}</code> birr
+• (${amount:.2f} USD)
 
-<b>✅ PAYMENT OPTIONS ✅</b>
+<b>💳 PAYMENT METHODS 💳</b>
 
-<b>🏦 Commercial Bank (CBE)</b>
+<b>🏦 COMMERCIAL BANK (CBE)</b>
 • Account: <code>1000547241316</code>
 • Name: <code>Eyob Mulugeta</code>
 
-<b>📱 TeleBirr Mobile Money</b>
+<b>📱 TELEBIRR</b>
 • Number: <code>0986693062</code>
 • Name: <code>Eyob Mulugeta</code>
 
-<b>📸 NEXT STEPS 📸</b>
+<b>📸 HOW TO PROCEED 📸</b>
 1️⃣ Choose your preferred payment method
-2️⃣ Send <b>exactly</b> <code>{birr_amount:,} ETB</code>
-3️⃣ Take a clear screenshot of confirmation
-4️⃣ Send your screenshot below ⬇️
+2️⃣ Transfer <b>exactly</b> <code>{birr_amount:,} birr</code>
+3️⃣ Take a clear screenshot of payment confirmation
+4️⃣ Send the screenshot below ⬇️
 
-<i>Your funds will be available immediately after verification!</i>
+<i>✨ Your balance will be updated immediately after verification! ✨</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML')
         else:
@@ -887,27 +896,29 @@ def send_payment_details(message, amount):
             from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("💳 Pay Now", url=payment_link['checkout_url']))
+            markup.add(InlineKeyboardButton("💳 PAY NOW 💳", url=payment_link['checkout_url']))
 
             payment_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>DEPOSIT DETAILS</b> 💰  
+   💸 <b>SECURE DEPOSIT</b> 💸  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>💵 Amount Due:</b>
-• USD: <code>${amount:,.2f}</code>
-• ETB: <code>{birr_amount:,}</code>
+<b>💰 PAYMENT AMOUNT:</b>
+• <code>{birr_amount:,}</code> birr
+• (${amount:.2f} USD)
 
-<b>✨ SECURE PAYMENT OPTIONS ✨</b>
+<b>✨ INSTANT PAYMENT OPTIONS ✨</b>
 
-Click the button below to pay securely with:
-• Credit/Debit Card
+<b>Click the button below to pay securely with:</b>
 • TeleBirr
 • CBE Birr
 • HelloCash
-• And more payment options!
+• Amole
+• Credit/Debit Cards
+• And more!
 
-<i>Your balance will be updated automatically after payment!</i>
+<i>💎 Your balance will update automatically after payment! 💎</i>
+<i>No need to send screenshots with online payment</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
 
@@ -932,6 +943,66 @@ Click the button below to pay securely with:
         bot.send_message(chat_id, "Sorry, there was an error processing your request. Please try again.")
     finally:
         safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_custom_amount')
+def process_custom_amount(message):
+    """Process custom deposit amount in birr"""
+    chat_id = message.chat.id
+    try:
+        # Remove any non-numeric characters
+        amount_text = ''.join(c for c in message.text if c.isdigit())
+        birr_amount = int(amount_text)
+        
+        # Convert birr to USD (for internal tracking)
+        usd_amount = birr_amount / 160
+        
+        # Check if amount is reasonable
+        if birr_amount < 100:
+            bot.send_message(
+                chat_id,
+                """
+❌ <b>Amount Too Small</b>
+
+Please enter an amount of at least 100 birr.
+""",
+                parse_mode='HTML'
+            )
+            return
+            
+        if birr_amount > 100000:
+            bot.send_message(
+                chat_id,
+                """
+❌ <b>Amount Too Large</b>
+
+Please enter an amount less than 100,000 birr.
+For larger deposits, please contact support.
+""",
+                parse_mode='HTML'
+            )
+            return
+            
+        # Send payment details with the custom amount
+        send_payment_details(message, usd_amount)
+        
+    except ValueError:
+        bot.send_message(
+            chat_id,
+            """
+❌ <b>Invalid Amount</b>
+
+Please enter a valid number (birr amount).
+Example: <code>2000</code> for 2,000 birr
+""",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error processing custom amount: {e}")
+        bot.send_message(
+            chat_id,
+            "Sorry, there was an error. Please try again.",
+            reply_markup=create_main_menu(is_registered=True)
+        )
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_deposit_screenshot', content_types=['photo'])
 def handle_deposit_screenshot(message):
@@ -982,23 +1053,25 @@ Screenshot attached below
         bot.send_message(
             chat_id,
             f"""
-✨ DEPOSIT RECEIVED ✨
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✨ <b>DEPOSIT RECEIVED</b> ✨  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-🌟 Thank you for your deposit! 🌟
+🌟 <b>Thank you for your deposit!</b> 🌟
 
-Deposit Information:
-Amount: `$ {deposit_amount:,.2f}
-ETB: <code>{birr_amount:,}</code> birr
-Screenshot: ✅ Received
-Status: ⏳ Processing
+<b>💰 DEPOSIT INFORMATION:</b>
+• Amount: <code>{birr_amount:,}</code> birr
+• USD Value: ${deposit_amount:,.2f}
+• Status: ⏳ <b>Processing</b>
+• Screenshot: ✅ <b>Received</b>
 
-What happens next?
-1. Quick verification of payment
-2. Your balance will be updated
-3. You'll receive confirmation
-4. Start shopping immediately!
+<b>🔄 WHAT HAPPENS NEXT:</b>
+1️⃣ Our team verifies your payment
+2️⃣ Your balance is updated automatically
+3️⃣ You'll receive confirmation message
+4️⃣ Start shopping immediately!
 
-Your AliExpress shopping adventure is just moments away!
+<i>💫 Your AliExpress shopping adventure is just moments away! 💫</i>
 """,
             parse_mode='HTML'
         )
@@ -1022,15 +1095,18 @@ def check_balance(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if user:
+            birr_balance = int(user.balance * 160)
             bot.send_message(
                 chat_id,
                 f"""
-💳 <b>Your Balance</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>YOUR BALANCE</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Available: $<code>{user.balance:,.2f}</code>
-≈ <code>{int(user.balance * 160):,}</code> ETB
+<b>Available:</b> <code>{birr_balance:,}</code> birr
+≈ $<code>{user.balance:,.2f}</code> USD
 
-Need more? Click 💰 Deposit
+<i>Need more? Click 💰 Deposit</i>
 """,
                 parse_mode='HTML'
             )
@@ -1360,16 +1436,20 @@ def handle_deposit_admin_decision(call):
             bot.send_message(
                 chat_id,
                 f"""
-✅ DEPOSIT APPROVED ✅
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-💰 Deposit Details:
-Amount: <code>${amount:.2f}</code>
-ETB: <code>{int(amount * 160):,}</code> birr
+<b>💰 DEPOSIT DETAILS:</b>
+• Amount: <code>{int(amount * 160):,}</code> birr
+• USD Value: ${amount:.2f}
 
-💳 Account Updated:
-New Balance: <code>${user.balance:.2f}</code>
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
 
-✨ You're ready to start shopping! ✨
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
 """,
                 parse_mode='HTML'
             )
