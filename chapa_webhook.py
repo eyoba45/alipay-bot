@@ -90,17 +90,19 @@ def chapa_webhook():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 def process_registration_payment(data):
-    """Process a successful registration payment"""
+    """Process a successful registration payment with automatic approval"""
     try:
         # Extract user information from the payment data
         tx_ref = data.get('tx_ref')
         customer_info = data.get('customer', {})
         email = customer_info.get('email', '')
         
-        # Extract telegram_id from email (format: telegram_id@telegram.user)
+        # Extract telegram_id from email (format: user.telegram_id@gmail.com)
         telegram_id = None
         if '@' in email:
-            telegram_id = int(email.split('@')[0])
+            email_prefix = email.split('@')[0]
+            if '.' in email_prefix:
+                telegram_id = int(email_prefix.split('.')[1])
             
         if not telegram_id:
             logger.warning(f"Could not extract telegram_id from email: {email}")
@@ -122,13 +124,14 @@ def process_registration_payment(data):
                 logger.warning(f"No pending approval found for user {telegram_id}")
                 return
                 
-            # Create new user
+            # Create new user - automatically approve since payment is confirmed
             new_user = User(
                 telegram_id=telegram_id,
                 name=pending.name,
                 phone=pending.phone,
                 address=pending.address,
-                balance=0.0
+                balance=0.0,
+                subscription_date=datetime.utcnow()
             )
             session.add(new_user)
             
@@ -136,7 +139,7 @@ def process_registration_payment(data):
             session.delete(pending)
             session.commit()
             
-            logger.info(f"User {telegram_id} registered successfully")
+            logger.info(f"User {telegram_id} automatically registered and approved after successful payment")
             
             # Notify user
             from bot import bot
@@ -147,7 +150,7 @@ def process_registration_payment(data):
 
 🎉 <b>Welcome to AliPay_ETH!</b> 🎉
 
-Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
+Your account has been automatically activated after successful payment! You're all set to start shopping on AliExpress using Ethiopian Birr!
 
 <b>📱 Your Services:</b>
 • 💰 <b>Deposit</b> - Add funds to your account
@@ -157,7 +160,8 @@ Your account has been successfully activated and you're all set to start shoppin
 
 Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
             )
         finally:
             safe_close_session(session)
@@ -165,7 +169,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
         logger.error(f"Error processing registration payment: {e}")
 
 def process_deposit_payment(data):
-    """Process a successful deposit payment"""
+    """Process a successful deposit payment with automatic approval"""
     try:
         # Extract user information from the payment data
         tx_ref = data.get('tx_ref')
@@ -173,16 +177,18 @@ def process_deposit_payment(data):
         customer_info = data.get('customer', {})
         email = customer_info.get('email', '')
         
-        # Extract telegram_id from email (format: telegram_id@telegram.user)
+        # Extract telegram_id from email (format: user.telegram_id@gmail.com)
         telegram_id = None
         if '@' in email:
-            telegram_id = int(email.split('@')[0])
+            email_prefix = email.split('@')[0]
+            if '.' in email_prefix:
+                telegram_id = int(email_prefix.split('.')[1])
             
         if not telegram_id:
             logger.warning(f"Could not extract telegram_id from email: {email}")
             return
             
-        logger.info(f"Processing deposit payment of ${amount} for user {telegram_id}")
+        logger.info(f"Processing deposit payment of {amount} birr for user {telegram_id}")
         
         session = get_session()
         try:
@@ -195,19 +201,19 @@ def process_deposit_payment(data):
             # Convert birr to USD for internal tracking (1 USD = 160 birr)
             usd_amount = amount / 160
             
-            # Update user balance with USD value
+            # Update user balance with USD value - AUTO APPROVE
             user.balance += usd_amount
             
-            # Add a record of the deposit
+            # Add a record of the deposit as approved
             deposit = PendingDeposit(
                 user_id=user.id,
                 amount=usd_amount,
-                status='Approved'
+                status='Approved'  # Auto-approved
             )
             session.add(deposit)
             session.commit()
             
-            logger.info(f"Deposit of {amount} birr (${usd_amount:.2f}) processed for user {telegram_id}")
+            logger.info(f"Deposit of {amount} birr (${usd_amount:.2f}) auto-approved for user {telegram_id}")
             
             # Notify user
             from bot import bot
