@@ -43,9 +43,9 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
         if return_url:
             payload["return_url"] = return_url
             
-        # Add customization for better user experience
+        # Add customization for better user experience (with shorter title)
         payload["customization"] = {
-            "title": "AliPay ETH Payment",
+            "title": "AliPay ETH",
             "description": "Payment for AliExpress service"
         }
 
@@ -72,7 +72,8 @@ def generate_deposit_payment(user_data, amount):
 
         # Prepare user data with a proper email format
         # Using a valid email format that meets Chapa's validation requirements
-        email = f"user{user_data['telegram_id']}@example.com"
+        # Use a properly formatted valid email 
+        email = f"user.{user_data['telegram_id']}@gmail.com"
 
         # Get name parts
         name_parts = user_data['name'].split()
@@ -98,8 +99,8 @@ def generate_deposit_payment(user_data, amount):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
-            return_url=f"https://t.me/alipay_eth_bot"
+            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
+            return_url=f"https://t.me/ali_paybot"
         )
 
         if response and response.get('status') == 'success' and 'data' in response:
@@ -121,7 +122,8 @@ def generate_registration_payment(user_data):
         tx_ref = generate_tx_ref("REG")
 
         # Prepare user data with a proper email format
-        email = f"user{user_data['telegram_id']}@example.com"
+        # Use a properly formatted valid email that will pass validation
+        email = f"user.{user_data['telegram_id']}@gmail.com"
 
         # Get name parts
         name_parts = user_data['name'].split()
@@ -147,8 +149,8 @@ def generate_registration_payment(user_data):
             last_name=last_name,
             phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
-            return_url=f"https://t.me/alipay_eth_bot"
+            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
+            return_url=f"https://t.me/ali_paybot"
         )
 
         if response and response.get('status') == 'success' and 'data' in response:
