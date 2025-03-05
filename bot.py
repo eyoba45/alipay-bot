@@ -1115,7 +1115,9 @@ def check_balance(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if user:
-            birr_balance = int(user.balance * 160)
+            # Default to 0 if balance is None
+            balance = user.balance if user.balance is not None else 0
+            birr_balance = int(balance * 160)
             bot.send_message(
                 chat_id,
                 f"""
@@ -1124,7 +1126,7 @@ def check_balance(message):
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>Available:</b> <code>{birr_balance:,}</code> birr
-≈ $<code>{user.balance:,.2f}</code> USD
+≈ $<code>{balance:,.2f}</code> USD
 
 <i>Need more? Click 💰 Deposit</i>
 """,
@@ -1169,7 +1171,7 @@ Click 🔑 Register to create your account.
             return
 
         # Check if user has enough balance
-        if user.balance <= 0:
+        if user.balance is None or user.balance <= 0:
             bot.send_message(
                 chat_id,
                 """
@@ -2320,6 +2322,17 @@ def check_subscription(message):
 
         # Calculate subscription status
         now = datetime.utcnow()
+        
+        # Create attractive subscription renewal buttons first - fixed markup outside conditional
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("💫 Renew 1 Month ($1) 💫", callback_data="renew_1")
+        )
+        markup.add(
+            InlineKeyboardButton("🎁 View Premium Benefits", callback_data="sub_benefits")
+        )
+        
+        # Handle subscription date logic
         if user.subscription_date:
             days_passed = (now - user.subscription_date).days
             days_remaining = 30 - days_passed
@@ -2329,22 +2342,11 @@ def check_subscription(message):
                 status_emoji = "✅"
                 status = f"Active ({days_remaining} days remaining)"
                 renew_date = (user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')
-                status_color = "green"
             else:
                 # Expired subscription
                 status_emoji = "⚠️"
                 status = "Expired"
                 renew_date = "Renewal needed"
-                status_color = "red"
-
-            # Create attractive subscription renewal buttons
-            markup = InlineKeyboardMarkup(row_width=2)
-            markup.add(
-                InlineKeyboardButton("💫 Renew 1 Month ($1) 💫", callback_data="renew_1")
-            )
-            markup.add(
-                InlineKeyboardButton("🎁 View Premium Benefits", callback_data="sub_benefits")
-            )
 
             # Enhanced fancy subscription message with better formatting
             subscription_msg = f"""
@@ -2366,15 +2368,34 @@ def check_subscription(message):
 
 <i>Click below to renew your membership!</i>
 """
-            bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
         else:
-            bot.send_message(
-                chat_id, 
-                "✨ No subscription information found. Please contact our support team for assistance. ✨",
-                parse_mode='HTML'
-            )
+            # No subscription date, but still show renewal options
+            subscription_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✨ <b>PREMIUM SUBSCRIPTION</b> ✨  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+⚠️ <b>Status:</b> <code>No active subscription</code>
+
+📆 <b>Next renewal:</b> <code>Not set</code>
+💎 <b>Monthly fee:</b> <code>$1.00</code> (150 ETB)
+👑 <b>Benefits:</b> Full access to all premium features
+
+<b>Start your subscription to enjoy:</b>
+• 🛍️ Unlimited AliExpress shopping
+• 💰 Special discounts
+• 🎯 Priority order processing
+• 🌟 Premium customer support
+
+<i>Click below to activate your membership!</i>
+"""
+
+        # Send the message with markup - moved outside conditionals
+        bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
+        
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
+        logger.error(traceback.format_exc())  # Add traceback for better debugging
         bot.send_message(
             chat_id, 
             "⚠️ <b>Oops!</b> We encountered a temporary glitch. Please try again in a moment. ⚠️",
@@ -2389,15 +2410,17 @@ def handle_subscription_renewal(call):
     chat_id = call.message.chat.id
     session = None
     try:
+        # First acknowledge the callback to prevent timeout
+        bot.answer_callback_query(call.id, "Processing your subscription renewal...")
+        
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if not user:
-            bot.answer_callback_query(call.id, "User not found.")
+            bot.send_message(chat_id, "User not found. Please try again or contact support.")
             return
 
         # Check if user has enough balance for subscription
-        if user.balance < 1.0:
-            bot.answer_callback_query(call.id, "Insufficient balance. Please deposit funds first.")
+        if user.balance is None or user.balance < 1.0:
             bot.send_message(
                 chat_id,
                 """
@@ -2417,8 +2440,10 @@ Please use the 💰 Deposit option to add funds.
 
         try:
             session.commit()
-            bot.answer_callback_query(call.id, "Subscription renewed successfully!")
-            bot.edit_message_text(
+            
+            # Send a new message instead of editing the old one to avoid errors
+            bot.send_message(
+                chat_id,
                 f"""
 ✅ <b>Subscription Renewed!</b>
 
@@ -2428,19 +2453,18 @@ Current balance: ${user.balance:.2f}
 
 Thank you for using AliPay_ETH!
 """,
-                chat_id=chat_id,
-                message_id=call.message.message_id,
                 parse_mode='HTML'
             )
         except Exception as commit_error:
             logger.error(f"Error committing subscription renewal: {commit_error}")
+            logger.error(traceback.format_exc())
             session.rollback()
-            bot.answer_callback_query(call.id, "Database error, please try again.")
+            bot.send_message(chat_id, "Database error, please try again.")
             return
     except Exception as e:
         logger.error(f"Error renewing subscription: {e}")
         logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error renewing subscription.")
+        bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
     finally:
         safe_close_session(session)
 
