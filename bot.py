@@ -820,12 +820,21 @@ Examples:
         )
         user_states[chat_id] = 'waiting_for_custom_amount'
         return
-
-    # Extract amount from button text - in dollar format from button like "800 birr ($5)"
-    amount_text = message.text.split('(')[1].split(')')[0]
-    amount = float(amount_text.replace('$', ''))
-    # Use dollar amount for payment
-    send_payment_details(message, amount)
+  # Extract amount from button text - handles format like "$5 (800 birr)"
+    if '(' in message.text and ')' in message.text:
+        # Extract dollar amount from the start of the string
+        amount_text = message.text.split('(')[0].strip()
+        # Remove $ and convert to float
+        amount = float(amount_text.replace('$', ''))
+        # Use dollar amount for payment
+        send_payment_details(message, amount)
+    else:
+        bot.send_message(
+            message.chat.id,
+            "❌ Invalid amount format. Please try again.",
+            parse_mode='HTML'
+        )
+   
 
 def send_payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
