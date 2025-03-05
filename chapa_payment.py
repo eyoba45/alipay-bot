@@ -9,7 +9,7 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None):
+def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None, phone_number=None):
     """Create a new payment with Chapa"""
     try:
         url = "https://api.chapa.co/v1/transaction/initialize"
@@ -18,20 +18,36 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
             "Content-Type": "application/json"
         }
 
+        # Format amount as string
+        amount_str = str(amount)
+        
+        # Build payload according to Chapa documentation
         payload = {
-            "amount": str(amount),
+            "amount": amount_str,
             "currency": currency,
             "email": email,
             "first_name": first_name,
             "last_name": last_name,
             "tx_ref": tx_ref
         }
-
+        
+        # Add phone_number if provided
+        if phone_number:
+            payload["phone_number"] = phone_number
+            
+        # Add callback_url if provided
         if callback_url:
             payload["callback_url"] = callback_url
 
+        # Add return_url if provided
         if return_url:
             payload["return_url"] = return_url
+            
+        # Add customization for better user experience
+        payload["customization"] = {
+            "title": "AliPay ETH Payment",
+            "description": "Payment for AliExpress service"
+        }
 
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
@@ -54,13 +70,24 @@ def generate_deposit_payment(user_data, amount):
         # Generate a unique transaction reference
         tx_ref = generate_tx_ref("DEP")
 
-        # Prepare user data
-        email = f"{user_data['telegram_id']}@alipayeth.com"
+        # Prepare user data with a proper email format
+        # Using a valid email format that meets Chapa's validation requirements
+        email = f"user{user_data['telegram_id']}@example.com"
 
         # Get name parts
         name_parts = user_data['name'].split()
         first_name = name_parts[0]
         last_name = name_parts[-1] if len(name_parts) > 1 else "User"
+        
+        # Format phone number if available
+        phone_number = None
+        if 'phone' in user_data and user_data['phone']:
+            # Clean up phone number format
+            phone = user_data['phone'].replace(" ", "")
+            if phone.startswith('+251'):
+                phone_number = phone
+            elif phone.startswith('0'):
+                phone_number = '+251' + phone[1:]
 
         # Create the payment
         response = create_payment(
@@ -69,8 +96,10 @@ def generate_deposit_payment(user_data, amount):
             email=email,
             first_name=first_name,
             last_name=last_name,
+            phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook"
+            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
+            return_url=f"https://t.me/alipay_eth_bot"
         )
 
         if response and response.get('status') == 'success' and 'data' in response:
@@ -91,13 +120,23 @@ def generate_registration_payment(user_data):
         # Generate a unique transaction reference
         tx_ref = generate_tx_ref("REG")
 
-        # Prepare user data
-        email = f"{user_data['telegram_id']}@alipayeth.com"
+        # Prepare user data with a proper email format
+        email = f"user{user_data['telegram_id']}@example.com"
 
         # Get name parts
         name_parts = user_data['name'].split()
         first_name = name_parts[0]
         last_name = name_parts[-1] if len(name_parts) > 1 else "User"
+        
+        # Format phone number if available
+        phone_number = None
+        if 'phone' in user_data and user_data['phone']:
+            # Clean up phone number format
+            phone = user_data['phone'].replace(" ", "")
+            if phone.startswith('+251'):
+                phone_number = phone
+            elif phone.startswith('0'):
+                phone_number = '+251' + phone[1:]
 
         # Create the payment
         response = create_payment(
@@ -106,8 +145,10 @@ def generate_registration_payment(user_data):
             email=email,
             first_name=first_name,
             last_name=last_name,
+            phone_number=phone_number,
             tx_ref=tx_ref,
-            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook"
+            callback_url=f"https://alipay-eth-bot.replit.app/chapa/webhook",
+            return_url=f"https://t.me/alipay_eth_bot"
         )
 
         if response and response.get('status') == 'success' and 'data' in response:
