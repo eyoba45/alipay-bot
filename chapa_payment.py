@@ -91,7 +91,7 @@ def generate_deposit_payment(user_data, amount):
                 phone_number = '+251' + phone[1:]
 
         # Convert to birr for payment (1 USD = 160 ETB)
-        birr_amount = amount * 160
+        birr_amount = float(amount) * 160
 
         # Create the payment
         response = create_payment(
