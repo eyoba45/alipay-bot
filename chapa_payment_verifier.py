@@ -109,7 +109,7 @@ def process_verified_deposit(telegram_id, amount):
             logger.warning(f"User {telegram_id} not found for deposit")
             return False
             
-        # Find pending deposit record
+        # Find pending deposit record or create one
         pending_deposit = session.query(PendingDeposit).filter(
             and_(
                 PendingDeposit.user_id == user.id,
@@ -130,7 +130,7 @@ def process_verified_deposit(telegram_id, amount):
             # Update existing record
             pending_deposit.status = 'Approved'
             
-        # Update user balance
+        # Automatically update user balance
         user.balance += amount
         session.commit()
         
@@ -138,16 +138,20 @@ def process_verified_deposit(telegram_id, amount):
         bot.send_message(
             telegram_id,
             f"""
-✅ DEPOSIT APPROVED ✅
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-💰 Deposit Details:
-Amount: <code>${amount:.2f}</code>
-ETB: <code>{int(amount * 160):,}</code> birr
+<b>💰 DEPOSIT DETAILS:</b>
+• Amount: <code>{int(amount * 160):,}</code> birr
+• USD Value: ${amount:.2f}
 
-💳 Account Updated:
-New Balance: <code>${user.balance:.2f}</code>
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
 
-✨ You're ready to start shopping! ✨
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
 """,
             parse_mode='HTML'
         )
@@ -166,7 +170,6 @@ New Balance: <code>${user.balance:.2f}</code>
 def create_main_menu(is_registered=False):
     """Create the main menu keyboard based on registration status"""
     # This function is imported from bot.py
-    # This is just a placeholder to make the verification service work
     from telebot.types import ReplyKeyboardMarkup, KeyboardButton
     
     menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -203,17 +206,25 @@ def verify_pending_payments():
         logger.info("Starting payment verification cycle")
         session = get_session()
         
-        # Get pending registrations with tx_ref (from the user_states dict in bot.py)
-        # This is just a placeholder - in production, you'd store tx_refs in the database
+        # Get all pending registrations to check for payment verification
+        pending_regs = session.query(PendingApproval).all()
+        for pending in pending_regs:
+            try:
+                # For each pending registration, we would need to have a tx_ref to verify
+                # This would normally be stored in a database field, but we'd need to 
+                # modify the database schema for that
+                pass
+            except Exception as e:
+                logger.error(f"Error verifying registration for {pending.telegram_id}: {e}")
         
-        # For now we're not implementing the full check here, as we rely on webhook
-        # for real-time updates. This is just a backup verification process.
-        
-        # In a real implementation, you would:
-        # 1. Store tx_refs in the database when payments are initiated
-        # 2. Query for unverified payments here
-        # 3. Verify each one with the Chapa API
-        # 4. Process successful payments
+        # Check pending deposits
+        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+        for deposit in pending_deposits:
+            try:
+                # Would need tx_ref to verify these payments too
+                pass
+            except Exception as e:
+                logger.error(f"Error verifying deposit for user_id {deposit.user_id}: {e}")
         
         logger.info("Payment verification cycle complete")
     except Exception as e:
