@@ -1,93 +1,36 @@
 
 #!/usr/bin/env python3
 """
-Chapa webhook server to handle payment notifications
+Chapa Payment Webhook Handler
 """
 import os
 import logging
 import json
-import hmac
+import time
+import traceback
 import hashlib
-import sys
+import hmac
+from datetime import datetime
 from flask import Flask, request, jsonify
-from threading import Thread
 from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval, PendingDeposit
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-def verify_webhook_signature(payload, signature):
-    """Verify the webhook signature from Chapa"""
+# Functions to import bot only when needed to avoid circular imports
+def get_bot():
+    """Import and return bot instance"""
     try:
-        if not os.environ.get('CHAPA_WEBHOOK_SECRET'):
-            logger.warning("CHAPA_WEBHOOK_SECRET not set, skipping signature verification")
-            return True
-            
-        secret = os.environ.get('CHAPA_WEBHOOK_SECRET').encode()
-        computed_signature = hmac.new(
-            secret,
-            payload.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        return hmac.compare_digest(computed_signature, signature)
+        from bot import bot, create_main_menu
+        return bot, create_main_menu
     except Exception as e:
-        logger.error(f"Error verifying webhook signature: {e}")
-        return False
-
-@app.route('/chapa/webhook', methods=['POST'])
-def chapa_webhook():
-    """Handle Chapa webhook notifications"""
-    try:
-        # Get the signature from headers
-        signature = request.headers.get('X-Chapa-Signature')
-        if not signature:
-            logger.warning("Missing webhook signature")
-            return jsonify({"status": "error", "message": "Missing signature"}), 400
-            
-        # Get the payload
-        payload = request.get_data(as_text=True)
-        
-        # Verify signature
-        if not verify_webhook_signature(payload, signature):
-            logger.warning("Invalid webhook signature")
-            return jsonify({"status": "error", "message": "Invalid signature"}), 401
-            
-        # Parse the payload
-        data = json.loads(payload)
-        
-        # Check if this is a successful payment
-        if data.get('status') != 'success':
-            return jsonify({"status": "error", "message": "Payment not successful"}), 200
-            
-        # Get the transaction reference
-        tx_ref = data.get('tx_ref')
-        if not tx_ref:
-            logger.warning("Missing transaction reference")
-            return jsonify({"status": "error", "message": "Missing tx_ref"}), 400
-            
-        # Determine the type of payment (registration or deposit)
-        if tx_ref.startswith('REG-'):
-            # Process registration payment
-            process_registration_payment(data)
-        elif tx_ref.startswith('DEP-'):
-            # Process deposit payment
-            process_deposit_payment(data)
-        else:
-            logger.warning(f"Unknown transaction type: {tx_ref}")
-            
-        return jsonify({"status": "success"}), 200
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.error(f"Error importing bot: {e}")
+        logger.error(traceback.format_exc())
+        return None, None
 
 def process_registration_payment(data):
     """Process a successful registration payment with automatic approval"""
@@ -102,11 +45,14 @@ def process_registration_payment(data):
         if '@' in email:
             email_prefix = email.split('@')[0]
             if '.' in email_prefix:
-                telegram_id = int(email_prefix.split('.')[1])
+                try:
+                    telegram_id = int(email_prefix.split('.')[1])
+                except ValueError:
+                    logger.warning(f"Could not parse telegram_id from email: {email}")
             
         if not telegram_id:
             logger.warning(f"Could not extract telegram_id from email: {email}")
-            return
+            return {"success": False, "message": "Could not extract telegram_id"}
             
         logger.info(f"Processing registration payment for user {telegram_id}")
         
@@ -116,13 +62,13 @@ def process_registration_payment(data):
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if user:
                 logger.info(f"User {telegram_id} already registered")
-                return
+                return {"success": True, "message": "User already registered"}
                 
             # Look for pending approval
             pending = session.query(PendingApproval).filter_by(telegram_id=telegram_id).first()
             if not pending:
                 logger.warning(f"No pending approval found for user {telegram_id}")
-                return
+                return {"success": False, "message": "No pending approval found"}
                 
             # Create new user - automatically approve since payment is confirmed
             new_user = User(
@@ -142,10 +88,11 @@ def process_registration_payment(data):
             logger.info(f"User {telegram_id} automatically registered and approved after successful payment")
             
             # Notify user
-            from bot import bot
-            bot.send_message(
-                telegram_id,
-                """
+            bot, create_main_menu = get_bot()
+            if bot:
+                bot.send_message(
+                    telegram_id,
+                    """
 ✅ <b>Registration Approved!</b>
 
 🎉 <b>Welcome to AliPay_ETH!</b> 🎉
@@ -160,20 +107,24 @@ Your account has been automatically activated after successful payment! You're a
 
 Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
-                parse_mode='HTML',
-                reply_markup=create_main_menu(is_registered=True)
-            )
+                    parse_mode='HTML',
+                    reply_markup=create_main_menu(is_registered=True)
+                )
+            
+            return {"success": True, "message": "Registration approved"}
         finally:
             safe_close_session(session)
     except Exception as e:
         logger.error(f"Error processing registration payment: {e}")
+        logger.error(traceback.format_exc())
+        return {"success": False, "message": str(e)}
 
 def process_deposit_payment(data):
     """Process a successful deposit payment with automatic approval"""
     try:
         # Extract user information from the payment data
         tx_ref = data.get('tx_ref')
-        amount = float(data.get('amount', 0))
+        amount = float(data.get('amount', 0)) / 160  # Convert from Birr to USD
         customer_info = data.get('customer', {})
         email = customer_info.get('email', '')
         
@@ -182,51 +133,62 @@ def process_deposit_payment(data):
         if '@' in email:
             email_prefix = email.split('@')[0]
             if '.' in email_prefix:
-                telegram_id = int(email_prefix.split('.')[1])
-            
+                try:
+                    telegram_id = int(email_prefix.split('.')[1])
+                except ValueError:
+                    logger.warning(f"Could not parse telegram_id from email: {email}")
+        
         if not telegram_id:
             logger.warning(f"Could not extract telegram_id from email: {email}")
-            return
+            return {"success": False, "message": "Could not extract telegram_id"}
             
-        logger.info(f"Processing deposit payment of {amount} birr for user {telegram_id}")
+        logger.info(f"Processing deposit payment for user {telegram_id}, amount: ${amount}")
         
         session = get_session()
         try:
             # Get user
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if not user:
-                logger.warning(f"User {telegram_id} not found")
-                return
-                
-            # Convert birr to USD for internal tracking (1 USD = 160 birr)
-            usd_amount = amount / 160
+                logger.warning(f"User {telegram_id} not found for deposit")
+                return {"success": False, "message": "User not found"}
             
-            # Update user balance with USD value - AUTO APPROVE
-            user.balance += usd_amount
-            
-            # Add a record of the deposit as approved
-            deposit = PendingDeposit(
+            # Create or update pending deposit
+            pending_deposit = session.query(PendingDeposit).filter_by(
                 user_id=user.id,
-                amount=usd_amount,
-                status='Approved'  # Auto-approved
-            )
-            session.add(deposit)
+                status='Processing'
+            ).order_by(PendingDeposit.created_at.desc()).first()
+            
+            if pending_deposit:
+                pending_deposit.status = 'Approved'
+            else:
+                # Create new deposit record
+                pending_deposit = PendingDeposit(
+                    user_id=user.id,
+                    amount=amount,
+                    status='Approved'
+                )
+                session.add(pending_deposit)
+            
+            # Update user balance automatically
+            user.balance += amount
             session.commit()
             
-            logger.info(f"Deposit of {amount} birr (${usd_amount:.2f}) auto-approved for user {telegram_id}")
+            logger.info(f"Deposit of ${amount} for user {telegram_id} automatically approved")
             
-            # Notify user
-            from bot import bot
-            bot.send_message(
-                telegram_id,
-                f"""
+            # Notify user with updated balance
+            bot, _ = get_bot()
+            if bot:
+                birr_amount = int(amount * 160)
+                bot.send_message(
+                    telegram_id,
+                    f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{int(amount):,}</code> birr
-• USD Value: ${usd_amount:.2f}
+• Amount: <code>{birr_amount:,}</code> birr
+• USD Value: ${amount:.2f}
 
 <b>💳 ACCOUNT UPDATED:</b>
 • New Balance: <code>{int(user.balance * 160):,}</code> birr
@@ -235,20 +197,91 @@ def process_deposit_payment(data):
 
 <i>Browse AliExpress and submit your orders now!</i>
 """,
-                parse_mode='HTML'
-            )
+                    parse_mode='HTML'
+                )
+            
+            return {"success": True, "message": "Deposit approved"}
         finally:
             safe_close_session(session)
     except Exception as e:
         logger.error(f"Error processing deposit payment: {e}")
+        logger.error(traceback.format_exc())
+        return {"success": False, "message": str(e)}
 
-def run_webhook_server():
-    """Run the webhook server in a separate thread"""
-    app.run(host='0.0.0.0', port=8000, threaded=True)
+def verify_webhook_signature(request_data, signature):
+    """Verify webhook signature from Chapa"""
+    try:
+        webhook_secret = os.environ.get('CHAPA_WEBHOOK_SECRET')
+        if not webhook_secret:
+            logger.warning("CHAPA_WEBHOOK_SECRET not set. Skipping signature verification.")
+            return True
+            
+        computed_signature = hmac.new(
+            webhook_secret.encode(),
+            request_data,
+            hashlib.sha256
+        ).hexdigest()
+        
+        return hmac.compare_digest(computed_signature, signature)
+    except Exception as e:
+        logger.error(f"Error verifying webhook signature: {e}")
+        return False
+
+@app.route('/chapa/webhook', methods=['POST'])
+def chapa_webhook():
+    """Handle Chapa webhook for successful payments"""
+    try:
+        # Get the raw request data for signature verification
+        request_data = request.get_data()
+        signature = request.headers.get('X-Chapa-Signature')
+        
+        # Log the webhook payload
+        logger.info(f"Received Chapa webhook: {request_data}")
+        
+        # Verify signature if available
+        if signature and not verify_webhook_signature(request_data, signature):
+            logger.warning("Invalid webhook signature")
+            return jsonify({"status": "error", "message": "Invalid signature"}), 401
+        
+        # Parse the payload
+        data = request.json
+        
+        # Verify the payment status
+        if data.get('status') != 'success':
+            logger.info(f"Ignoring non-successful payment: {data.get('status')}")
+            return jsonify({"status": "success", "message": "Webhook received but payment not successful"}), 200
+        
+        # Determine payment type from tx_ref and process accordingly
+        tx_ref = data.get('tx_ref', '')
+        
+        if tx_ref.startswith('REG-'):
+            # Registration payment
+            result = process_registration_payment(data)
+            return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
+        
+        elif tx_ref.startswith('DEP-'):
+            # Deposit payment
+            result = process_deposit_payment(data)
+            return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
+        
+        else:
+            logger.warning(f"Unknown payment type for tx_ref: {tx_ref}")
+            return jsonify({"status": "error", "message": f"Unknown payment type: {tx_ref}"}), 400
+            
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"status": "error", "message": f"Internal server error: {str(e)}"}), 500
+
+# Add a health check endpoint
+@app.route('/chapa/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
 
 if __name__ == '__main__':
-    # Initialize database
+    # Initialize the database
     init_db()
-    
-    # Run the webhook server
-    run_webhook_server()
+    # Start the Flask app
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
