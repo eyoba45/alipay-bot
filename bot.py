@@ -318,7 +318,7 @@ Click the button below to pay securely with:
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_payment', content_types=['photo'])
 def handle_payment_screenshot(message):
-    """Process payment screenshot with maximum reliability"""
+    """Process payment screenshot with maximum reliability and auto-approval"""
     chat_id = message.chat.id
     session = None
     registration_complete = False
@@ -363,27 +363,33 @@ def handle_payment_screenshot(message):
             parse_mode='HTML'
         )
 
-        # Check if user already has a pending approval to prevent duplicates
+        # Check if user already exists
+        existing_user = None
         for db_attempt in range(3):  # Retry DB operations
             try:
                 session = get_session()
-                existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
-
-                if existing_pending:
-                    logger.info(f"User {chat_id} already has a pending approval")
+                existing_user = session.query(User).filter_by(telegram_id=chat_id).first()
+                
+                if existing_user:
+                    logger.info(f"User {chat_id} is already registered")
                     bot.send_message(
                         chat_id,
                         f"""
-⚠️⚠️⚠️ ALREADY PENDING ⚠️⚠️⚠️
+✅ <b>You are already registered!</b>
 
-<b>Your registration is already being processed!</b>
-
-Please wait for admin approval. You'll be notified once your account is activated.
+Your account is active and ready to use.
 """,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        reply_markup=create_main_menu(is_registered=True)
                     )
                     safe_close_session(session)
                     return
+                
+                # Check for existing pending approval
+                existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
+                if existing_pending:
+                    logger.info(f"User {chat_id} already has a pending approval - auto-approving")
+                    break
                 break
             except Exception as db_error:
                 logger.error(f"Database check error (attempt {db_attempt+1}): {db_error}")
@@ -392,7 +398,7 @@ Please wait for admin approval. You'll be notified once your account is activate
                     raise
                 time.sleep(0.5 * (db_attempt + 1))  # Progressive delay
 
-        # Add retries for database operations with transactional safety
+        # AUTO-APPROVE: Instead of adding to pending, create user directly
         max_retries = 5
         for retry_count in range(max_retries):
             try:
@@ -401,35 +407,42 @@ Please wait for admin approval. You'll be notified once your account is activate
                     safe_close_session(session)
                 session = get_session()
 
-                # Create new pending approval
-                pending = PendingApproval(
-                    telegram_id=chat_id,
-                    name=registration_data[chat_id]['name'],
-                    phone=registration_data[chat_id]['phone'],
-                    address=registration_data[chat_id]['address']
-                )
-                session.add(pending)
-                session.commit()
-                logger.info(f"Added pending approval for user {chat_id}")
-                break
-            except Exception as db_error:
-                logger.error(f"Database error (attempt {retry_count+1}/{max_retries}): {db_error}")
-                logger.error(traceback.format_exc())
-                session.rollback()
-                if retry_count >= max_retries - 1:
-                    raise
-                time.sleep(0.5 * (retry_count + 1))  # Progressive delay
-
-        # Admin approval buttons
-        admin_markup = InlineKeyboardMarkup()
-        admin_markup.row(
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_{chat_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_{chat_id}")
-        )
-
-        # Admin notification
-        admin_msg = f"""
-New User!
+                # Check if there's an existing pending approval
+                existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
+                
+                # If not, create a new user directly (auto-approve)
+                if not existing_pending:
+                    # Create new user
+                    new_user = User(
+                        telegram_id=chat_id,
+                        name=registration_data[chat_id]['name'],
+                        phone=registration_data[chat_id]['phone'],
+                        address=registration_data[chat_id]['address'],
+                        balance=0.0,
+                        subscription_date=datetime.utcnow()
+                    )
+                    session.add(new_user)
+                    session.commit()
+                    logger.info(f"Auto-approved and registered user {chat_id}")
+                else:
+                    # Convert pending approval to full user
+                    new_user = User(
+                        telegram_id=chat_id,
+                        name=existing_pending.name,
+                        phone=existing_pending.phone,
+                        address=existing_pending.address,
+                        balance=0.0,
+                        subscription_date=datetime.utcnow()
+                    )
+                    session.add(new_user)
+                    session.delete(existing_pending)
+                    session.commit()
+                    logger.info(f"Converted pending approval to full user for {chat_id}")
+                
+                # Send notification to admin
+                if ADMIN_ID:
+                    admin_msg = f"""
+✅ <b>AUTO-APPROVED REGISTRATION</b>
 
 User Information:
 Name: <b>{registration_data[chat_id]['name']}</b>
@@ -441,39 +454,51 @@ Registration Fee: 150 ETB
 Payment screenshot attached below
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-Please verify the payment and approve or reject.
+User has been automatically registered.
 """
-        # Send admin notification with retry
-        admin_notify_success = False
-        if ADMIN_ID:
-            for attempt in range(5):  # Increased retry attempts
-                try:
-                    bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
-                    bot.send_photo(ADMIN_ID, file_id, caption="📸 Registration Payment Screenshot")
-                    admin_notify_success = True
-                    logger.info(f"Admin notification sent for user {chat_id}")
-                    break
-                except Exception as notify_error:
-                    logger.error(f"Admin notification error (attempt {attempt+1}): {notify_error}")
-                    time.sleep(0.5 * (attempt + 1))  # Progressive delay
+                    try:
+                        bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
+                        bot.send_photo(ADMIN_ID, file_id, caption="📸 Auto-approved Registration Payment")
+                    except Exception as admin_error:
+                        logger.error(f"Error notifying admin about auto-approval: {admin_error}")
+                
+                break
+            except Exception as db_error:
+                logger.error(f"Database error (attempt {retry_count+1}/{max_retries}): {db_error}")
+                logger.error(traceback.format_exc())
+                session.rollback()
+                if retry_count >= max_retries - 1:
+                    raise
+                time.sleep(0.5 * (retry_count + 1))  # Progressive delay
 
         # Send confirmation to user - edit the previous message for faster response
         try:
             bot.edit_message_text(
                 f"""
-📷📷📷 ✨ RECEIVED! ✨ 🕘🕘🕘
+✅ <b>Registration Approved!</b>
 
-<b>🌟 Thank you for your registration! 🌟</b>
+🎉 <b>Welcome to AliPay_ETH!</b> 🎉
 
-<b>🔍 Status:</b> Payment received, verification pending
-<b>👁️ Next:</b> Our team will verify and activate your account
-<b>📱 Notification:</b> You'll be alerted when ready
+Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
 
-<i>💫 Get ready to shop on AliExpress with Ethiopian Birr!</i>
+<b>📱 Your Services:</b>
+• 💰 <b>Deposit</b> - Add funds to your account
+• 📦 <b>Submit Order</b> - Place AliExpress orders
+• 📊 <b>Order Status</b> - Track your orders
+• 💳 <b>Balance</b> - Check your current balance
+
+Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
                 chat_id=chat_id,
                 message_id=immediate_ack.message_id,
                 parse_mode='HTML'
+            )
+            
+            # Also send the main menu
+            bot.send_message(
+                chat_id,
+                "🏠 Welcome to your new account! What would you like to do?",
+                reply_markup=create_main_menu(is_registered=True)
             )
         except Exception as edit_error:
             # If editing fails, send a new message
@@ -481,20 +506,25 @@ Please verify the payment and approve or reject.
             bot.send_message(
                 chat_id,
                 """
-✨ RECEIVED! ✨ 
+✅ <b>Registration Approved!</b>
 
-<b>🌟 Thank you for your registration! 🌟</b>
+🎉 <b>Welcome to AliPay_ETH!</b> 🎉
 
-<b>🔍 Status:</b> Payment received, verification pending
-<b>👁️ Next:</b> Our team will verify and activate your account
-<b>📱 Notification:</b> You'll be alerted when ready
+Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
 
-<i>💫 Get ready to shop on AliExpress with Ethiopian Birr!</i>
+<b>📱 Your Services:</b>
+• 💰 <b>Deposit</b> - Add funds to your account
+• 📦 <b>Submit Order</b> - Place AliExpress orders
+• 📊 <b>Order Status</b> - Track your orders
+• 💳 <b>Balance</b> - Check your current balance
+
+Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
             )
 
-        logger.info(f"Confirmation sent to user {chat_id}")
+        logger.info(f"Auto-approval confirmation sent to user {chat_id}")
         registration_complete = True
 
         # Clean up registration data only after successful processing
@@ -1026,7 +1056,7 @@ Example: <code>2000</code> for 2,000 birr
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_deposit_screenshot', content_types=['photo'])
 def handle_deposit_screenshot(message):
-    """Process deposit screenshot"""
+    """Process deposit screenshot with auto-approval"""
     chat_id = message.chat.id
     session = None
     try:
@@ -1037,21 +1067,27 @@ def handle_deposit_screenshot(message):
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
+        if not user:
+            bot.send_message(chat_id, "Please register first before making a deposit.")
+            return
+
+        # Auto-approve: Update user balance immediately
+        user.balance += deposit_amount
+        
+        # Create approved deposit record
         pending_deposit = PendingDeposit(
             user_id=user.id,
-            amount=deposit_amount
+            amount=deposit_amount,
+            status='Approved'  # Set as approved immediately
         )
         session.add(pending_deposit)
         session.commit()
+        
+        logger.info(f"Auto-approved deposit of ${deposit_amount} for user {chat_id}")
 
-        admin_markup = InlineKeyboardMarkup()
-        admin_markup.row(
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{chat_id}_{deposit_amount}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{chat_id}_{deposit_amount}")
-        )
-
+        # Notify admin about auto-approved deposit
         admin_msg = f"""
-New Deposit
+✅ <b>AUTO-APPROVED DEPOSIT</b>
 
 User Details:
 Name: <b>{user.name}</b>
@@ -1062,36 +1098,36 @@ Amount:
 USD: <code>${deposit_amount:,.2f}</code>
 ETB: <code>{birr_amount:,}</code>
 
+New Balance: <code>${user.balance:.2f}</code>
+
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Screenshot attached below
 """
         if ADMIN_ID:
-            bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
-            bot.send_photo(ADMIN_ID, file_id, caption="📸 Deposit Screenshot")
+            try:
+                bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
+                bot.send_photo(ADMIN_ID, file_id, caption="📸 Auto-approved Deposit Screenshot")
+            except Exception as admin_error:
+                logger.error(f"Error notifying admin about auto-approval: {admin_error}")
 
         # Send enhanced fancy confirmation to user
         bot.send_message(
             chat_id,
             f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✨ <b>DEPOSIT RECEIVED</b> ✨  
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-🌟 <b>Thank you for your deposit!</b> 🌟
-
-<b>💰 DEPOSIT INFORMATION:</b>
+<b>💰 DEPOSIT DETAILS:</b>
 • Amount: <code>{birr_amount:,}</code> birr
-• USD Value: ${deposit_amount:,.2f}
-• Status: ⏳ <b>Processing</b>
-• Screenshot: ✅ <b>Received</b>
+• USD Value: ${deposit_amount:.2f}
 
-<b>🔄 WHAT HAPPENS NEXT:</b>
-1️⃣ Our team verifies your payment
-2️⃣ Your balance is updated automatically
-3️⃣ You'll receive confirmation message
-4️⃣ Start shopping immediately!
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
 
-<i>💫 Your AliExpress shopping adventure is just moments away! 💫</i>
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
 """,
             parse_mode='HTML'
         )
