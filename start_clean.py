@@ -66,7 +66,7 @@ def run_webhook_server():
         logger.info("Starting Chapa webhook server...")
         env = os.environ.copy()
 
-        # Run the webhook server
+        # Run the webhook server.  Assumes chapa_webhook.py handles automatic approval.
         webhook_process = subprocess.Popen(
             ["python", "chapa_webhook.py"],
             env=env,
@@ -155,16 +155,13 @@ def main():
         return 1
 
     # Always start webhook server to capture payments
-    logger.info("Starting webhook server...")
-    try:
-        from chapa_webhook import run_webhook_server
-        webhook_thread = threading.Thread(target=run_webhook_server)
-        webhook_thread.daemon = True
-        webhook_thread.start()
-        logger.info("Webhook server started successfully")
-    except Exception as e:
-        logger.error(f"Error starting webhook server: {e}")
-        logger.error(traceback.format_exc())
+    webhook_process = run_webhook_server()
+    if webhook_process:
+        processes.append(('webhook', webhook_process))
+    else:
+        logger.error("Failed to start webhook server")
+        # Decide whether to continue or exit based on requirements.
+        # return 1  # Uncomment to exit if webhook fails
 
 
     # Run the payment verifier if Chapa is configured
@@ -205,7 +202,7 @@ def main():
 
         # If we reach here, bot process has exited, terminate other processes
         for name, process in processes:
-            if name != 'bot' and process.poll() is None:
+            if process.poll() is None:
                 logger.info(f"Terminating {name} process...")
                 try:
                     process.terminate()
