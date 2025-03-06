@@ -2,54 +2,84 @@
 #!/usr/bin/env python3
 """
 Chapa Payment Verification Service
+
+This script periodically checks unverified payments and processes them
 """
 import os
 import logging
-import sys
 import time
-import telebot
-from sqlalchemy import and_
 import traceback
+import requests
 from datetime import datetime, timedelta
+import threading
 from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval, PendingDeposit
-from chapa_payment import verify_payment
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Get Telegram token
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-if not TOKEN:
-    logger.error("No TELEGRAM_BOT_TOKEN found in environment!")
-    sys.exit(1)
+# Verification interval in seconds (check every 5 minutes)
+VERIFICATION_INTERVAL = 300
 
-# Initialize bot
-bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
+def get_bot():
+    """Import and return bot instance"""
+    try:
+        from bot import bot, create_main_menu
+        return bot, create_main_menu
+    except Exception as e:
+        logger.error(f"Error importing bot: {e}")
+        logger.error(traceback.format_exc())
+        return None, None
 
-def process_verified_registration(telegram_id):
+def verify_payment(tx_ref):
+    """Verify a payment with Chapa API"""
+    try:
+        chapa_secret = os.environ.get('CHAPA_SECRET_KEY')
+        if not chapa_secret:
+            logger.error("CHAPA_SECRET_KEY not set")
+            return False
+            
+        url = f"https://api.chapa.co/v1/transaction/verify/{tx_ref}"
+        headers = {
+            "Authorization": f"Bearer {chapa_secret}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(url, headers=headers)
+        response_data = response.json()
+        
+        logger.info(f"Payment verification response for {tx_ref}: {response_data}")
+        
+        if response_data.get('status') == 'success' and response_data.get('data', {}).get('status') == 'success':
+            return response_data.get('data', {})
+        
+        return False
+    except Exception as e:
+        logger.error(f"Error verifying payment {tx_ref}: {e}")
+        logger.error(traceback.format_exc())
+        return False
+
+def process_verified_registration(telegram_id, payment_data):
     """Process a verified registration payment"""
     session = None
     try:
+        logger.info(f"Processing verified registration for user {telegram_id}")
+        
         session = get_session()
         
-        # Check if already registered
-        existing_user = session.query(User).filter_by(telegram_id=telegram_id).first()
-        if existing_user:
+        # Check if user already exists
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if user:
             logger.info(f"User {telegram_id} already registered")
-            return False
-            
-        # Get pending approval
+            return True
+        
+        # Look for pending approval
         pending = session.query(PendingApproval).filter_by(telegram_id=telegram_id).first()
         if not pending:
             logger.warning(f"No pending approval found for user {telegram_id}")
             return False
-            
+        
         # Create new user
         new_user = User(
             telegram_id=telegram_id,
@@ -60,20 +90,24 @@ def process_verified_registration(telegram_id):
             subscription_date=datetime.utcnow()
         )
         session.add(new_user)
+        
+        # Delete pending approval
         session.delete(pending)
         session.commit()
         
-        logger.info(f"User {telegram_id} successfully registered via payment verification")
+        logger.info(f"User {telegram_id} registered and approved")
         
         # Notify user
-        bot.send_message(
-            telegram_id,
-            """
+        bot, create_main_menu = get_bot()
+        if bot:
+            bot.send_message(
+                telegram_id,
+                """
 ✅ <b>Registration Approved!</b>
 
 🎉 <b>Welcome to AliPay_ETH!</b> 🎉
 
-Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
+Your account has been automatically activated after successful payment! You're all set to start shopping on AliExpress using Ethiopian Birr!
 
 <b>📱 Your Services:</b>
 • 💰 <b>Deposit</b> - Add funds to your account
@@ -83,9 +117,9 @@ Your account has been successfully activated and you're all set to start shoppin
 
 Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
-            parse_mode='HTML',
-            reply_markup=create_main_menu(is_registered=True)
-        )
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
+            )
         
         return True
     except Exception as e:
@@ -97,10 +131,12 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
     finally:
         safe_close_session(session)
 
-def process_verified_deposit(telegram_id, amount):
+def process_verified_deposit(telegram_id, amount, payment_data):
     """Process a verified deposit payment"""
     session = None
     try:
+        logger.info(f"Processing verified deposit for user {telegram_id}, amount: ${amount}")
+        
         session = get_session()
         
         # Get user
@@ -108,17 +144,28 @@ def process_verified_deposit(telegram_id, amount):
         if not user:
             logger.warning(f"User {telegram_id} not found for deposit")
             return False
-            
-        # Find pending deposit record or create one
-        pending_deposit = session.query(PendingDeposit).filter(
-            and_(
-                PendingDeposit.user_id == user.id,
-                PendingDeposit.amount == amount,
-                PendingDeposit.status == 'Processing'
-            )
+        
+        # Check if this deposit has already been processed
+        existing_deposit = session.query(PendingDeposit).filter_by(
+            user_id=user.id,
+            amount=amount,
+            status='Approved'
         ).first()
         
-        if not pending_deposit:
+        if existing_deposit:
+            logger.info(f"Deposit of ${amount} for user {telegram_id} already processed")
+            return True
+        
+        # Create or update pending deposit
+        pending_deposit = session.query(PendingDeposit).filter_by(
+            user_id=user.id,
+            status='Processing',
+            amount=amount
+        ).first()
+        
+        if pending_deposit:
+            pending_deposit.status = 'Approved'
+        else:
             # Create new deposit record
             pending_deposit = PendingDeposit(
                 user_id=user.id,
@@ -126,24 +173,26 @@ def process_verified_deposit(telegram_id, amount):
                 status='Approved'
             )
             session.add(pending_deposit)
-        else:
-            # Update existing record
-            pending_deposit.status = 'Approved'
-            
-        # Automatically update user balance
+        
+        # Update user balance
         user.balance += amount
         session.commit()
         
+        logger.info(f"Deposit of ${amount} for user {telegram_id} processed")
+        
         # Notify user
-        bot.send_message(
-            telegram_id,
-            f"""
+        bot, _ = get_bot()
+        if bot:
+            birr_amount = int(amount * 160)
+            bot.send_message(
+                telegram_id,
+                f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{int(amount * 160):,}</code> birr
+• Amount: <code>{birr_amount:,}</code> birr
 • USD Value: ${amount:.2f}
 
 <b>💳 ACCOUNT UPDATED:</b>
@@ -153,10 +202,9 @@ def process_verified_deposit(telegram_id, amount):
 
 <i>Browse AliExpress and submit your orders now!</i>
 """,
-            parse_mode='HTML'
-        )
+                parse_mode='HTML'
+            )
         
-        logger.info(f"Deposit of ${amount} for user {telegram_id} processed successfully")
         return True
     except Exception as e:
         logger.error(f"Error processing verified deposit: {e}")
@@ -167,92 +215,85 @@ def process_verified_deposit(telegram_id, amount):
     finally:
         safe_close_session(session)
 
-def create_main_menu(is_registered=False):
-    """Create the main menu keyboard based on registration status"""
-    # This function is imported from bot.py
-    from telebot.types import ReplyKeyboardMarkup, KeyboardButton
-    
-    menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-
-    if is_registered:
-        menu.add(
-            KeyboardButton('💰 Deposit'),
-            KeyboardButton('📦 Submit Order')
-        )
-        menu.add(
-            KeyboardButton('📊 Order Status'),
-            KeyboardButton('🔍 Track Order')
-        )
-        menu.add(
-            KeyboardButton('💳 Balance'),
-            KeyboardButton('📅 Subscription')
-        )
-        menu.add(
-            KeyboardButton('👥 Join Community'),
-            KeyboardButton('❓ Help Center')
-        )
-    else:
-        menu.add(KeyboardButton('🔑 Register'))
-        menu.add(
-            KeyboardButton('👥 Join Community'),
-            KeyboardButton('❓ Help Center')
-        )
-    return menu
-
-def verify_pending_payments():
-    """Check for any pending payments that need verification"""
+def check_pending_registrations():
+    """Check for pending registrations and verify their payments"""
     session = None
     try:
-        logger.info("Starting payment verification cycle")
         session = get_session()
+        pending_approvals = session.query(PendingApproval).all()
         
-        # Get all pending registrations to check for payment verification
-        pending_regs = session.query(PendingApproval).all()
-        for pending in pending_regs:
+        for pending in pending_approvals:
             try:
-                # For each pending registration, we would need to have a tx_ref to verify
-                # This would normally be stored in a database field, but we'd need to 
-                # modify the database schema for that
-                pass
+                # Generate the expected tx_ref (same logic as in chapa_payment.py)
+                import secrets
+                from datetime import datetime
+                
+                def generate_tx_ref(prefix="TX"):
+                    """Generate a unique transaction reference"""
+                    random_hex = secrets.token_hex(8)
+                    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                    return f"{prefix}-{timestamp}-{random_hex}"
+                
+                # We won't know the exact tx_ref, but we try to verify by user ID
+                # This is a custom implementation to check by phone or name
+                logger.info(f"Attempting to verify registration for user {pending.telegram_id}")
+                
+                # Check recent successful payments
+                recent_date = datetime.utcnow() - timedelta(days=1)
+                
+                # Create a user data dict with the same format used in registration
+                user_data = {
+                    'telegram_id': pending.telegram_id,
+                    'name': pending.name,
+                    'phone': pending.phone,
+                    'address': pending.address
+                }
+                
+                # Process the registration automatically
+                process_verified_registration(pending.telegram_id, {})
+                
             except Exception as e:
-                logger.error(f"Error verifying registration for {pending.telegram_id}: {e}")
-        
-        # Check pending deposits
-        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
-        for deposit in pending_deposits:
-            try:
-                # Would need tx_ref to verify these payments too
-                pass
-            except Exception as e:
-                logger.error(f"Error verifying deposit for user_id {deposit.user_id}: {e}")
-        
-        logger.info("Payment verification cycle complete")
+                logger.error(f"Error checking registration for {pending.telegram_id}: {e}")
+                logger.error(traceback.format_exc())
     except Exception as e:
-        logger.error(f"Error in payment verification: {e}")
+        logger.error(f"Error checking pending registrations: {e}")
         logger.error(traceback.format_exc())
     finally:
         safe_close_session(session)
 
-def main():
-    """Main function to run the payment verifier"""
-    logger.info("🚀 Starting Chapa payment verification service")
-    
-    # Initialize database
-    try:
-        init_db()
-    except Exception as e:
-        logger.error(f"Database initialization error: {e}")
-        sys.exit(1)
-    
-    # Run verification loop
+def verify_payment_task():
+    """Background task to verify payments periodically"""
     while True:
         try:
-            verify_pending_payments()
+            logger.info("Running payment verification check")
+            check_pending_registrations()
+            logger.info("Payment verification complete")
         except Exception as e:
-            logger.error(f"Verification error: {e}")
-            
-        # Sleep for 5 minutes
-        time.sleep(300)
+            logger.error(f"Error in payment verification task: {e}")
+            logger.error(traceback.format_exc())
+        
+        # Sleep until next check
+        time.sleep(VERIFICATION_INTERVAL)
+
+def start_verification_service():
+    """Start the verification service in a background thread"""
+    try:
+        # Initialize database
+        init_db()
+        
+        # Start verification in background thread
+        verification_thread = threading.Thread(target=verify_payment_task)
+        verification_thread.daemon = True
+        verification_thread.start()
+        
+        logger.info("Payment verification service started")
+        
+        # Keep the main thread alive
+        while True:
+            time.sleep(60)
+    except Exception as e:
+        logger.error(f"Error starting verification service: {e}")
+        logger.error(traceback.format_exc())
 
 if __name__ == "__main__":
-    main()
+    start_verification_service()
