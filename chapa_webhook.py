@@ -279,6 +279,19 @@ def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
 
+def run_webhook_server():
+    """Run the webhook server"""
+    try:
+        # Initialize the database
+        init_db()
+        # Start the Flask app
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Error running webhook server: {e}")
+        logger.error(traceback.format_exc())
+
+
 if __name__ == '__main__':
     # Initialize the database
     init_db()
