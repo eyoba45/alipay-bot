@@ -171,6 +171,7 @@ def generate_registration_payment(user_data):
 def verify_payment(tx_ref):
     """Verify a payment with Chapa"""
     try:
+        import traceback
         url = f"https://api.chapa.co/v1/transaction/verify/{tx_ref}"
         headers = {
             "Authorization": f"Bearer {os.environ.get('CHAPA_SECRET_KEY')}",
@@ -194,5 +195,6 @@ def verify_payment(tx_ref):
         return False
     except Exception as e:
         logger.error(f"Error verifying payment: {e}")
+        import traceback
         logger.error(traceback.format_exc())
         return False
