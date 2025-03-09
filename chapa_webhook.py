@@ -263,6 +263,18 @@ def chapa_webhook():
             logger.info(f"Processing registration payment: {tx_ref}")
             result = process_registration_payment(data)
             logger.info(f"Registration result: {result}")
+            
+            # Add extra logging for registration processing
+            if not result["success"]:
+                logger.error(f"Failed to process registration payment: {result['message']}")
+                # Log user data from webhook
+                try:
+                    customer = data.get('customer', {})
+                    email = customer.get('email', 'unknown')
+                    logger.error(f"Failed registration for email: {email}, tx_ref: {tx_ref}")
+                except Exception as e:
+                    logger.error(f"Could not extract customer data: {e}")
+            
             return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
         
         elif tx_ref.startswith('DEP-'):
@@ -278,6 +290,7 @@ def chapa_webhook():
             
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
+        import traceback
         logger.error(traceback.format_exc())
         return jsonify({"status": "error", "message": f"Internal server error: {str(e)}"}), 500
 
