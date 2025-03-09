@@ -177,14 +177,26 @@ def verify_payment(tx_ref):
             "Content-Type": "application/json"
         }
 
+
+
+         logger.info(f"Verifying payment for tx_ref: {tx_ref}")
         response = requests.get(url, headers=headers)
+
+# Log the raw response for debugging
+        logger.info(f"Verify payment raw response: {response.text}")
+        
         response_data = response.json()
         logger.info(f"Verify payment response: {response_data}")
 
         if response_data.get('status') == 'success' and response_data.get('data', {}).get('status') == 'success':
-            return True
+             logger.info(f"Payment {tx_ref} verified successfully")
+            return response_data.get('data', {})
+
+        logger.warning(f"Payment {tx_ref} verification failed: {response_data}")
+            
 
         return False
     except Exception as e:
         logger.error(f"Error verifying payment: {e}")
+        logger.error(traceback.format_exc())
         return False
