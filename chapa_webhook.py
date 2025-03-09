@@ -235,8 +235,10 @@ def chapa_webhook():
         request_data = request.get_data()
         signature = request.headers.get('X-Chapa-Signature')
         
-        # Log the webhook payload
-        logger.info(f"Received Chapa webhook: {request_data}")
+        # Log detailed webhook information for debugging
+        logger.info("===== WEBHOOK RECEIVED =====")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Raw Data: {request_data}")
         
         # Verify signature if available
         if signature and not verify_webhook_signature(request_data, signature):
@@ -245,6 +247,7 @@ def chapa_webhook():
         
         # Parse the payload
         data = request.json
+        logger.info(f"Parsed webhook payload: {data}")
         
         # Verify the payment status
         if data.get('status') != 'success':
@@ -253,15 +256,20 @@ def chapa_webhook():
         
         # Determine payment type from tx_ref and process accordingly
         tx_ref = data.get('tx_ref', '')
+        logger.info(f"Processing payment with tx_ref: {tx_ref}")
         
         if tx_ref.startswith('REG-'):
             # Registration payment
+            logger.info(f"Processing registration payment: {tx_ref}")
             result = process_registration_payment(data)
+            logger.info(f"Registration result: {result}")
             return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
         
         elif tx_ref.startswith('DEP-'):
             # Deposit payment
+            logger.info(f"Processing deposit payment: {tx_ref}")
             result = process_deposit_payment(data)
+            logger.info(f"Deposit result: {result}")
             return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
         
         else:
@@ -290,7 +298,6 @@ def run_webhook_server():
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         logger.error(traceback.format_exc())
-
 
 if __name__ == '__main__':
     # Initialize the database
