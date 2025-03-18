@@ -224,15 +224,25 @@ def generate_registration_payment(user_data):
 def verify_payment(tx_ref):
     """Verify a payment with Chapa"""
     try:
-        import traceback
+        if not tx_ref:
+            logger.error("Empty transaction reference")
+            return False
+            
+        chapa_key = os.environ.get('CHAPA_SECRET_KEY')
+        if not chapa_key:
+            logger.error("CHAPA_SECRET_KEY not found in environment variables")
+            return False
+            
+        
         url = f"https://api.chapa.co/v1/transaction/verify/{tx_ref}"
         headers = {
-            "Authorization": f"Bearer {os.environ.get('CHAPA_SECRET_KEY')}",
+            "Authorization": f"Bearer {chapa_key}",
             "Content-Type": "application/json"
         }
 
         logger.info(f"Verifying payment for tx_ref: {tx_ref}")
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=30)
+       
 
         # Log the raw response for debugging
         logger.info(f"Verify payment raw response: {response.text}")
