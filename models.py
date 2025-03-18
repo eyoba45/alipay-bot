@@ -65,10 +65,13 @@ class PendingApproval(Base):
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    payment_status = Column(String, default='pending')  # pending, paid
+    tx_ref = Column(String, unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
-        return f"<PendingApproval(telegram_id={self.telegram_id}, name='{self.name}')>"
+        return f"<PendingApproval(telegram_id={self.telegram_id}, name='{self.name}', status='{self.payment_status}')>"
 
 class PendingDeposit(Base):
     __tablename__ = 'pending_deposits'
