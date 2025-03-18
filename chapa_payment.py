@@ -15,9 +15,15 @@ logger = logging.getLogger(__name__)
 def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None, phone_number=None):
     """Create a new payment with Chapa"""
     try:
+         chapa_key = os.environ.get('CHAPA_SECRET_KEY')
+        if not chapa_key:
+            logger.error("CHAPA_SECRET_KEY not found in environment variables")
+            return None
+
+        
         url = "https://api.chapa.co/v1/transaction/initialize"
         headers = {
-            "Authorization": f"Bearer {os.environ.get('CHAPA_SECRET_KEY')}",
+            "Authorization": f"Bearer {chapa_key}",
             "Content-Type": "application/json"
         }
 
