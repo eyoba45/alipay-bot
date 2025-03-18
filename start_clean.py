@@ -10,6 +10,7 @@ import subprocess
 import signal
 import threading
 import traceback
+import fcntl
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +26,34 @@ console.setFormatter(formatter)
 logging.getLogger('').addHandler(console)
 
 logger = logging.getLogger(__name__)
+
+# Global lock file handle
+lock_file = None
+
+def acquire_lock():
+    """Ensure only one instance runs"""
+    global lock_file
+    try:
+        lock_file = open("bot.lock", "w")
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except IOError:
+        logger.error("Another bot instance is already running")
+        return False
+    except Exception as e:
+        logger.error(f"Error acquiring lock: {e}")
+        return False
+
+def release_lock():
+    """Release the lock file"""
+    global lock_file
+    if lock_file:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            lock_file.close()
+            os.remove("bot.lock")
+        except Exception as e:
+            logger.error(f"Error releasing lock: {e}")
 
 def run_bot():
     """Run the main bot process"""
@@ -42,7 +71,7 @@ def run_bot():
             bufsize=1
         )
 
-        # Process and log the bot output in a separate thread
+        # Process and log the bot output
         def log_output():
             for line in bot_process.stdout:
                 logger.info(f"Bot output: {line.strip()}")
@@ -57,7 +86,6 @@ def run_bot():
 
 def run_webhook_server():
     """Run the Chapa webhook server if Chapa integration is enabled"""
-    # Check if Chapa secret key is set
     if not os.environ.get('CHAPA_SECRET_KEY'):
         logger.info("Chapa integration not configured, skipping webhook server")
         return None
@@ -66,7 +94,6 @@ def run_webhook_server():
         logger.info("Starting Chapa webhook server...")
         env = os.environ.copy()
 
-        # Run the webhook server.  Assumes chapa_webhook.py handles automatic approval.
         webhook_process = subprocess.Popen(
             ["python", "chapa_webhook.py"],
             env=env,
@@ -76,17 +103,12 @@ def run_webhook_server():
             bufsize=1
         )
 
-        # Process and log the webhook server output in a separate thread
         def log_output():
             for line in webhook_process.stdout:
                 logger.info(f"Webhook server output: {line.strip()}")
 
         log_thread = threading.Thread(target=log_output, daemon=True)
         log_thread.start()
-
-        # Give the webhook server time to start up
-        time.sleep(2)
-        logger.info("Chapa webhook server started")
 
         return webhook_process
     except Exception as e:
@@ -129,99 +151,102 @@ def run_payment_verifier():
 
 def main():
     """Main function to start the bot with clean environment"""
-    logger.info("Starting bot with clean environment...")
+    if not acquire_lock():
+        logger.error("Another instance is running. Exiting.")
+        return 1
 
-    # First, run the cleanup script
     try:
-        logger.info("Running cleanup script...")
-        subprocess.run(["python", "clean_locks.py"], check=True)
-        logger.info("Cleanup complete")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Cleanup failed with error code {e.returncode}")
-        return 1
-    except Exception as e:
-        logger.error(f"Error running cleanup: {e}")
-        return 1
+        logger.info("Starting bot with clean environment...")
 
-    # Start the bot and additional services
-    processes = []
+        # First, run the cleanup script
+        try:
+            logger.info("Running cleanup script...")
+            subprocess.run(["python", "clean_locks.py"], check=True)
+            logger.info("Cleanup complete")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Cleanup failed with error code {e.returncode}")
+            return 1
+        except Exception as e:
+            logger.error(f"Error running cleanup: {e}")
+            return 1
 
-    # Run the main bot
-    bot_process = run_bot()
-    if bot_process:
-        processes.append(('bot', bot_process))
-    else:
-        logger.error("Failed to start bot process")
-        return 1
+        # Start the bot and additional services
+        processes = []
 
-    # Always start webhook server to capture payments
-    webhook_process = run_webhook_server()
-    if webhook_process:
-        processes.append(('webhook', webhook_process))
-    else:
-        logger.error("Failed to start webhook server")
-        # Decide whether to continue or exit based on requirements.
-        # return 1  # Uncomment to exit if webhook fails
+        # Run the main bot
+        bot_process = run_bot()
+        if bot_process:
+            processes.append(('bot', bot_process))
+        else:
+            logger.error("Failed to start bot process")
+            return 1
 
+        # Run webhook server
+        webhook_process = run_webhook_server()
+        if webhook_process:
+            processes.append(('webhook', webhook_process))
 
-    # Run the payment verifier if Chapa is configured
-    verifier_process = run_payment_verifier()
-    if verifier_process:
-        processes.append(('verifier', verifier_process))
+        # Run the payment verifier if Chapa is configured
+        verifier_process = run_payment_verifier()
+        if verifier_process:
+            processes.append(('verifier', verifier_process))
 
-    # Set up signal handler for graceful shutdown
-    def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down gracefully...")
-        for name, process in processes:
-            logger.info(f"Terminating {name} process...")
-            try:
-                process.terminate()
-                process.wait(timeout=5)
-                logger.info(f"{name} process terminated")
-            except subprocess.TimeoutExpired:
-                logger.warning(f"{name} process did not terminate, killing...")
-                process.kill()
-            except Exception as e:
-                logger.error(f"Error terminating {name} process: {e}")
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # Wait for bot process to exit
-    try:
-        while True:
-            # Check if bot process is still running
-            if bot_process.poll() is not None:
-                return_code = bot_process.returncode
-                logger.info(f"Bot process exited with code {return_code}")
-                break
-
-            # Sleep to avoid CPU spinning
-            time.sleep(1)
-
-        # If we reach here, bot process has exited, terminate other processes
-        for name, process in processes:
-            if process.poll() is None:
+        # Set up signal handler for graceful shutdown
+        def signal_handler(sig, frame):
+            logger.info(f"Received signal {sig}, shutting down gracefully...")
+            for name, process in processes:
                 logger.info(f"Terminating {name} process...")
                 try:
                     process.terminate()
                     process.wait(timeout=5)
+                    logger.info(f"{name} process terminated")
                 except subprocess.TimeoutExpired:
+                    logger.warning(f"{name} process did not terminate, killing...")
                     process.kill()
                 except Exception as e:
                     logger.error(f"Error terminating {name} process: {e}")
+            sys.exit(0)
 
-        if return_code != 0:
-            logger.error("Bot process exited with error")
-            return 1
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
 
-        return 0
-    except KeyboardInterrupt:
-        # Handle Ctrl+C
-        logger.info("Received keyboard interrupt, shutting down...")
-        signal_handler(signal.SIGINT, None)
-        return 0
+        # Wait for bot process to exit
+        try:
+            while True:
+                # Check if bot process is still running
+                if bot_process.poll() is not None:
+                    return_code = bot_process.returncode
+                    logger.info(f"Bot process exited with code {return_code}")
+                    break
+
+                # Sleep to avoid CPU spinning
+                time.sleep(1)
+
+            # If we reach here, bot process has exited, terminate other processes
+            for name, process in processes:
+                if process.poll() is None:
+                    logger.info(f"Terminating {name} process...")
+                    try:
+                        process.terminate()
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    except Exception as e:
+                        logger.error(f"Error terminating {name} process: {e}")
+
+            if return_code != 0:
+                logger.error("Bot process exited with error")
+                return 1
+
+            return 0
+        except KeyboardInterrupt:
+            # Handle Ctrl+C
+            logger.info("Received keyboard interrupt, shutting down...")
+            signal_handler(signal.SIGINT, None)
+            return 0
+
+    finally:
+        release_lock()
 
 if __name__ == "__main__":
     sys.exit(main())
