@@ -17,7 +17,7 @@ def get_connection():
         if not db_url:
             logger.error("DATABASE_URL environment variable is not set")
             sys.exit(1)
-            
+
         conn = psycopg2.connect(db_url)
         return conn
     except Exception as e:
@@ -25,28 +25,24 @@ def get_connection():
         sys.exit(1)
 
 def recreate_tables():
-    """Drop and recreate all tables with proper schema"""
+    """Drop and recreate all tables"""
     conn = None
     try:
         conn = get_connection()
         cur = conn.cursor()
-        
+
         logger.info("Starting database schema recreation")
-        
-        # Disable triggers temporarily
-        cur.execute("SET session_replication_role = 'replica';")
-        
-        # Step 1: Drop all tables - with CASCADE to handle dependencies
-        logger.info("Dropping all existing tables...")
+
+        # Drop tables in correct order to handle dependencies
+        logger.info("Dropping existing tables...")
         cur.execute("""
-        DROP TABLE IF EXISTS pending_deposits CASCADE;
-        DROP TABLE IF EXISTS orders CASCADE;
-        DROP TABLE IF EXISTS pending_approvals CASCADE;
-        DROP TABLE IF EXISTS users CASCADE;
+            DROP TABLE IF EXISTS pending_deposits CASCADE;
+            DROP TABLE IF EXISTS orders CASCADE;
+            DROP TABLE IF EXISTS pending_approvals CASCADE;
+            DROP TABLE IF EXISTS users CASCADE;
         """)
-        logger.info("All tables dropped successfully")
-        
-        # Step 2: Create tables with correct schema
+
+        # Create tables in correct order
         logger.info("Creating users table...")
         cur.execute("""
             CREATE TABLE users (
@@ -62,7 +58,7 @@ def recreate_tables():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         logger.info("Creating pending_approvals table...")
         cur.execute("""
             CREATE TABLE pending_approvals (
@@ -77,7 +73,7 @@ def recreate_tables():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         logger.info("Creating orders table...")
         cur.execute("""
             CREATE TABLE orders (
@@ -94,7 +90,7 @@ def recreate_tables():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
-        
+
         logger.info("Creating pending_deposits table...")
         cur.execute("""
             CREATE TABLE pending_deposits (
@@ -106,15 +102,12 @@ def recreate_tables():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
-        
-        # Re-enable triggers
-        cur.execute("SET session_replication_role = 'origin';")
-        
+
         # Commit the transaction
         conn.commit()
         logger.info("✅ All tables created successfully with correct schema!")
         print("✅ Database tables recreated successfully!")
-        
+
     except Exception as e:
         logger.error(f"Error recreating database: {e}")
         if conn:
