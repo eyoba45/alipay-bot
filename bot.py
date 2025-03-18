@@ -316,23 +316,79 @@ Click the button below to pay securely with:
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_payment', content_types=['photo'])
-def handle_payment_screenshot(message):
-    """Process payment screenshot with maximum reliability and auto-approval"""
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_payment')
+def handle_payment_registration(message):
+    """Process registration payment with Chapa integration"""
     chat_id = message.chat.id
     session = None
-    registration_complete = False
 
-    # First, acknowledge receipt immediately to provide user feedback
     try:
-        bot.send_chat_action(chat_id, 'typing')
-        # Store important data in case of later errors
         if chat_id not in registration_data:
             logger.error(f"Missing registration data for user {chat_id}")
             bot.send_message(chat_id, "Registration data missing. Please restart registration with /start.")
             return
+
+        # Import the Chapa payment module
+        from chapa_payment import generate_registration_payment
+
+        # Generate payment link
+        payment_link = generate_registration_payment(registration_data[chat_id])
+
+        if not payment_link or 'checkout_url' not in payment_link:
+            # Fall back to error message
+            bot.send_message(
+                chat_id,
+                "❌ Error generating payment link. Please try again or contact support.",
+                parse_mode='HTML'
+            )
+            return
+
+        # Send payment link with inline button
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("💳 Pay Registration Fee", url=payment_link['checkout_url']))
+
+        payment_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💫 <b>COMPLETE REGISTRATION</b> 💫  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Click the button below to securely pay the registration fee:
+• Amount: <code>150</code> birr
+• Secure payment via Chapa
+• Instant activation after payment
+
+<b>Available Payment Methods:</b>
+• TeleBirr
+• CBE Birr
+• HelloCash
+• Amole
+• Credit/Debit Cards
+
+<i>Your account will be automatically activated after successful payment!</i>
+"""
+        bot.send_message(
+            chat_id,
+            payment_msg,
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+
+        # Update user state to wait for Chapa payment
+        user_states[chat_id] = {
+            'state': 'waiting_for_chapa_payment',
+            'tx_ref': payment_link['tx_ref']
+        }
+
     except Exception as e:
-        logger.error(f"Initial acknowledgment error: {e}")
+        logger.error(f"Error in payment registration: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "Sorry, there was an error. Please try again.",
+            reply_markup=create_main_menu(is_registered=False)
+        )
+    finally:
+        safe_close_session(session)
 
     # Import performance monitor if available
     try:
