@@ -124,6 +124,16 @@ def generate_registration_payment(user_data):
         # Generate a unique transaction reference
         tx_ref = generate_tx_ref("REG")
 
+         # Update pending approval with tx_ref
+        session = get_session()
+        try:
+            pending = session.query(PendingApproval).filter_by(telegram_id=user_data['telegram_id']).first()
+            if pending:
+                pending.tx_ref = tx_ref
+                session.commit()
+        finally:
+            safe_close_session(session)
+
         # Prepare user data with a proper email format
         # Use a properly formatted valid email that will pass validation
         email = f"user.{user_data['telegram_id']}@gmail.com"
