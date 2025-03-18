@@ -5,7 +5,8 @@ import secrets
 import requests
 from datetime import datetime
 from sqlalchemy.orm import sessionmaker
-from database import get_session, safe_close_session, PendingApproval
+from database import get_session, safe_close_session 
+from models import PendingApproval
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
