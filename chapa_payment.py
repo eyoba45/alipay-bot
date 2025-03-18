@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy.orm import sessionmaker # Added import for sessionmaker
 from database import get_session, safe_close_session, PendingApproval # Added imports for database functions and models
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -135,7 +136,7 @@ def generate_registration_payment(user_data):
         # Generate a unique transaction reference
         tx_ref = generate_tx_ref("REG")
 
-         session = None
+        session = None
         try:
             session = get_session()
             # Update pending approval with tx_ref
@@ -151,7 +152,6 @@ def generate_registration_payment(user_data):
         except Exception as e:
             logger.error(f"Error getting database session: {e}")
             return None
-        
         finally:
             safe_close_session(session)
 
@@ -194,7 +194,7 @@ def generate_registration_payment(user_data):
             return None
         finally:
             safe_close_session(session)
-       
+
 
         if response and response.get('status') == 'success' and 'data' in response:
             return {
@@ -217,13 +217,13 @@ def verify_payment(tx_ref):
             "Authorization": f"Bearer {os.environ.get('CHAPA_SECRET_KEY')}",
             "Content-Type": "application/json"
         }
-        
+
         logger.info(f"Verifying payment for tx_ref: {tx_ref}")
         response = requests.get(url, headers=headers)
-        
+
         # Log the raw response for debugging
         logger.info(f"Verify payment raw response: {response.text}")
-        
+
         response_data = response.json()
         logger.info(f"Verify payment response: {response_data}")
 
