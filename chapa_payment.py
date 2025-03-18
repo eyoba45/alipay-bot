@@ -4,9 +4,8 @@ import json
 import secrets
 import requests
 from datetime import datetime
-from sqlalchemy.orm import sessionmaker # Added import for sessionmaker
-from database import get_session, safe_close_session, PendingApproval # Added imports for database functions and models
-
+from sqlalchemy.orm import sessionmaker
+from database import get_session, safe_close_session, PendingApproval
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,12 +14,14 @@ logger = logging.getLogger(__name__)
 def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None, phone_number=None):
     """Create a new payment with Chapa"""
     try:
-         chapa_key = os.environ.get('CHAPA_SECRET_KEY')
+        chapa_key = os.environ.get('CHAPA_SECRET_KEY')
+        if not chapa_key:
+            logger.error("CHAPA_SECRET_KEY not found in environment variables")
+            return {"status": "error", "message": "Missing Chapa API key"}
         if not chapa_key:
             logger.error("CHAPA_SECRET_KEY not found in environment variables")
             return None
 
-        
         url = "https://api.chapa.co/v1/transaction/initialize"
         headers = {
             "Authorization": f"Bearer {chapa_key}",
@@ -52,7 +53,7 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
         if return_url:
             payload["return_url"] = return_url
 
-        # Add customization for better user experience (with shorter title)
+        # Add customization for better user experience
         payload["customization"] = {
             "title": "AliPay ETH",
             "description": "Payment for AliExpress service"
@@ -139,6 +140,11 @@ def generate_deposit_payment(user_data, amount):
 def generate_registration_payment(user_data):
     """Generate a payment link for registration"""
     try:
+        # Check if CHAPA_SECRET_KEY is configured
+        if not os.environ.get('CHAPA_SECRET_KEY'):
+            logger.error("CHAPA_SECRET_KEY not configured")
+            return None
+            
         # Generate a unique transaction reference
         tx_ref = generate_tx_ref("REG")
 
