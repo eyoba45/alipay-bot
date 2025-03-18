@@ -10,7 +10,7 @@ import hmac
 from datetime import datetime
 from flask import Flask, request, jsonify
 from database import init_db, get_session, safe_close_session
-from models import User, PendingApproval , PendingDeposit
+from models import User, PendingApproval
 from telebot import TeleBot
 
 # Configure logging
@@ -30,11 +30,14 @@ def get_bot():
 
 def handle_webhook(data):
     """Handle Chapa payment webhook"""
+    session = None
     try:
         # Verify payment status
         if data.get('status') != 'success':
             logger.warning(f"Payment not successful: {data}")
             return {"success": False, "message": "Payment not successful"}
+
+        session = get_session()
 
         # Extract transaction reference
         tx_ref = data.get('tx_ref')
@@ -58,20 +61,26 @@ def handle_webhook(data):
                 logger.info(f"User {telegram_id} already registered")
                 return {"success": True, "message": "User already registered"}
 
-            # Create new user
-            new_user = User(
-                telegram_id=telegram_id,
-                name=pending.name,
-                phone=pending.phone,
-                address=pending.address,
-                balance=0.0,
-                subscription_date=datetime.utcnow()
-            )
+            try:
+                # Create new user within transaction
+                new_user = User(
+                    telegram_id=telegram_id,
+                    name=pending.name,
+                    phone=pending.phone,
+                    address=pending.address,
+                    balance=0.0,
+                    subscription_date=datetime.utcnow()
+                )
 
-            # Add user and remove pending approval
-            session.add(new_user)
-            session.delete(pending)
-            session.commit()
+                # Add user and remove pending approval
+                session.add(new_user)
+                session.delete(pending)
+                session.commit()
+                logger.info(f"Successfully registered user {telegram_id}")
+            except Exception as e:
+                logger.error(f"Database error during user registration: {e}")
+                session.rollback()
+                raise
 
             # Notify user
             bot, create_main_menu = get_bot()
