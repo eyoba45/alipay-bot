@@ -215,6 +215,9 @@ def get_phone(message):
         registration_data[chat_id]['telegram_id'] = chat_id
         user_states[chat_id] = 'waiting_for_payment'
 
+         # Move imports here to avoid circular imports
+        from chapa_payment import generate_registration_payment
+
         # Create a pending approval
         session = get_session()
         existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
