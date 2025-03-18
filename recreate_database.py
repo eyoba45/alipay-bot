@@ -71,7 +71,10 @@ def recreate_tables():
                 name VARCHAR(255) NOT NULL,
                 phone VARCHAR(255) NOT NULL,
                 address TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                payment_status VARCHAR(50) DEFAULT 'pending',
+                tx_ref VARCHAR(255) UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
