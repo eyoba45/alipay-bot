@@ -32,10 +32,26 @@ def handle_webhook(data):
     """Handle Chapa payment webhook"""
     session = None
     try:
-        # Verify payment status
-        if data.get('status') != 'success':
-            logger.warning(f"Payment not successful: {data}")
+        logger.info(f"Received webhook data: {data}")
+        
+        # Enhanced verification
+        if not data:
+            logger.error("Empty webhook data received")
+            return {"success": False, "message": "Empty webhook data"}
+            
+        # Check both top-level status and transaction status
+        status = data.get('status')
+        tx_status = data.get('data', {}).get('status') if data.get('data') else None
+        
+        if status != 'success' or tx_status != 'success':
+            logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
             return {"success": False, "message": "Payment not successful"}
+
+        # Get transaction reference
+        tx_ref = data.get('tx_ref') or data.get('data', {}).get('tx_ref')
+        if not tx_ref:
+            logger.error("No transaction reference found in webhook data")
+            return {"success": False, "message": "Missing transaction reference"}
 
         session = get_session()
 
