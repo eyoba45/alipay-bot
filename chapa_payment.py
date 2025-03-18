@@ -4,6 +4,8 @@ import json
 import secrets
 import requests
 from datetime import datetime
+from sqlalchemy.orm import sessionmaker # Added import for sessionmaker
+from database import get_session, safe_close_session, PendingApproval # Added imports for database functions and models
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -93,18 +95,27 @@ def generate_deposit_payment(user_data, amount):
         # Amount is already in USD, convert to birr for payment (1 USD = 160 ETB)
         birr_amount = float(amount) * 160
 
-        # Create the payment
-        response = create_payment(
-            amount=birr_amount,
-            currency="ETB",
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            phone_number=phone_number,
-            tx_ref=tx_ref,
-            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
-            return_url=f"https://t.me/ali_paybot"
-        )
+        session = None
+        try:
+            session = get_session()
+            # Create the payment
+            response = create_payment(
+                amount=birr_amount,
+                currency="ETB",
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                phone_number=phone_number,
+                tx_ref=tx_ref,
+                callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
+                return_url=f"https://t.me/ali_paybot"
+            )
+        except Exception as e:
+            logger.error(f"Error generating deposit payment: {e}")
+            return None
+        finally:
+            safe_close_session(session)
+
 
         if response and response.get('status') == 'success' and 'data' in response:
             return {
@@ -124,13 +135,23 @@ def generate_registration_payment(user_data):
         # Generate a unique transaction reference
         tx_ref = generate_tx_ref("REG")
 
-         # Update pending approval with tx_ref
-        session = get_session()
+         session = None
         try:
-            pending = session.query(PendingApproval).filter_by(telegram_id=user_data['telegram_id']).first()
-            if pending:
-                pending.tx_ref = tx_ref
-                session.commit()
+            session = get_session()
+            # Update pending approval with tx_ref
+            try:
+                pending = session.query(PendingApproval).filter_by(telegram_id=user_data['telegram_id']).first()
+                if pending:
+                    pending.tx_ref = tx_ref
+                    session.commit()
+            except Exception as e:
+                logger.error(f"Error updating pending approval: {e}")
+                session.rollback() # Rollback transaction if error occurs
+                raise
+        except Exception as e:
+            logger.error(f"Error getting database session: {e}")
+            return None
+        
         finally:
             safe_close_session(session)
 
@@ -153,18 +174,27 @@ def generate_registration_payment(user_data):
             elif phone.startswith('0'):
                 phone_number = '+251' + phone[1:]
 
-        # Create the payment
-        response = create_payment(
-            amount=1.0,  # Registration fee is 150 birr
-            currency="ETB", 
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            phone_number=phone_number,
-            tx_ref=tx_ref,
-            callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
-            return_url=f"https://t.me/ali_paybot"
-        )
+        session = None
+        try:
+            session = get_session()
+            # Create the payment
+            response = create_payment(
+                amount=150.0,  # Registration fee is 150 birr
+                currency="ETB", 
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                phone_number=phone_number,
+                tx_ref=tx_ref,
+                callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
+                return_url=f"https://t.me/ali_paybot"
+            )
+        except Exception as e:
+            logger.error(f"Error creating payment: {e}")
+            return None
+        finally:
+            safe_close_session(session)
+       
 
         if response and response.get('status') == 'success' and 'data' in response:
             return {
