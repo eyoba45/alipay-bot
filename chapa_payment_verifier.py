@@ -249,8 +249,21 @@ def check_pending_registrations():
                     'address': pending.address
                 }
                 
-                # Process the registration automatically
-                process_verified_registration(pending.telegram_id, {})
+                # Get payment status from Chapa
+                if pending.tx_ref:
+                    payment_status = verify_payment(pending.tx_ref)
+                    if payment_status:
+                        process_verified_registration(pending.telegram_id, payment_status)
+                    else:
+                        # If payment not verified but older than 10 minutes, auto-approve
+                        time_diff = datetime.utcnow() - pending.created_at
+                        if time_diff.total_seconds() > 600:  # 10 minutes
+                            process_verified_registration(pending.telegram_id, {})
+                else:
+                    # No tx_ref but pending for more than 10 minutes, auto-approve
+                    time_diff = datetime.utcnow() - pending.created_at
+                    if time_diff.total_seconds() > 600:  # 10 minutes
+                        process_verified_registration(pending.telegram_id, {})
                 
             except Exception as e:
                 logger.error(f"Error checking registration for {pending.telegram_id}: {e}")
