@@ -241,7 +241,7 @@ def generate_registration_payment(user_data):
             session = get_session()
             # Create the payment
             response = create_payment(
-                amount=150.0,  # Registration fee is 150 birr
+                amount=1.0,  # Registration fee is 150 birr
                 currency="ETB", 
                 email=email,
                 first_name=first_name,
