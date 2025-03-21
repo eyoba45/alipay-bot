@@ -11,7 +11,7 @@ import traceback
 from datetime import datetime
 from flask import Flask, request, jsonify
 from database import init_db, get_session, safe_close_session
-from models import User, PendingApproval
+from models import User, PendingApproval, PendingDeposit
 from telebot import TeleBot
 
 # Configure logging
@@ -23,6 +23,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
+    """Root endpoint"""
     return jsonify({
         "status": "ok",
         "message": "Webhook server is running"
@@ -31,15 +32,16 @@ def index():
 @app.route('/chapa/test', methods=['GET'])
 def test_webhook():
     """Test endpoint to verify webhook server is running"""
+    logger.info("Test endpoint accessed")
     return jsonify({
         "status": "ok",
         "message": "Webhook server is running",
+        "timestamp": datetime.now().isoformat(),
         "config": {
             "has_secret_key": bool(os.environ.get('CHAPA_SECRET_KEY')),
             "has_webhook_secret": bool(os.environ.get('CHAPA_WEBHOOK_SECRET'))
         }
     })
-
 
 def get_bot():
     """Get bot instance and main menu creator function"""
@@ -226,7 +228,7 @@ def handle_deposit_webhook(data, session):
         logger.error(f"Error handling deposit webhook: {e}")
         return False
 
-@app.route('/chapa/webhook', methods=['POST'])
+@app.route('/webhook', methods=['GET', 'POST'])
 def chapa_webhook():
     """Handle Chapa webhook for successful payments"""
     try:
@@ -293,11 +295,12 @@ def run_webhook_server():
         # Initialize the database
         init_db()
         # Start the Flask app
-        port = int(os.environ.get('PORT', 8080))
-        app.run(host='0.0.0.0', port=port, debug=True)
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         logger.error(traceback.format_exc())
+        raise
 
 if __name__ == '__main__':
     run_webhook_server()
