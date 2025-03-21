@@ -22,34 +22,32 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 @app.route('/')
-@app.route('/test')
-@app.route('/chapa/test')
 def test_endpoint():
     """Test endpoint to verify webhook server is running"""
-    logger.info(f"Test endpoint accessed at {request.path}")
     return jsonify({
         "status": "ok",
         "message": "Webhook server is running",
-        "path": request.path,
         "timestamp": datetime.now().isoformat()
     })
 
-@app.route('/webhook', methods=['POST'])
-@app.route('/chapa/webhook', methods=['POST'])
+@app.route('/webhook', methods=['GET', 'POST'])
+@app.route('/chapa/webhook', methods=['GET', 'POST'])
 def webhook():
-    """Handle Chapa webhook for successful payments"""
+    """Handle Chapa webhook"""
     try:
         logger.info("\n====== WEBHOOK REQUEST RECEIVED ======")
         logger.info(f"Path: {request.path}")
         logger.info(f"Method: {request.method}")
         logger.info(f"Headers: {dict(request.headers)}")
 
-        data = request.get_json()
-        logger.info(f"Payload: {data}")
+        if request.method == 'POST':
+            data = request.get_json()
+            logger.info(f"Payload: {data}")
+            return handle_webhook(data)
 
         return jsonify({
-            "status": "success",
-            "message": "Webhook received",
+            "status": "ok",
+            "message": "Webhook endpoint is active",
             "timestamp": datetime.now().isoformat()
         })
     except Exception as e:
@@ -141,9 +139,6 @@ def handle_webhook(data):
             logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
             return {"success": False, "message": "Payment not successful"}
 
-        if status != 'success' or tx_status != 'success':
-            logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
-            return {"success": False, "message": "Payment not successful"}
 
         # Get transaction reference
         tx_ref = data.get('tx_ref') or data.get('data', {}).get('tx_ref')
@@ -249,18 +244,11 @@ def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
 
-def run_webhook_server():
-    """Run the webhook server"""
+if __name__ == '__main__':
     try:
-        # Initialize the database
         init_db()
-        # Start the Flask app
-        port = int(os.environ.get('PORT', 8080))
-        app.run(host='0.0.0.0', port=port, debug=True)
+        port = int(os.environ.get('PORT', 80))
+        app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
-        logger.error(traceback.format_exc())
         raise
-
-if __name__ == '__main__':
-    run_webhook_server()
