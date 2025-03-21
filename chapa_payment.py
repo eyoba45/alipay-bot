@@ -1,263 +1,272 @@
+#!/usr/bin/env python3
+"""
+Chapa Payment Webhook Handler
+"""
 import os
 import logging
 import json
-import secrets
-import requests
+import hashlib
+import hmac
 from datetime import datetime
-from sqlalchemy.orm import sessionmaker
-from database import get_session, safe_close_session 
-from models import PendingApproval
+from flask import Flask, request, jsonify
+from database import init_db, get_session, safe_close_session
+from models import User, PendingApproval
+from telebot import TeleBot
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None, phone_number=None):
-    """Create a new payment with Chapa"""
+app = Flask(__name__)
+
+def get_bot():
+    """Get bot instance and main menu creator function"""
     try:
-        chapa_key = os.environ.get('CHAPA_SECRET_KEY')
-        if not chapa_key:
-            logger.error("CHAPA_SECRET_KEY not found in environment variables")
-            return {"status": "error", "message": "Missing Chapa API key"}
-        if not chapa_key:
-            logger.error("CHAPA_SECRET_KEY not found in environment variables")
-            return None
-
-        url = "https://api.chapa.co/v1/transaction/initialize"
-        headers = {
-            "Authorization": f"Bearer {chapa_key}",
-            "Content-Type": "application/json"
-        }
-
-        # Format amount as string
-        amount_str = str(amount)
-
-        # Build payload according to Chapa documentation
-        payload = {
-            "amount": amount_str,
-            "currency": currency,
-            "email": email,
-            "first_name": first_name,
-            "last_name": last_name,
-            "tx_ref": tx_ref
-        }
-
-        # Add phone_number if provided
-        if phone_number:
-            payload["phone_number"] = phone_number
-
-        # Add callback_url if provided
-        if callback_url:
-            payload["callback_url"] = callback_url
-
-        # Add return_url if provided
-        if return_url:
-            payload["return_url"] = return_url
-
-        # Add customization for better user experience
-        payload["customization"] = {
-            "title": "AliPay ETH",
-            "description": "Payment for AliExpress service"
-        }
-
-        response = requests.post(url, json=payload, headers=headers)
-        response_data = response.json()
-        logger.info(f"Create payment response: {response_data}")
-
-        return response_data
+        from bot import bot, create_main_menu
+        return bot, create_main_menu
     except Exception as e:
-        logger.error(f"Error creating payment: {e}")
-        return None
+        logger.error(f"Error importing bot: {e}")
+        return None, None
 
-def generate_tx_ref(prefix="TX"):
-    """Generate a unique transaction reference"""
-    random_hex = secrets.token_hex(8)
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    return f"{prefix}-{timestamp}-{random_hex}"
-
-def generate_deposit_payment(user_data, amount):
-    """Generate a payment link for deposits"""
+def handle_webhook(data):
+    """Handle Chapa payment webhook"""
+    session = None
     try:
-        # Generate a unique transaction reference
-        tx_ref = generate_tx_ref("DEP")
-
-        # Prepare user data with a proper email format
-        # Using a valid email format that meets Chapa's validation requirements
-        # Use a properly formatted valid email 
-        email = f"user.{user_data['telegram_id']}@gmail.com"
-
-        # Get name parts
-        name_parts = user_data['name'].split()
-        first_name = name_parts[0]
-        last_name = name_parts[-1] if len(name_parts) > 1 else "User"
-
-        # Format phone number if available
-        phone_number = None
-        if 'phone' in user_data and user_data['phone']:
-            # Clean up phone number format
-            phone = user_data['phone'].replace(" ", "")
-            if phone.startswith('+251'):
-                phone_number = phone
-            elif phone.startswith('0'):
-                phone_number = '+251' + phone[1:]
-
-        # Amount is already in USD, convert to birr for payment (1 USD = 160 ETB)
-        birr_amount = float(amount) * 160
-
-        session = None
-        try:
-            session = get_session()
-            # Create the payment
-            response = create_payment(
-                amount=birr_amount,
-                currency="ETB",
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                phone_number=phone_number,
-                tx_ref=tx_ref,
-                callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
-                return_url=f"https://t.me/ali_paybot"
-            )
-        except Exception as e:
-            logger.error(f"Error generating deposit payment: {e}")
-            return None
-        finally:
-            safe_close_session(session)
-
-
-        if response and response.get('status') == 'success' and 'data' in response:
-            return {
-                'checkout_url': response['data'].get('checkout_url'),
-                'tx_ref': tx_ref
-            }
-
-        logger.error("Failed to generate deposit payment.")
-        return None
-    except Exception as e:
-        logger.error(f"Error generating deposit payment: {e}")
-        return None
-
-def generate_registration_payment(user_data):
-    """Generate a payment link for registration"""
-    try:
-        # Check if CHAPA_SECRET_KEY is configured
-        if not os.environ.get('CHAPA_SECRET_KEY'):
-            logger.error("CHAPA_SECRET_KEY not configured")
-            return None
-            
-        # Generate a unique transaction reference
-        tx_ref = generate_tx_ref("REG")
-
-        session = None
-        try:
-            session = get_session()
-            # Update pending approval with tx_ref
-            try:
-                pending = session.query(PendingApproval).filter_by(telegram_id=user_data['telegram_id']).first()
-                if pending:
-                    pending.tx_ref = tx_ref
-                    session.commit()
-            except Exception as e:
-                logger.error(f"Error updating pending approval: {e}")
-                session.rollback() # Rollback transaction if error occurs
-                raise
-        except Exception as e:
-            logger.error(f"Error getting database session: {e}")
-            return None
-        finally:
-            safe_close_session(session)
-
-        # Prepare user data with a proper email format
-        # Use a properly formatted valid email that will pass validation
-        email = f"user.{user_data['telegram_id']}@gmail.com"
-
-        # Get name parts
-        name_parts = user_data['name'].split()
-        first_name = name_parts[0]
-        last_name = name_parts[-1] if len(name_parts) > 1 else "User"
-
-        # Format phone number if available
-        phone_number = None
-        if 'phone' in user_data and user_data['phone']:
-            # Clean up phone number format
-            phone = user_data['phone'].replace(" ", "")
-            if phone.startswith('+251'):
-                phone_number = phone
-            elif phone.startswith('0'):
-                phone_number = '+251' + phone[1:]
-
-        session = None
-        try:
-            session = get_session()
-            # Create the payment
-            response = create_payment(
-                amount=1.0,  # Registration fee is 150 birr
-                currency="ETB", 
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                phone_number=phone_number,
-                tx_ref=tx_ref,
-                callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
-                return_url=f"https://t.me/ali_paybot"
-            )
-        except Exception as e:
-            logger.error(f"Error creating payment: {e}")
-            return None
-        finally:
-            safe_close_session(session)
-
-
-        if response and response.get('status') == 'success' and 'data' in response:
-            return {
-                'checkout_url': response['data'].get('checkout_url'),
-                'tx_ref': tx_ref
-            }
-
-        logger.error("Failed to generate registration payment.")
-        return None
-    except Exception as e:
-        logger.error(f"Error generating registration payment: {e}")
-        return None
-
-def verify_payment(tx_ref):
-    """Verify a payment with Chapa"""
-    try:
-        if not tx_ref:
-            logger.error("Empty transaction reference")
-            return False
-            
-        chapa_key = os.environ.get('CHAPA_SECRET_KEY')
-        if not chapa_key:
-            logger.error("CHAPA_SECRET_KEY not found in environment variables")
-            return False
-            
+        logger.info(f"Received webhook data: {data}")
         
-        url = f"https://api.chapa.co/v1/transaction/verify/{tx_ref}"
-        headers = {
-            "Authorization": f"Bearer {chapa_key}",
-            "Content-Type": "application/json"
-        }
+        # Enhanced verification
+        if not data:
+            logger.error("Empty webhook data received")
+            return {"success": False, "message": "Empty webhook data"}
 
-        logger.info(f"Verifying payment for tx_ref: {tx_ref}")
-        response = requests.get(url, headers=headers, timeout=30)
-       
+        # Extract transaction data
+        tx_data = data.get('data', {})
+        status = data.get('status')
+        tx_status = tx_data.get('status')
+        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
+        
+        logger.info(f"Payment status: {status}, Transaction status: {tx_status}, tx_ref: {tx_ref}")
 
-        # Log the raw response for debugging
-        logger.info(f"Verify payment raw response: {response.text}")
+        if not tx_ref:
+            logger.error("No transaction reference found")
+            return {"success": False, "message": "Missing tx_ref"}
 
-        response_data = response.json()
-        logger.info(f"Verify payment response: {response_data}")
+        # Verify payment success
+        if status != 'success' or tx_status != 'success':
+            logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
+            return {"success": False, "message": "Payment not successful"}
+        
+        if status != 'success' or tx_status != 'success':
+            logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
+            return {"success": False, "message": "Payment not successful"}
 
-        if response_data.get('status') == 'success' and response_data.get('data', {}).get('status') == 'success':
-            logger.info(f"Payment {tx_ref} verified successfully")
-            return response_data.get('data', {})
+        # Get transaction reference
+        tx_ref = data.get('tx_ref') or data.get('data', {}).get('tx_ref')
+        if not tx_ref:
+            logger.error("No transaction reference found in webhook data")
+            return {"success": False, "message": "Missing transaction reference"}
 
-        logger.warning(f"Payment {tx_ref} verification failed: {response_data}")
+        session = get_session()
+
+        # Extract transaction reference
+        tx_ref = data.get('tx_ref')
+        if not tx_ref:
+            logger.error("No tx_ref in webhook data")
+            return {"success": False, "message": "No tx_ref found"}
+
+        session = get_session()
+        try:
+            # Find pending approval with this tx_ref
+            pending = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
+            if not pending:
+                logger.warning(f"No pending approval found for tx_ref: {tx_ref}")
+                return {"success": False, "message": "No pending approval found"}
+
+            telegram_id = pending.telegram_id
+
+            # Check if user already exists
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
+            if user:
+                logger.info(f"User {telegram_id} already registered")
+                return {"success": True, "message": "User already registered"}
+
+            logger.info(f"Processing registration payment for user {telegram_id}")
+            try:
+                # Create new user within transaction
+                new_user = User(
+                    telegram_id=telegram_id,
+                    name=pending.name,
+                    phone=pending.phone,
+                    address=pending.address,
+                    balance=0.0,
+                    subscription_date=datetime.utcnow()
+                )
+                
+                # Update payment status
+                pending.payment_status = 'paid'
+
+                # Add user and remove pending approval
+                session.add(new_user)
+                session.delete(pending)
+                session.commit()
+                logger.info(f"Successfully registered user {telegram_id}")
+            except Exception as e:
+                logger.error(f"Database error during user registration: {e}")
+                session.rollback()
+                raise
+
+            # Notify user
+            bot, create_main_menu = get_bot()
+            if bot:
+                try:
+                    bot.send_message(
+                        telegram_id,
+                        """
+✅ <b>Registration Approved!</b>
+
+🎉 <b>Welcome to AliPay_ETH!</b> 🎉
+
+Your account has been automatically activated after successful payment! You're all set to start shopping on AliExpress using Ethiopian Birr!
+
+<b>📱 Your Services:</b>
+• 💰 <b>Deposit</b> - Add funds to your account
+• 📦 <b>Submit Order</b> - Place AliExpress orders
+• 📊 <b>Order Status</b> - Track your orders
+• 💳 <b>Balance</b> - Check your balance
+
+Need help? Use ❓ <b>Help Center</b> anytime!
+""",
+                        parse_mode='HTML',
+                        reply_markup=create_main_menu(is_registered=True)
+                    )
+                except Exception as notify_error:
+                    logger.error(f"Error notifying user: {notify_error}")
+
+            return {"success": True, "message": "User registered successfully"}
+
+        except Exception as e:
+            logger.error(f"Error processing webhook: {e}")
+            logger.error(traceback.format_exc())
+            session.rollback()
+            return {"success": False, "message": str(e)}
+        finally:
+            safe_close_session(session)
+
+    except Exception as e:
+        logger.error(f"Error in webhook handler: {e}")
+        logger.error(traceback.format_exc())
+        return {"success": False, "message": str(e)}
+
+def verify_webhook_signature(request_data, signature):
+    """Verify webhook signature from Chapa"""
+    try:
+        webhook_secret = os.environ.get('CHAPA_WEBHOOK_SECRET')
+        if not webhook_secret:
+            logger.warning("CHAPA_WEBHOOK_SECRET not set. Skipping signature verification.")
+            return True
+
+        # Convert webhook secret to bytes
+        secret_bytes = webhook_secret.encode()
+        
+        # Create HMAC-SHA512 hash
+        computed_signature = hmac.new(
+            secret_bytes,
+            request_data,
+            hashlib.sha512
+        ).hexdigest()
+
+        # Compare signatures using constant time comparison
+        return hmac.compare_digest(computed_signature, signature)
+    except Exception as e:
+        logger.error(f"Error verifying webhook signature: {e}")
+        return False
+
+def handle_deposit_webhook(data, session):
+    """Handle deposit webhook data"""
+    try:
+        tx_data = data.get('data', {})
+        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
+        amount = float(tx_data.get('amount', 0))
+
+        # Find pending deposit by tx_ref
+        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+        for deposit in pending_deposits:
+            if abs(deposit.amount - (amount/160)) < 0.01:  # Compare amounts accounting for birr conversion
+                user = session.query(User).filter_by(id=deposit.user_id).first()
+                if user:
+                    user.balance += deposit.amount
+                    deposit.status = 'Approved'
+                    session.commit()
+                    logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
+                    return True
         return False
     except Exception as e:
-        logger.error(f"Error verifying payment: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Error handling deposit webhook: {e}")
         return False
+
+@app.route('/chapa/webhook', methods=['POST'])
+def chapa_webhook():
+    """Handle Chapa webhook for successful payments"""
+    try:
+        # Get the raw request data and headers
+        request_data = request.get_data()
+        signature = request.headers.get('X-Chapa-Signature')
+        event_type = request.headers.get('X-Chapa-Event', '')
+        
+        logger.info(f"Received webhook. Event: {event_type}")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Raw data: {request_data}")
+
+        # Log detailed webhook information for debugging
+        logger.info("===== WEBHOOK RECEIVED =====")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Raw Data: {request_data}")
+
+        # Verify signature if available
+        if signature and not verify_webhook_signature(request_data, signature):
+            logger.warning("Invalid webhook signature")
+            return jsonify({"status": "error", "message": "Invalid signature"}), 401
+
+        # Parse the payload
+        data = request.json
+        logger.info(f"Parsed webhook payload: {data}")
+
+        # Handle different webhook events
+        event_type = request.headers.get('X-Chapa-Event', '')
+        
+        if event_type == 'charge.completed':
+            logger.info("Processing completed charge")
+            result = handle_webhook(data)
+        elif event_type == 'transfer.succeeded':
+            logger.info("Processing successful transfer")
+            result = handle_webhook(data)
+        else:
+            logger.warning(f"Unhandled webhook event type: {event_type}")
+            return jsonify({"status": "success", "message": "Event type not handled"}), 200
+        return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
+
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"status": "error", "message": f"Internal server error: {str(e)}"}), 500
+
+# Add a health check endpoint
+@app.route('/chapa/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
+
+def run_webhook_server():
+    """Run the webhook server"""
+    try:
+        # Initialize the database
+        init_db()
+        # Start the Flask app
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Error running webhook server: {e}")
+        logger.error(traceback.format_exc())
+
+if __name__ == '__main__':
+    run_webhook_server()
