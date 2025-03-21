@@ -29,14 +29,23 @@ def index():
         "message": "Webhook server is running"
     })
 
-@app.route('/chapa/test', methods=['GET'])
+@app.route('/chapa/test', methods=['GET', 'POST'])
 def test_webhook():
     """Test endpoint to verify webhook server is running"""
-    logger.info("Test endpoint accessed")
+    logger.info("\n====== TEST ENDPOINT ACCESSED ======")
+    logger.info(f"Method: {request.method}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    
+    if request.method == 'POST':
+        data = request.get_data()
+        logger.info(f"Received data: {data.decode('utf-8') if data else 'No data'}")
+    
     return jsonify({
         "status": "ok",
         "message": "Webhook server is running",
         "timestamp": datetime.now().isoformat(),
+        "method": request.method,
+        "path": request.path,
         "config": {
             "has_secret_key": bool(os.environ.get('CHAPA_SECRET_KEY')),
             "has_webhook_secret": bool(os.environ.get('CHAPA_WEBHOOK_SECRET'))
@@ -57,7 +66,7 @@ def handle_webhook(data):
     session = None
     try:
         logger.info(f"Received webhook data: {data}")
-        
+
         # Enhanced verification
         if not data:
             logger.error("Empty webhook data received")
@@ -68,7 +77,7 @@ def handle_webhook(data):
         status = data.get('status')
         tx_status = tx_data.get('status')
         tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
-        
+
         logger.info(f"Payment status: {status}, Transaction status: {tx_status}, tx_ref: {tx_ref}")
 
         if not tx_ref:
@@ -79,7 +88,7 @@ def handle_webhook(data):
         if status != 'success' or tx_status != 'success':
             logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
             return {"success": False, "message": "Payment not successful"}
-        
+
         if status != 'success' or tx_status != 'success':
             logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
             return {"success": False, "message": "Payment not successful"}
@@ -125,7 +134,7 @@ def handle_webhook(data):
                     balance=0.0,
                     subscription_date=datetime.utcnow()
                 )
-                
+
                 # Update payment status
                 pending.payment_status = 'paid'
 
@@ -191,7 +200,7 @@ def verify_webhook_signature(request_data, signature):
 
         # Convert webhook secret to bytes
         secret_bytes = webhook_secret.encode()
-        
+
         # Create HMAC-SHA512 hash
         computed_signature = hmac.new(
             secret_bytes,
@@ -228,6 +237,7 @@ def handle_deposit_webhook(data, session):
         logger.error(f"Error handling deposit webhook: {e}")
         return False
 
+@app.route('/webhook', methods=['POST'])
 @app.route('/chapa/webhook', methods=['POST'])
 def chapa_webhook():
     """Handle Chapa webhook for successful payments"""
@@ -236,8 +246,15 @@ def chapa_webhook():
         request_data = request.get_data()
         signature = request.headers.get('X-Chapa-Signature')
         event_type = request.headers.get('X-Chapa-Event', '')
-        
-        logger.info("====== WEBHOOK REQUEST RECEIVED ======")
+
+        logger.info("\n====== WEBHOOK REQUEST RECEIVED ======")
+        logger.info(f"URL Path: {request.path}")
+        logger.info(f"Method: {request.method}")
+        logger.info("Headers:")
+        for header, value in request.headers.items():
+            logger.info(f"  {header}: {value}")
+        logger.info("Raw Data:")
+        logger.info(request_data.decode('utf-8') if request_data else "No data")
         logger.info(f"Event Type: {event_type}")
         logger.info(f"Signature: {signature}")
         logger.info(f"Headers: {dict(request.headers)}")
@@ -266,7 +283,7 @@ def chapa_webhook():
 
         # Handle different webhook events
         event_type = request.headers.get('X-Chapa-Event', '')
-        
+
         if event_type == 'charge.completed':
             logger.info("Processing completed charge")
             result = handle_webhook(data)
