@@ -7,11 +7,26 @@ import logging
 import json
 import hashlib
 import hmac
+import traceback
 from datetime import datetime
 from flask import Flask, request, jsonify
 from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval
 from telebot import TeleBot
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Initialize Flask app
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return jsonify({
+        "status": "ok",
+        "message": "Webhook server is running"
+    })
 
 @app.route('/chapa/test', methods=['GET'])
 def test_webhook():
@@ -25,22 +40,6 @@ def test_webhook():
         }
     })
 
-
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Initialize Flask app first
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return jsonify({
-        "status": "ok",
-        "message": "Webhook server is running"
-    })
 
 def get_bot():
     """Get bot instance and main menu creator function"""
