@@ -30,6 +30,7 @@ def index():
     })
 
 @app.route('/chapa/test', methods=['GET', 'POST'])
+@app.route('/test', methods=['GET', 'POST'])
 def test_webhook():
     """Test endpoint to verify webhook server is running"""
     logger.info("\n====== TEST ENDPOINT ACCESSED ======")
@@ -41,11 +42,11 @@ def test_webhook():
         logger.info(f"Received data: {data.decode('utf-8') if data else 'No data'}")
     
     return jsonify({
-        "status": "ok",
+        "status": "ok", 
         "message": "Webhook server is running",
         "timestamp": datetime.now().isoformat(),
+        "endpoint": request.path,
         "method": request.method,
-        "path": request.path,
         "config": {
             "has_secret_key": bool(os.environ.get('CHAPA_SECRET_KEY')),
             "has_webhook_secret": bool(os.environ.get('CHAPA_WEBHOOK_SECRET'))
