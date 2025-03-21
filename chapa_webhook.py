@@ -13,6 +13,20 @@ from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval
 from telebot import TeleBot
 
+
+@app.route('/chapa/test', methods=['GET'])
+def test_webhook():
+    """Test endpoint to verify webhook server is running"""
+    return jsonify({
+        "status": "ok",
+        "message": "Webhook server is running",
+        "config": {
+            "has_secret_key": bool(os.environ.get('CHAPA_SECRET_KEY')),
+            "has_webhook_secret": bool(os.environ.get('CHAPA_WEBHOOK_SECRET'))
+        }
+    })
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -213,9 +227,18 @@ def chapa_webhook():
         signature = request.headers.get('X-Chapa-Signature')
         event_type = request.headers.get('X-Chapa-Event', '')
         
-        logger.info(f"Received webhook. Event: {event_type}")
+        logger.info("====== WEBHOOK REQUEST RECEIVED ======")
+        logger.info(f"Event Type: {event_type}")
+        logger.info(f"Signature: {signature}")
         logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Raw data: {request_data}")
+        logger.info(f"Raw Data: {request_data}")
+        logger.info(f"JSON Data: {request.json if request.is_json else 'Not JSON'}")
+        logger.info("=====================================")
+
+        # Verify we have required environment variables
+        if not os.environ.get('CHAPA_WEBHOOK_SECRET'):
+            logger.error("CHAPA_WEBHOOK_SECRET not configured")
+            return jsonify({"status": "error", "message": "Webhook secret not configured"}), 500
 
         # Log detailed webhook information for debugging
         logger.info("===== WEBHOOK RECEIVED =====")
