@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/')
+@app.route('/webhook')
 def index():
     """Root endpoint"""
     return jsonify({
