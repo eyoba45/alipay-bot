@@ -165,12 +165,17 @@ def verify_webhook_signature(request_data, signature):
             logger.warning("CHAPA_WEBHOOK_SECRET not set. Skipping signature verification.")
             return True
 
+        # Convert webhook secret to bytes
+        secret_bytes = webhook_secret.encode()
+        
+        # Create HMAC-SHA512 hash
         computed_signature = hmac.new(
-            webhook_secret.encode(),
+            secret_bytes,
             request_data,
-            hashlib.sha256
+            hashlib.sha512
         ).hexdigest()
 
+        # Compare signatures using constant time comparison
         return hmac.compare_digest(computed_signature, signature)
     except Exception as e:
         logger.error(f"Error verifying webhook signature: {e}")
@@ -203,11 +208,13 @@ def handle_deposit_webhook(data, session):
 def chapa_webhook():
     """Handle Chapa webhook for successful payments"""
     try:
-        # Get the raw request data for signature verification
+        # Get the raw request data and headers
         request_data = request.get_data()
         signature = request.headers.get('X-Chapa-Signature')
+        event_type = request.headers.get('X-Chapa-Event', '')
         
-        logger.info(f"Received webhook. Headers: {dict(request.headers)}")
+        logger.info(f"Received webhook. Event: {event_type}")
+        logger.info(f"Headers: {dict(request.headers)}")
         logger.info(f"Raw data: {request_data}")
 
         # Log detailed webhook information for debugging
@@ -224,8 +231,18 @@ def chapa_webhook():
         data = request.json
         logger.info(f"Parsed webhook payload: {data}")
 
-
-        result = handle_webhook(data)
+        # Handle different webhook events
+        event_type = request.headers.get('X-Chapa-Event', '')
+        
+        if event_type == 'charge.completed':
+            logger.info("Processing completed charge")
+            result = handle_webhook(data)
+        elif event_type == 'transfer.succeeded':
+            logger.info("Processing successful transfer")
+            result = handle_webhook(data)
+        else:
+            logger.warning(f"Unhandled webhook event type: {event_type}")
+            return jsonify({"status": "success", "message": "Event type not handled"}), 200
         return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
 
     except Exception as e:
