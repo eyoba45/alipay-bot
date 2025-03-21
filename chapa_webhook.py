@@ -13,7 +13,6 @@ from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval
 from telebot import TeleBot
 
-
 @app.route('/chapa/test', methods=['GET'])
 def test_webhook():
     """Test endpoint to verify webhook server is running"""
@@ -27,13 +26,15 @@ def test_webhook():
     })
 
 
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Initialize Flask app first
 app = Flask(__name__)
 
-# Add basic route for testing
 @app.route('/')
 def index():
     return jsonify({
