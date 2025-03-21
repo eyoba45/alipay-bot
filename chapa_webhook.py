@@ -22,36 +22,40 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 @app.route('/')
-def index():
-    """Root endpoint"""
+@app.route('/test')
+@app.route('/chapa/test')
+def test_endpoint():
+    """Test endpoint to verify webhook server is running"""
+    logger.info(f"Test endpoint accessed at {request.path}")
     return jsonify({
         "status": "ok",
-        "message": "Webhook server is running"
+        "message": "Webhook server is running",
+        "path": request.path,
+        "timestamp": datetime.now().isoformat()
     })
 
-@app.route('/chapa/test', methods=['GET', 'POST'])
-@app.route('/test', methods=['GET', 'POST'])
-def test_webhook():
-    """Test endpoint to verify webhook server is running"""
-    logger.info("\n====== TEST ENDPOINT ACCESSED ======")
-    logger.info(f"Method: {request.method}")
-    logger.info(f"Headers: {dict(request.headers)}")
-    
-    if request.method == 'POST':
-        data = request.get_data()
-        logger.info(f"Received data: {data.decode('utf-8') if data else 'No data'}")
-    
-    return jsonify({
-        "status": "ok", 
-        "message": "Webhook server is running",
-        "timestamp": datetime.now().isoformat(),
-        "endpoint": request.path,
-        "method": request.method,
-        "config": {
-            "has_secret_key": bool(os.environ.get('CHAPA_SECRET_KEY')),
-            "has_webhook_secret": bool(os.environ.get('CHAPA_WEBHOOK_SECRET'))
-        }
-    })
+@app.route('/webhook', methods=['POST'])
+@app.route('/chapa/webhook', methods=['POST'])
+def webhook():
+    """Handle Chapa webhook for successful payments"""
+    try:
+        logger.info("\n====== WEBHOOK REQUEST RECEIVED ======")
+        logger.info(f"Path: {request.path}")
+        logger.info(f"Method: {request.method}")
+        logger.info(f"Headers: {dict(request.headers)}")
+
+        data = request.get_json()
+        logger.info(f"Payload: {data}")
+
+        return jsonify({
+            "status": "success",
+            "message": "Webhook received",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Error in webhook: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 def get_bot():
     """Get bot instance and main menu creator function"""
@@ -61,6 +65,53 @@ def get_bot():
     except Exception as e:
         logger.error(f"Error importing bot: {e}")
         return None, None
+
+def verify_webhook_signature(request_data, signature):
+    """Verify webhook signature from Chapa"""
+    try:
+        webhook_secret = os.environ.get('CHAPA_WEBHOOK_SECRET')
+        if not webhook_secret:
+            logger.warning("CHAPA_WEBHOOK_SECRET not set. Skipping signature verification.")
+            return True
+
+        # Convert webhook secret to bytes
+        secret_bytes = webhook_secret.encode()
+
+        # Create HMAC-SHA512 hash
+        computed_signature = hmac.new(
+            secret_bytes,
+            request_data,
+            hashlib.sha512
+        ).hexdigest()
+
+        # Compare signatures using constant time comparison
+        return hmac.compare_digest(computed_signature, signature)
+    except Exception as e:
+        logger.error(f"Error verifying webhook signature: {e}")
+        return False
+
+def handle_deposit_webhook(data, session):
+    """Handle deposit webhook data"""
+    try:
+        tx_data = data.get('data', {})
+        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
+        amount = float(tx_data.get('amount', 0))
+
+        # Find pending deposit by tx_ref
+        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+        for deposit in pending_deposits:
+            if abs(deposit.amount - (amount/160)) < 0.01:  # Compare amounts accounting for birr conversion
+                user = session.query(User).filter_by(id=deposit.user_id).first()
+                if user:
+                    user.balance += deposit.amount
+                    deposit.status = 'Approved'
+                    session.commit()
+                    logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
+                    return True
+        return False
+    except Exception as e:
+        logger.error(f"Error handling deposit webhook: {e}")
+        return False
 
 def handle_webhook(data):
     """Handle Chapa payment webhook"""
@@ -191,115 +242,6 @@ Need help? Use ❓ <b>Help Center</b> anytime!
         logger.error(traceback.format_exc())
         return {"success": False, "message": str(e)}
 
-def verify_webhook_signature(request_data, signature):
-    """Verify webhook signature from Chapa"""
-    try:
-        webhook_secret = os.environ.get('CHAPA_WEBHOOK_SECRET')
-        if not webhook_secret:
-            logger.warning("CHAPA_WEBHOOK_SECRET not set. Skipping signature verification.")
-            return True
-
-        # Convert webhook secret to bytes
-        secret_bytes = webhook_secret.encode()
-
-        # Create HMAC-SHA512 hash
-        computed_signature = hmac.new(
-            secret_bytes,
-            request_data,
-            hashlib.sha512
-        ).hexdigest()
-
-        # Compare signatures using constant time comparison
-        return hmac.compare_digest(computed_signature, signature)
-    except Exception as e:
-        logger.error(f"Error verifying webhook signature: {e}")
-        return False
-
-def handle_deposit_webhook(data, session):
-    """Handle deposit webhook data"""
-    try:
-        tx_data = data.get('data', {})
-        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
-        amount = float(tx_data.get('amount', 0))
-
-        # Find pending deposit by tx_ref
-        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
-        for deposit in pending_deposits:
-            if abs(deposit.amount - (amount/160)) < 0.01:  # Compare amounts accounting for birr conversion
-                user = session.query(User).filter_by(id=deposit.user_id).first()
-                if user:
-                    user.balance += deposit.amount
-                    deposit.status = 'Approved'
-                    session.commit()
-                    logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
-                    return True
-        return False
-    except Exception as e:
-        logger.error(f"Error handling deposit webhook: {e}")
-        return False
-
-@app.route('/webhook', methods=['POST'])
-@app.route('/chapa/webhook', methods=['POST'])
-def chapa_webhook():
-    """Handle Chapa webhook for successful payments"""
-    try:
-        # Get the raw request data and headers
-        request_data = request.get_data()
-        signature = request.headers.get('X-Chapa-Signature')
-        event_type = request.headers.get('X-Chapa-Event', '')
-
-        logger.info("\n====== WEBHOOK REQUEST RECEIVED ======")
-        logger.info(f"URL Path: {request.path}")
-        logger.info(f"Method: {request.method}")
-        logger.info("Headers:")
-        for header, value in request.headers.items():
-            logger.info(f"  {header}: {value}")
-        logger.info("Raw Data:")
-        logger.info(request_data.decode('utf-8') if request_data else "No data")
-        logger.info(f"Event Type: {event_type}")
-        logger.info(f"Signature: {signature}")
-        logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Raw Data: {request_data}")
-        logger.info(f"JSON Data: {request.json if request.is_json else 'Not JSON'}")
-        logger.info("=====================================")
-
-        # Verify we have required environment variables
-        if not os.environ.get('CHAPA_WEBHOOK_SECRET'):
-            logger.error("CHAPA_WEBHOOK_SECRET not configured")
-            return jsonify({"status": "error", "message": "Webhook secret not configured"}), 500
-
-        # Log detailed webhook information for debugging
-        logger.info("===== WEBHOOK RECEIVED =====")
-        logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Raw Data: {request_data}")
-
-        # Verify signature if available
-        if signature and not verify_webhook_signature(request_data, signature):
-            logger.warning("Invalid webhook signature")
-            return jsonify({"status": "error", "message": "Invalid signature"}), 401
-
-        # Parse the payload
-        data = request.json
-        logger.info(f"Parsed webhook payload: {data}")
-
-        # Handle different webhook events
-        event_type = request.headers.get('X-Chapa-Event', '')
-
-        if event_type == 'charge.completed':
-            logger.info("Processing completed charge")
-            result = handle_webhook(data)
-        elif event_type == 'transfer.succeeded':
-            logger.info("Processing successful transfer")
-            result = handle_webhook(data)
-        else:
-            logger.warning(f"Unhandled webhook event type: {event_type}")
-            return jsonify({"status": "success", "message": "Event type not handled"}), 200
-        return jsonify({"status": "success" if result["success"] else "error", "message": result["message"]}), 200
-
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({"status": "error", "message": f"Internal server error: {str(e)}"}), 500
 
 # Add a health check endpoint
 @app.route('/chapa/health', methods=['GET'])
@@ -314,7 +256,7 @@ def run_webhook_server():
         init_db()
         # Start the Flask app
         port = int(os.environ.get('PORT', 8080))
-        app.run(host='0.0.0.0', port=port, debug=False)
+        app.run(host='0.0.0.0', port=port, debug=True)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         logger.error(traceback.format_exc())
