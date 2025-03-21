@@ -38,10 +38,23 @@ def handle_webhook(data):
         if not data:
             logger.error("Empty webhook data received")
             return {"success": False, "message": "Empty webhook data"}
-            
-        # Check both top-level status and transaction status
+
+        # Extract transaction data
+        tx_data = data.get('data', {})
         status = data.get('status')
-        tx_status = data.get('data', {}).get('status') if data.get('data') else None
+        tx_status = tx_data.get('status')
+        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
+        
+        logger.info(f"Payment status: {status}, Transaction status: {tx_status}, tx_ref: {tx_ref}")
+
+        if not tx_ref:
+            logger.error("No transaction reference found")
+            return {"success": False, "message": "Missing tx_ref"}
+
+        # Verify payment success
+        if status != 'success' or tx_status != 'success':
+            logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
+            return {"success": False, "message": "Payment not successful"}
         
         if status != 'success' or tx_status != 'success':
             logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
@@ -77,6 +90,7 @@ def handle_webhook(data):
                 logger.info(f"User {telegram_id} already registered")
                 return {"success": True, "message": "User already registered"}
 
+            logger.info(f"Processing registration payment for user {telegram_id}")
             try:
                 # Create new user within transaction
                 new_user = User(
@@ -87,6 +101,9 @@ def handle_webhook(data):
                     balance=0.0,
                     subscription_date=datetime.utcnow()
                 )
+                
+                # Update payment status
+                pending.payment_status = 'paid'
 
                 # Add user and remove pending approval
                 session.add(new_user)
@@ -159,6 +176,29 @@ def verify_webhook_signature(request_data, signature):
         logger.error(f"Error verifying webhook signature: {e}")
         return False
 
+def handle_deposit_webhook(data, session):
+    """Handle deposit webhook data"""
+    try:
+        tx_data = data.get('data', {})
+        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
+        amount = float(tx_data.get('amount', 0))
+
+        # Find pending deposit by tx_ref
+        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+        for deposit in pending_deposits:
+            if abs(deposit.amount - (amount/160)) < 0.01:  # Compare amounts accounting for birr conversion
+                user = session.query(User).filter_by(id=deposit.user_id).first()
+                if user:
+                    user.balance += deposit.amount
+                    deposit.status = 'Approved'
+                    session.commit()
+                    logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
+                    return True
+        return False
+    except Exception as e:
+        logger.error(f"Error handling deposit webhook: {e}")
+        return False
+
 @app.route('/chapa/webhook', methods=['POST'])
 def chapa_webhook():
     """Handle Chapa webhook for successful payments"""
@@ -166,6 +206,9 @@ def chapa_webhook():
         # Get the raw request data for signature verification
         request_data = request.get_data()
         signature = request.headers.get('X-Chapa-Signature')
+        
+        logger.info(f"Received webhook. Headers: {dict(request.headers)}")
+        logger.info(f"Raw data: {request_data}")
 
         # Log detailed webhook information for debugging
         logger.info("===== WEBHOOK RECEIVED =====")
