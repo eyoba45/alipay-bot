@@ -295,7 +295,7 @@ def run_webhook_server():
         # Initialize the database
         init_db()
         # Start the Flask app
-        port = int(os.environ.get('PORT', 5000))
+        port = int(os.environ.get('PORT', 8080))
         app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
