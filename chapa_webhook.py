@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/webhook')
+@app.route('/')
 def index():
     """Root endpoint"""
     return jsonify({
@@ -228,7 +228,7 @@ def handle_deposit_webhook(data, session):
         logger.error(f"Error handling deposit webhook: {e}")
         return False
 
-@app.route('/webhook', methods=['GET', 'POST'])
+@app.route('/chapa/webhook', methods=['POST'])
 def chapa_webhook():
     """Handle Chapa webhook for successful payments"""
     try:
