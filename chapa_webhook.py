@@ -33,6 +33,14 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Add basic route for testing
+@app.route('/')
+def index():
+    return jsonify({
+        "status": "ok",
+        "message": "Webhook server is running"
+    })
+
 def get_bot():
     """Get bot instance and main menu creator function"""
     try:
@@ -285,8 +293,8 @@ def run_webhook_server():
         # Initialize the database
         init_db()
         # Start the Flask app
-        port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port)
+        port = int(os.environ.get('PORT', 8080))
+        app.run(host='0.0.0.0', port=port, debug=True)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         logger.error(traceback.format_exc())
