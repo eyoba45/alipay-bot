@@ -264,7 +264,7 @@ def health_check():
 if __name__ == '__main__':
     try:
         init_db()
-        port = int(os.environ.get('PORT', 80))
+        port = int(os.environ.get('PORT', 8080))
         app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
