@@ -147,6 +147,12 @@ def handle_webhook(data):
         pending = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
 
         if not pending:
+            # Check by telegram_id since tx_ref might not be set
+            telegram_id = tx_data.get('metadata', {}).get('telegram_id')
+            if telegram_id:
+                pending = session.query(PendingApproval).filter_by(telegram_id=telegram_id).first()
+
+        if not pending:
             # Check for deposit
             return handle_deposit_webhook(data, session)
 
@@ -170,6 +176,33 @@ def handle_webhook(data):
         session.add(new_user)
         session.delete(pending)
         session.commit()
+
+        # Send welcome message to user
+        bot, create_main_menu = get_bot()
+        if bot:
+            try:
+                bot.send_message(
+                    telegram_id,
+                    """
+✅ <b>Registration Approved!</b>
+
+🎉 <b>Welcome to AliPay_ETH!</b> 🎉
+
+Your account has been successfully activated! You're all set to start shopping on AliExpress using Ethiopian Birr!
+
+<b>📱 Your Services:</b>
+• 💰 <b>Deposit</b> - Add funds to your account
+• 📦 <b>Submit Order</b> - Place AliExpress orders
+• 📊 <b>Order Status</b> - Track your orders
+• 💳 <b>Balance</b> - Check your current balance
+
+Need assistance? Use ❓ <b>Help Center</b> anytime!
+""",
+                    parse_mode='HTML',
+                    reply_markup=create_main_menu(is_registered=True)
+                )
+            except Exception as e:
+                logger.error(f"Error sending welcome message to user: {e}")
 
         # Notify user
         bot, create_main_menu = get_bot()
