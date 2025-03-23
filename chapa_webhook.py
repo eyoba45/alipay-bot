@@ -31,28 +31,27 @@ def home():
     })
 
 # Main webhook route
-@app.route('/chapa/webhook', methods=['POST'])
-def webhook_handler():
-    """Handle Chapa webhook POST requests"""
+@app.route('/chapa/webhook', methods=['GET', 'POST'])
+def webhook():
+    """Handle webhook requests"""
     try:
-        logger.info("Received webhook POST request")
+        logger.info(f"Received {request.method} request at {request.path}")
         logger.info(f"Headers: {dict(request.headers)}")
+        
+        if request.method == 'GET':
+            return jsonify({
+                "status": "success",
+                "message": "Webhook endpoint is active",
+                "path": request.path
+            })
+            
+        # Handle POST requests
         data = request.get_json(silent=True) or {}
         logger.info(f"Webhook payload: {data}")
         return handle_webhook(data)
     except Exception as e:
         logger.error(f"Webhook handler error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
-# Webhook test route
-@app.route('/chapa/webhook', methods=['GET'])
-def webhook_test():
-    """Test endpoint for webhook"""
-    return jsonify({
-        "status": "success",
-        "message": "Webhook endpoint is active",
-        "path": request.path
-    })
 
 def get_bot():
     """Get bot instance and main menu creator function"""
