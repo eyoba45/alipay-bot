@@ -37,6 +37,9 @@ def webhook():
         logger.info(f"Received {request.method} request at {request.path}")
         logger.info(f"Headers: {dict(request.headers)}")
         logger.info(f"Request URL: {request.url}")
+        logger.info(f"Request data: {request.get_data()}")
+        logger.info(f"Request form: {request.form}")
+        logger.info(f"Request args: {request.args}")
         
         if request.method == 'GET':
             return jsonify({
