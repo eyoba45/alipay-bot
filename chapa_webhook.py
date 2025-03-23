@@ -26,16 +26,14 @@ app = Flask(__name__)
 @app.route('/chapa/webhook', methods=['GET', 'POST'])
 def webhook():
     """Handle webhook requests"""
-    logger.info(f"Received request at {request.path}")
-    if request.method == 'GET':
-        return jsonify({
-            "status": "ok",
-            "message": "Webhook server is running",
-            "timestamp": datetime.now().isoformat()
-        })
-def webhook():
-    """Handle Chapa webhook"""
     try:
+        logger.info(f"Received request at {request.path}")
+        if request.method == 'GET':
+            return jsonify({
+                "status": "ok",
+                "message": "Webhook server is running",
+                "timestamp": datetime.now().isoformat()
+            })
         logger.info("\n====== WEBHOOK REQUEST RECEIVED ======")
         logger.info(f"Path: {request.path}")
         logger.info(f"Method: {request.method}")
