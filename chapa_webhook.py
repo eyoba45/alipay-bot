@@ -21,29 +21,28 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/chapa/webhook', methods=['GET', 'POST'])
-@app.route('/', methods=['GET'])
-def webhook():
-    """Handle webhook requests"""
+@app.route('/chapa/webhook', methods=['POST'])
+def webhook_handler():
+    """Handle Chapa webhook POST requests"""
     try:
-        logger.info(f"Received request at {request.path}")
-        logger.info(f"Request method: {request.method}")
-        logger.info(f"Request headers: {dict(request.headers)}")
-        logger.info(f"Request data: {request.get_data()}")
+        logger.info("Received webhook POST request")
+        logger.info(f"Headers: {dict(request.headers)}")
+        data = request.get_json(silent=True) or {}
+        logger.info(f"Webhook payload: {data}")
+        return handle_webhook(data)
+    except Exception as e:
+        logger.error(f"Webhook handler error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-        # Handle all GET requests
-        if request.method == 'GET':
-            return jsonify({
-                "status": "success",
-                "message": "Webhook endpoint is active",
-                "path": request.path
-            }), 200
-
-        # Handle POST requests
-        if request.method == 'POST':
-            data = request.get_json(silent=True) or {}
-            logger.info(f"Webhook payload: {data}")
-            return handle_webhook(data)
+@app.route('/chapa/webhook', methods=['GET'])
+@app.route('/', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "success",
+        "message": "Webhook endpoint is active",
+        "path": request.path
+    }), 200
         logger.info(f"Request method: {request.method}")
         logger.info(f"Request headers: {dict(request.headers)}")
         logger.info(f"Request data: {request.get_data()}")
@@ -286,4 +285,3 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
-        
