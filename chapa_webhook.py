@@ -21,17 +21,18 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/')
-def test_endpoint():
-    """Test endpoint to verify webhook server is running"""
-    return jsonify({
-        "status": "ok",
-        "message": "Webhook server is running",
-        "timestamp": datetime.now().isoformat()
-    })
-
+@app.route('/', methods=['GET', 'POST'])
 @app.route('/webhook', methods=['GET', 'POST'])
 @app.route('/chapa/webhook', methods=['GET', 'POST'])
+def webhook():
+    """Handle webhook requests"""
+    logger.info(f"Received request at {request.path}")
+    if request.method == 'GET':
+        return jsonify({
+            "status": "ok",
+            "message": "Webhook server is running",
+            "timestamp": datetime.now().isoformat()
+        })
 def webhook():
     """Handle Chapa webhook"""
     try:
