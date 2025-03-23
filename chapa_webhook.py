@@ -24,31 +24,42 @@ app = Flask(__name__)
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/webhook', methods=['GET', 'POST'])
 @app.route('/chapa/webhook', methods=['GET', 'POST'])
+@app.route('/chapa/test', methods=['GET', 'POST'])
 def webhook():
     """Handle webhook requests"""
     try:
         logger.info(f"Received request at {request.path}")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request data: {request.get_data()}")
+
         if request.method == 'GET':
             return jsonify({
                 "status": "ok",
                 "message": "Webhook server is running",
                 "timestamp": datetime.now().isoformat()
+            }), 200
+
+        # Handle POST requests
+        try:
+            if request.method == 'POST':
+                data = request.get_json()
+                logger.info(f"Payload: {data}")
+                return handle_webhook(data)
+
+            return jsonify({
+                "status": "ok",
+                "message": "Webhook endpoint is active",
+                "timestamp": datetime.now().isoformat()
             })
-        logger.info("\n====== WEBHOOK REQUEST RECEIVED ======")
-        logger.info(f"Path: {request.path}")
-        logger.info(f"Method: {request.method}")
-        logger.info(f"Headers: {dict(request.headers)}")
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON payload received")
+            return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
+        except Exception as e:
+            logger.error(f"Error handling POST request: {e}")
+            logger.error(traceback.format_exc())
+            return jsonify({"status": "error", "message": str(e)}), 500
 
-        if request.method == 'POST':
-            data = request.get_json()
-            logger.info(f"Payload: {data}")
-            return handle_webhook(data)
-
-        return jsonify({
-            "status": "ok",
-            "message": "Webhook endpoint is active",
-            "timestamp": datetime.now().isoformat()
-        })
     except Exception as e:
         logger.error(f"Error in webhook: {e}")
         logger.error(traceback.format_exc())
@@ -247,7 +258,7 @@ if __name__ == '__main__':
     try:
         init_db()
         port = int(os.environ.get('PORT', 80))
-        app.run(host='0.0.0.0', port=port, debug=False)
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
