@@ -129,6 +129,57 @@ def handle_webhook(data):
         tx_status = tx_data.get('status')
         tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
 
+        logger.info(f"Webhook received: status={status}, tx_status={tx_status}, tx_ref={tx_ref}")
+
+        if not tx_ref:
+            logger.error("No transaction reference found")
+            return jsonify({"status": "error", "message": "Missing tx_ref"}), 400
+
+        if status != 'success' or tx_status != 'success':
+            logger.warning(f"Payment not successful. Status: {status}, Transaction status: {tx_status}")
+            return jsonify({"status": "error", "message": "Payment not successful"}), 400
+
+        session = get_session()
+        pending = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
+
+        if not pending:
+            # Check for deposit
+            return handle_deposit_webhook(data, session)
+
+        telegram_id = pending.telegram_id
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+
+        if user:
+            return jsonify({"status": "success", "message": "User already registered"}), 200
+
+        # Create new user
+        new_user = User(
+            telegram_id=telegram_id,
+            name=pending.name,
+            phone=pending.phone,
+            address=pending.address,
+            balance=0.0,
+            subscription_date=datetime.utcnow()
+        )
+
+        session.add(new_user)
+        session.delete(pending)
+        session.commit()
+        logger.info(f"User {telegram_id} registered via webhook")
+
+        # Get bot instance and create_main_menu function
+        bot, create_main_menu = get_bot()
+        if bot:
+            try:
+                bot.send_message(
+                    telegram_id,
+                    "✅ Registration successful! Welcome to AliPay_ETH!",
+                    parse_mode='HTML',
+                    reply_markup=create_main_menu(is_registered=True)
+                )
+            except Exception as e:
+                logger.error(f"Error notifying user: {e}")
+
         if not tx_ref:
             logger.error("No transaction reference found")
             return jsonify({"status": "error", "message": "Missing tx_ref"}), 400
