@@ -21,23 +21,29 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/', methods=['GET', 'POST'])
-@app.route('/webhook', methods=['GET', 'POST'])
-@app.route('/chapa/webhook', methods=['GET', 'POST'])
-@app.route('/chapa/test', methods=['GET', 'POST'])
-def webhook():
+@app.route('/', defaults={'path': ''}, methods=['GET', 'POST'])
+@app.route('/<path:path>', methods=['GET', 'POST'])
+def webhook(path):
     """Handle webhook requests"""
     try:
         logger.info(f"Received request at {request.path}")
         logger.info(f"Request method: {request.method}")
-        
-        # Always return 200 OK for GET requests to confirm endpoint is active
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request data: {request.get_data()}")
+
+        # Handle all GET requests
         if request.method == 'GET':
             return jsonify({
                 "status": "success",
                 "message": "Webhook endpoint is active",
                 "path": request.path
             }), 200
+
+        # Handle POST requests
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+            logger.info(f"Webhook payload: {data}")
+            return handle_webhook(data)
         logger.info(f"Request method: {request.method}")
         logger.info(f"Request headers: {dict(request.headers)}")
         logger.info(f"Request data: {request.get_data()}")
@@ -273,8 +279,9 @@ def health_check():
 if __name__ == '__main__':
     try:
         init_db()
-        port = int(os.environ.get('PORT', 80))
+        port = int(os.environ.get('PORT', 5000))
         app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
+    
