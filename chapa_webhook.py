@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/', defaults={'path': ''}, methods=['GET', 'POST'])
-@app.route('/<path:path>', methods=['GET', 'POST'])
-def webhook(path):
+@app.route('/chapa/webhook', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
+def webhook():
     """Handle webhook requests"""
     try:
         logger.info(f"Received request at {request.path}")
@@ -47,7 +47,7 @@ def webhook(path):
         logger.info(f"Request method: {request.method}")
         logger.info(f"Request headers: {dict(request.headers)}")
         logger.info(f"Request data: {request.get_data()}")
-        
+
         # Always return 200 OK for GET requests
         if request.method == 'GET':
             return jsonify({
@@ -279,9 +279,11 @@ def health_check():
 if __name__ == '__main__':
     try:
         init_db()
+        print("Registered Routes:")
+        print(app.url_map)
         port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+        app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
-    
+        
