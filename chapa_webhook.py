@@ -36,10 +36,6 @@ def webhook():
     try:
         logger.info(f"Received {request.method} request at {request.path}")
         logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Request URL: {request.url}")
-        logger.info(f"Request data: {request.get_data()}")
-        logger.info(f"Request form: {request.form}")
-        logger.info(f"Request args: {request.args}")
         
         if request.method == 'GET':
             return jsonify({
@@ -49,7 +45,30 @@ def webhook():
             })
             
         # Handle POST requests
-        data = request.get_json(silent=True) or {}
+        raw_data = request.get_data()
+        signature = request.headers.get('Chapa-Signature')
+        
+        logger.info(f"Raw webhook data: {raw_data}")
+        logger.info(f"Signature: {signature}")
+        
+        if not signature:
+            logger.error("No Chapa-Signature header found")
+            return jsonify({"status": "error", "message": "Missing signature"}), 400
+            
+        if not verify_webhook_signature(raw_data, signature):
+            logger.error("Invalid webhook signature")
+            return jsonify({"status": "error", "message": "Invalid signature"}), 400
+            
+        try:
+            data = request.get_json()
+        except Exception as e:
+            logger.error(f"Error parsing JSON: {e}")
+            return jsonify({"status": "error", "message": "Invalid JSON"}), 400
+            
+        if not data:
+            logger.error("Empty request data")
+            return jsonify({"status": "error", "message": "Empty request"}), 400
+            
         logger.info(f"Webhook payload: {data}")
         response = handle_webhook(data)
         logger.info(f"Webhook response: {response}")
