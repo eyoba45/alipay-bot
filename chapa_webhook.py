@@ -46,7 +46,6 @@ def webhook():
     try:
         logger.info(f"Received {request.method} request at {request.path}")
         logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Raw Data: {request.get_data()}")
         
         if request.method == 'GET':
             return jsonify({
@@ -54,47 +53,54 @@ def webhook():
                 "message": "Webhook endpoint is active",
                 "path": request.path
             })
-            
-        # Handle POST requests
-        try:
-            # Try to get JSON data first
-            data = request.get_json(silent=True)
-            if not data:
-                # If JSON parsing fails, try to get form data
-                data = request.form.to_dict()
-            
-            # If still no data, try raw data
-            if not data:
-                raw_data = request.get_data()
-                try:
-                    data = json.loads(raw_data)
-                except:
-                    logger.warning("Could not parse raw data as JSON")
-                    data = {'raw_data': raw_data.decode('utf-8', errors='ignore')}
 
-            logger.info(f"Processed webhook data: {data}")
-            
-            # More lenient signature verification
-            signature = request.headers.get('Chapa-Signature')
-            if signature:
-                raw_data = request.get_data()
-                if not verify_webhook_signature(raw_data, signature):
-                    logger.warning("Invalid signature, but continuing processing")
-            else:
-                logger.warning("No signature found in request")
-            
-            logger.info(f"Webhook payload: {data}")
-            response = handle_webhook(data)
-            return response
-        except Exception as e:
-            logger.error(f"Error processing webhook: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 500
+        # Handle POST requests
+        raw_data = request.get_data()
+        logger.info(f"Raw Data: {raw_data}")
+
+        # Try different methods to parse the data
+        data = None
+        try:
+            data = request.get_json(silent=True)
+        except:
+            pass
+
+        if not data:
+            try:
+                data = request.form.to_dict()
+            except:
+                pass
+
+        if not data and raw_data:
+            try:
+                data = json.loads(raw_data)
+            except:
+                data = {'raw_data': raw_data.decode('utf-8', errors='ignore')}
+
+        if not data:
+            return jsonify({"status": "error", "message": "No valid data received"}), 400
+
+        logger.info(f"Processed webhook data: {data}")
+
+        # Verify signature if present
+        signature = request.headers.get('Chapa-Signature')
+        if signature and not verify_webhook_signature(raw_data, signature):
+            logger.warning("Invalid signature received")
+            return jsonify({"status": "error", "message": "Invalid signature"}), 401
+
+        # Process the webhook data
+        response = handle_webhook(data)
         logger.info(f"Webhook response: {response}")
         return response
+
     except Exception as e:
         logger.error(f"Webhook handler error: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": "Internal server error",
+            "error": str(e)
+        }), 500
 
 # Print registered routes on startup
 print("Available Routes:")
