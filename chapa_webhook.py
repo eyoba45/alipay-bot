@@ -32,6 +32,13 @@ def webhook():
         logger.info(f"Request method: {request.method}")
         logger.info(f"Request headers: {dict(request.headers)}")
         logger.info(f"Request data: {request.get_data()}")
+        
+        # Always return 200 OK for GET requests
+        if request.method == 'GET':
+            return jsonify({
+                "status": "success",
+                "message": "Webhook endpoint is active"
+            }), 200
 
         if request.method == 'GET':
             return jsonify({
@@ -262,3 +269,4 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
+        
