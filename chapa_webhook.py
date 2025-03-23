@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
+@app.before_request
+def log_request_info():
+    logger.info('Headers: %s', request.headers)
+    logger.info('Body: %s', request.get_data())
+
+@app.after_request
+def after_request(response):
+    logger.info('Response: %s', response.get_data())
+    return response
+
 # Simple health check route
 @app.route('/')
 def home():
@@ -36,6 +46,7 @@ def webhook():
     try:
         logger.info(f"Received {request.method} request at {request.path}")
         logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Raw Data: {request.get_data()}")
         
         if request.method == 'GET':
             return jsonify({
@@ -221,3 +232,4 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
+        
