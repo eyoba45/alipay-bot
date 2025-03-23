@@ -30,12 +30,6 @@ def home():
         "timestamp": datetime.now().isoformat()
     })
 
-# Main webhook route
-@app.route('/')
-def index():
-    """Root endpoint"""
-    return jsonify({"status": "success", "message": "Server is running"})
-
 @app.route('/chapa/webhook', methods=['GET', 'POST'])
 def webhook():
     """Handle webhook requests"""
