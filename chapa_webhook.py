@@ -83,8 +83,12 @@ def webhook():
             else:
                 logger.warning("No signature found in request")
             
-        logger.info(f"Webhook payload: {data}")
-        response = handle_webhook(data)
+            logger.info(f"Webhook payload: {data}")
+            response = handle_webhook(data)
+            return response
+        except Exception as e:
+            logger.error(f"Error processing webhook: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
         logger.info(f"Webhook response: {response}")
         return response
     except Exception as e:
