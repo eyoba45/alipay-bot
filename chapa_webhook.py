@@ -202,11 +202,16 @@ def handle_webhook(data):
             subscription_date=datetime.utcnow()
         )
 
-        pending.payment_status = 'paid'
-        session.add(new_user)
-        session.delete(pending)
-        session.commit()
-        logger.info(f"User {telegram_id} registered via webhook")
+        try:
+            pending.payment_status = 'paid'
+            session.add(new_user)
+            session.delete(pending)
+            session.commit()
+            logger.info(f"User {telegram_id} registered via webhook")
+        except Exception as e:
+            logger.error(f"Database transaction error: {e}")
+            session.rollback()
+            return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
         # Send registration success message
         bot, create_main_menu = get_bot()
@@ -262,7 +267,7 @@ def handle_deposit_webhook(data, session):
                 if user:
                     telegram_id = user.telegram_id
                     logger.info(f"Found pending deposit for telegram_id={telegram_id}")
-            
+
             # Try pending approval as fallback
             if not telegram_id:
                 pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
@@ -288,10 +293,15 @@ def handle_deposit_webhook(data, session):
                     amount=usd_amount,
                     status='Approved'
                 )
-                session.add(new_deposit)
-                session.commit()
+                try:
+                    session.add(new_deposit)
+                    session.commit()
+                    logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
+                except Exception as e:
+                    logger.error(f"Database transaction error: {e}")
+                    session.rollback()
+                    return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
-                logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
 
                 # Send deposit confirmation message
                 try:
@@ -324,9 +334,13 @@ def handle_deposit_webhook(data, session):
                 if user:
                     user.balance += deposit.amount
                     deposit.status = 'Approved'
-                    session.commit()
-
-                    logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
+                    try:
+                        session.commit()
+                        logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
+                    except Exception as e:
+                        logger.error(f"Database transaction error: {e}")
+                        session.rollback()
+                        return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
                     # Send notification
                     bot, create_main_menu = get_bot()
