@@ -124,12 +124,21 @@ def handle_webhook(data):
             return jsonify({"status": "error", "message": "Empty webhook data"}), 400
 
         # Extract transaction data
+        # Extract data carefully
         tx_data = data.get('data', {})
         status = data.get('status')
         tx_status = tx_data.get('status')
         tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
-
-        logger.info(f"Webhook received: status={status}, tx_status={tx_status}, tx_ref={tx_ref}")
+        metadata = tx_data.get('metadata', {})
+        amount = float(tx_data.get('amount', 0))
+        
+        logger.info(f"Webhook received: status={status}, tx_status={tx_status}, tx_ref={tx_ref}, amount={amount}")
+        logger.info(f"Transaction metadata: {metadata}")
+        
+        # Only process if payment is successful
+        if status != 'success':
+            logger.warning(f"Payment not successful. Status: {status}")
+            return jsonify({"status": "error", "message": "Payment not successful"}), 400
 
         if not tx_ref:
             logger.error("No transaction reference found")
@@ -226,8 +235,13 @@ def handle_deposit_webhook(data, session):
         if telegram_id:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if user:
-                usd_amount = amount / 160  # Convert from birr to USD
-                user.balance += usd_amount
+                # Convert amount from birr to USD
+                usd_amount = float(amount) / 160.0
+                
+                # Update user balance
+                current_balance = user.balance if user.balance is not None else 0
+                user.balance = current_balance + usd_amount
+                logger.info(f"Updating balance for user {telegram_id}: {current_balance} + {usd_amount} = {user.balance}")
 
                 # Create new deposit record
                 new_deposit = PendingDeposit(
