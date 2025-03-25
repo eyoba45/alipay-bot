@@ -260,9 +260,8 @@ def handle_deposit_webhook(data, session):
                 if pending_approval:
                     telegram_id = pending_approval.telegram_id
                     logger.info(f"Found pending approval for telegram_id={telegram_id}")
-                        
-                        for deposit in pending_deposits:
-                            user = session.query(User).filter_by(id=deposit.user_id).first()
+                    for deposit in pending_deposits:
+                        user = session.query(User).filter_by(id=deposit.user_id).first()
                             if user:
                                 telegram_id = user.telegram_id
                                 logger.info(f"Matched deposit to user {telegram_id}")
