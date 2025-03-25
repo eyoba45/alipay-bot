@@ -228,7 +228,7 @@ def handle_deposit_webhook(data, session):
             if user:
                 usd_amount = amount / 160  # Convert from birr to USD
                 user.balance += usd_amount
-                
+
                 # Create new deposit record
                 new_deposit = PendingDeposit(
                     user_id=user.id,
@@ -237,16 +237,13 @@ def handle_deposit_webhook(data, session):
                 )
                 session.add(new_deposit)
                 session.commit()
-                
+
                 logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
-                
+
                 # Send deposit confirmation message
-                bot, create_main_menu = get_bot()
-                if bot:
-                    try:
-                        bot.send_message(
-                            telegram_id,
-                            f"""
+                try:
+                    from bot import bot
+                    notification = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT SUCCESSFUL!</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -258,11 +255,11 @@ def handle_deposit_webhook(data, session):
 <b>💳 New Balance:</b> ${user.balance:.2f}
 
 ✨ You can now start shopping on AliExpress!
-""",
-                            parse_mode='HTML'
-                        )
-                    except Exception as e:
-                        logger.error(f"Error sending deposit confirmation message: {e}")
+"""
+                    bot.send_message(telegram_id, notification, parse_mode='HTML')
+                    logger.info(f"Sent deposit confirmation to user {telegram_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send deposit notification: {e}")
 
                 return jsonify({"status": "success", "message": "Deposit processed"}), 200
 
@@ -275,9 +272,9 @@ def handle_deposit_webhook(data, session):
                     user.balance += deposit.amount
                     deposit.status = 'Approved'
                     session.commit()
-                    
+
                     logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
-                    
+
                     # Send notification
                     bot, create_main_menu = get_bot()
                     if bot:
