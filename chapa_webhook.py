@@ -243,13 +243,34 @@ def handle_deposit_webhook(data, session):
     try:
         amount = float(data.get('amount', 0))
         tx_ref = data.get('tx_ref')
-        telegram_id = None
-        
-        # Try to find user from tx_ref
-        if tx_ref:
-            pending = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
-            if pending:
-                telegram_id = pending.user.telegram_id
+        logger.info(f"Processing payment: amount={amount}, tx_ref={tx_ref}")
+
+        # Find user by tx_ref prefix pattern
+        if tx_ref and tx_ref.startswith('DEP-'):
+            # Find pending approval by tx_ref
+            pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
+            if pending_approval:
+                telegram_id = pending_approval.telegram_id
+                logger.info(f"Found pending approval for telegram_id={telegram_id}")
+            else:
+                # Try to extract telegram_id from the tx_ref
+                try:
+                    # Format is DEP-{timestamp}-{user_id_hash}
+                    parts = tx_ref.split('-')
+                    if len(parts) >= 2:
+                        # Find the most recent pending deposit
+                        pending_deposits = session.query(PendingDeposit).filter_by(
+                            status='Processing'
+                        ).order_by(PendingDeposit.created_at.desc()).all()
+                        
+                        for deposit in pending_deposits:
+                            user = session.query(User).filter_by(id=deposit.user_id).first()
+                            if user:
+                                telegram_id = user.telegram_id
+                                logger.info(f"Matched deposit to user {telegram_id}")
+                                break
+                except Exception as e:
+                    logger.error(f"Error extracting telegram_id from tx_ref: {e}")
 
         if telegram_id:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
