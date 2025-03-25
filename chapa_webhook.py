@@ -129,9 +129,9 @@ def handle_webhook(data):
         status = data.get('status')
         tx_ref = data.get('tx_ref')
         amount = float(data.get('amount', 0))
-        
+
         logger.info(f"Webhook received: status={status}, tx_ref={tx_ref}, amount={amount}")
-        
+
         # Extract telegram_id from tx_ref (DEP-{timestamp}-{hex} format)
         telegram_id = None
         session = get_session()
@@ -145,9 +145,9 @@ def handle_webhook(data):
             logger.error(f"Error extracting telegram_id: {e}")
         finally:
             safe_close_session(session)
-            
+
         logger.info(f"Extracted telegram_id: {telegram_id}")
-        
+
         # Only process if payment is successful
         if status != 'success':
             logger.warning(f"Payment not successful. Status: {status}")
@@ -170,7 +170,7 @@ def handle_webhook(data):
 
         if not pending:
             # Check by telegram_id since tx_ref might not be set
-            telegram_id = tx_data.get('metadata', {}).get('telegram_id')
+            telegram_id = data.get('metadata', {}).get('telegram_id')
             if telegram_id:
                 pending = session.query(PendingApproval).filter_by(telegram_id=telegram_id).first()
 
@@ -260,21 +260,22 @@ def handle_deposit_webhook(data, session):
                 if pending_approval:
                     telegram_id = pending_approval.telegram_id
                     logger.info(f"Found pending approval for telegram_id={telegram_id}")
+
+                    pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
                     for deposit in pending_deposits:
                         user = session.query(User).filter_by(id=deposit.user_id).first()
-                            if user:
-                                telegram_id = user.telegram_id
-                                logger.info(f"Matched deposit to user {telegram_id}")
-                                break
-                except Exception as e:
-                    logger.error(f"Error extracting telegram_id from tx_ref: {e}")
+                        if user:
+                            telegram_id = user.telegram_id
+                            logger.info(f"Matched deposit to user {telegram_id}")
+                            break
+
 
         if telegram_id:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if user:
                 # Convert amount from birr to USD
                 usd_amount = float(amount) / 160.0
-                
+
                 # Update user balance
                 current_balance = user.balance if user.balance is not None else 0
                 user.balance = current_balance + usd_amount
