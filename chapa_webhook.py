@@ -247,21 +247,19 @@ def handle_deposit_webhook(data, session):
 
         # Find user by tx_ref prefix pattern
         if tx_ref and tx_ref.startswith('DEP-'):
-            # Find pending approval by tx_ref
-            pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
-            if pending_approval:
-                telegram_id = pending_approval.telegram_id
-                logger.info(f"Found pending approval for telegram_id={telegram_id}")
+            # First try to find pending deposit by tx_ref
+            pending_deposit = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
+            if pending_deposit:
+                user = session.query(User).filter_by(id=pending_deposit.user_id).first()
+                if user:
+                    telegram_id = user.telegram_id
+                    logger.info(f"Found pending deposit for telegram_id={telegram_id}")
             else:
-                # Try to extract telegram_id from the tx_ref
-                try:
-                    # Format is DEP-{timestamp}-{user_id_hash}
-                    parts = tx_ref.split('-')
-                    if len(parts) >= 2:
-                        # Find the most recent pending deposit
-                        pending_deposits = session.query(PendingDeposit).filter_by(
-                            status='Processing'
-                        ).order_by(PendingDeposit.created_at.desc()).all()
+                # Try pending approval as fallback
+                pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
+                if pending_approval:
+                    telegram_id = pending_approval.telegram_id
+                    logger.info(f"Found pending approval for telegram_id={telegram_id}")
                         
                         for deposit in pending_deposits:
                             user = session.query(User).filter_by(id=deposit.user_id).first()
