@@ -125,15 +125,28 @@ def handle_webhook(data):
 
         # Extract transaction data
         # Extract data carefully
-        tx_data = data.get('data', {})
+        # Extract data from webhook payload
         status = data.get('status')
-        tx_status = tx_data.get('status')
-        tx_ref = tx_data.get('tx_ref') or data.get('tx_ref')
-        metadata = tx_data.get('metadata', {})
-        amount = float(tx_data.get('amount', 0))
+        tx_ref = data.get('tx_ref')
+        amount = float(data.get('amount', 0))
         
-        logger.info(f"Webhook received: status={status}, tx_status={tx_status}, tx_ref={tx_ref}, amount={amount}")
-        logger.info(f"Transaction metadata: {metadata}")
+        logger.info(f"Webhook received: status={status}, tx_ref={tx_ref}, amount={amount}")
+        
+        # Extract telegram_id from tx_ref (DEP-{timestamp}-{hex} format)
+        telegram_id = None
+        session = get_session()
+        try:
+            if tx_ref and tx_ref.startswith('DEP-'):
+                # Find pending deposit by tx_ref
+                pending = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
+                if pending:
+                    telegram_id = pending.user.telegram_id
+        except Exception as e:
+            logger.error(f"Error extracting telegram_id: {e}")
+        finally:
+            safe_close_session(session)
+            
+        logger.info(f"Extracted telegram_id: {telegram_id}")
         
         # Only process if payment is successful
         if status != 'success':
@@ -228,9 +241,15 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
 def handle_deposit_webhook(data, session):
     """Handle deposit webhook data"""
     try:
-        tx_data = data.get('data', {})
-        amount = float(tx_data.get('amount', 0))
-        telegram_id = tx_data.get('metadata', {}).get('telegram_id')
+        amount = float(data.get('amount', 0))
+        tx_ref = data.get('tx_ref')
+        telegram_id = None
+        
+        # Try to find user from tx_ref
+        if tx_ref:
+            pending = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
+            if pending:
+                telegram_id = pending.user.telegram_id
 
         if telegram_id:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
