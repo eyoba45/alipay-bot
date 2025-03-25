@@ -79,6 +79,7 @@ class PendingDeposit(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     amount = Column(Float, nullable=False)
+    tx_ref = Column(String, unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default='Processing')
 
