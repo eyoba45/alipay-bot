@@ -1,28 +1,12 @@
-
+#!/usr/bin/env python3
 import os
-import logging
 import sys
-import psycopg2
-from psycopg2 import sql
+import logging
+from database import get_connection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-def get_connection():
-    """Get a database connection"""
-    try:
-        # Get database URL from environment
-        db_url = os.environ.get('DATABASE_URL')
-        if not db_url:
-            logger.error("DATABASE_URL environment variable is not set")
-            sys.exit(1)
-
-        conn = psycopg2.connect(db_url)
-        return conn
-    except Exception as e:
-        logger.error(f"Database connection error: {str(e)}")
-        sys.exit(1)
 
 def recreate_tables():
     """Drop and recreate all tables"""
@@ -97,6 +81,7 @@ def recreate_tables():
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 amount FLOAT NOT NULL,
+                tx_ref VARCHAR(255) UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status VARCHAR(50) DEFAULT 'Processing',
                 FOREIGN KEY (user_id) REFERENCES users(id)
