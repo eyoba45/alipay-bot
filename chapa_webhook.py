@@ -176,8 +176,9 @@ def handle_webhook(data):
         session.add(new_user)
         session.delete(pending)
         session.commit()
+        logger.info(f"User {telegram_id} registered via webhook")
 
-        # Send welcome message to user
+        # Send registration success message
         bot, create_main_menu = get_bot()
         if bot:
             try:
@@ -202,20 +203,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                     reply_markup=create_main_menu(is_registered=True)
                 )
             except Exception as e:
-                logger.error(f"Error sending welcome message to user: {e}")
-
-        # Notify user
-        bot, create_main_menu = get_bot()
-        if bot:
-            try:
-                bot.send_message(
-                    telegram_id,
-                    "✅ Registration successful! Welcome to AliPay_ETH!",
-                    parse_mode='HTML',
-                    reply_markup=create_main_menu(is_registered=True)
-                )
-            except Exception as e:
-                logger.error(f"Error notifying user: {e}")
+                logger.error(f"Error sending welcome message: {e}")
 
         return jsonify({"status": "success", "message": "User registered successfully"}), 200
 
@@ -243,6 +231,18 @@ def handle_deposit_webhook(data, session):
                     deposit.status = 'Approved'
                     session.commit()
                     logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
+                    # Send deposit confirmation message
+                    bot, create_main_menu = get_bot()
+                    if bot:
+                        try:
+                            bot.send_message(
+                                user.telegram_id,
+                                f"✅ Deposit successful! Your new balance is: ${user.balance}",
+                                parse_mode='HTML'
+                            )
+                        except Exception as e:
+                            logger.error(f"Error sending deposit confirmation message: {e}")
+
                     return jsonify({"status": "success", "message": "Deposit processed"}), 200
         return jsonify({"status": "error", "message": "No matching deposit found"}), 404
     except Exception as e:
