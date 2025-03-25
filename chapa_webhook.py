@@ -221,7 +221,52 @@ def handle_deposit_webhook(data, session):
     try:
         tx_data = data.get('data', {})
         amount = float(tx_data.get('amount', 0))
+        telegram_id = tx_data.get('metadata', {}).get('telegram_id')
 
+        if telegram_id:
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
+            if user:
+                usd_amount = amount / 160  # Convert from birr to USD
+                user.balance += usd_amount
+                
+                # Create new deposit record
+                new_deposit = PendingDeposit(
+                    user_id=user.id,
+                    amount=usd_amount,
+                    status='Approved'
+                )
+                session.add(new_deposit)
+                session.commit()
+                
+                logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
+                
+                # Send deposit confirmation message
+                bot, create_main_menu = get_bot()
+                if bot:
+                    try:
+                        bot.send_message(
+                            telegram_id,
+                            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT SUCCESSFUL!</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>💰 Amount Deposited:</b>
+• {amount:,.2f} ETB
+• ${usd_amount:.2f}
+
+<b>💳 New Balance:</b> ${user.balance:.2f}
+
+✨ You can now start shopping on AliExpress!
+""",
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.error(f"Error sending deposit confirmation message: {e}")
+
+                return jsonify({"status": "success", "message": "Deposit processed"}), 200
+
+        # If no user found or telegram_id missing, check old method
         pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
         for deposit in pending_deposits:
             if abs(deposit.amount - (amount/160)) < 0.01:
@@ -230,20 +275,35 @@ def handle_deposit_webhook(data, session):
                     user.balance += deposit.amount
                     deposit.status = 'Approved'
                     session.commit()
+                    
                     logger.info(f"Deposit approved for user {user.telegram_id}, amount: ${deposit.amount}")
-                    # Send deposit confirmation message
+                    
+                    # Send notification
                     bot, create_main_menu = get_bot()
                     if bot:
                         try:
                             bot.send_message(
                                 user.telegram_id,
-                                f"✅ Deposit successful! Your new balance is: ${user.balance}",
+                                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT SUCCESSFUL!</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>💰 Amount Deposited:</b>
+• {amount:,.2f} ETB
+• ${deposit.amount:.2f}
+
+<b>💳 New Balance:</b> ${user.balance:.2f}
+
+✨ You can now start shopping on AliExpress!
+""",
                                 parse_mode='HTML'
                             )
                         except Exception as e:
                             logger.error(f"Error sending deposit confirmation message: {e}")
 
                     return jsonify({"status": "success", "message": "Deposit processed"}), 200
+
         return jsonify({"status": "error", "message": "No matching deposit found"}), 404
     except Exception as e:
         logger.error(f"Error handling deposit webhook: {e}")
