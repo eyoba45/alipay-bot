@@ -136,13 +136,21 @@ def handle_webhook(data):
         telegram_id = None
         session = get_session()
         try:
-            if tx_ref and tx_ref.startswith('DEP-'):
+            if tx_ref:
                 # Find pending deposit by tx_ref
                 pending = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
-                if pending:
+                if pending and pending.user:
                     telegram_id = pending.user.telegram_id
+                    logger.info(f"Found telegram_id {telegram_id} from pending deposit")
+                else:
+                    # Try finding in pending approvals
+                    pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
+                    if pending_approval:
+                        telegram_id = pending_approval.telegram_id
+                        logger.info(f"Found telegram_id {telegram_id} from pending approval")
         except Exception as e:
             logger.error(f"Error extracting telegram_id: {e}")
+            logger.error(traceback.format_exc())
         finally:
             safe_close_session(session)
 
@@ -246,7 +254,7 @@ def handle_deposit_webhook(data, session):
         logger.info(f"Processing payment: amount={amount}, tx_ref={tx_ref}")
 
         # Find user by tx_ref prefix pattern
-        if tx_ref and tx_ref.startswith('DEP-'):
+        if tx_ref:
             # First try to find pending deposit by tx_ref
             pending_deposit = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
             if pending_deposit:
@@ -254,20 +262,13 @@ def handle_deposit_webhook(data, session):
                 if user:
                     telegram_id = user.telegram_id
                     logger.info(f"Found pending deposit for telegram_id={telegram_id}")
-            else:
-                # Try pending approval as fallback
+            
+            # Try pending approval as fallback
+            if not telegram_id:
                 pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
                 if pending_approval:
                     telegram_id = pending_approval.telegram_id
                     logger.info(f"Found pending approval for telegram_id={telegram_id}")
-
-                    pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
-                    for deposit in pending_deposits:
-                        user = session.query(User).filter_by(id=deposit.user_id).first()
-                        if user:
-                            telegram_id = user.telegram_id
-                            logger.info(f"Matched deposit to user {telegram_id}")
-                            break
 
 
         if telegram_id:
