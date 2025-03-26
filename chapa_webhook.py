@@ -289,6 +289,32 @@ def handle_deposit_webhook(data, session):
                 user.balance = current_balance + usd_amount
                 logger.info(f"Updating balance for user {telegram_id}: {current_balance} + {usd_amount} = {user.balance}")
 
+                # Send deposit confirmation message
+                try:
+                    from bot import bot
+                    bot.send_message(
+                        telegram_id,
+                        f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>💰 DEPOSIT DETAILS:</b>
+• Amount: <code>{int(amount):,}</code> birr
+• USD Value: ${usd_amount:.2f}
+
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>${user.balance:.2f}</code>
+
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
+""",
+                        parse_mode='HTML'
+                    )
+                except Exception as e:
+                    logger.error(f"Error sending deposit confirmation: {e}")
+
                 # Create new deposit record
                 new_deposit = PendingDeposit(
                     user_id=user.id,
@@ -304,27 +330,6 @@ def handle_deposit_webhook(data, session):
                     session.rollback()
                     return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
-
-                # Send deposit confirmation message
-                try:
-                    from bot import bot
-                    notification = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT SUCCESSFUL!</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>💰 Amount Deposited:</b>
-• {amount:,.2f} ETB
-• ${usd_amount:.2f}
-
-<b>💳 New Balance:</b> ${user.balance:.2f}
-
-✨ You can now start shopping on AliExpress!
-"""
-                    bot.send_message(telegram_id, notification, parse_mode='HTML')
-                    logger.info(f"Sent deposit confirmation to user {telegram_id}")
-                except Exception as e:
-                    logger.error(f"Failed to send deposit notification: {e}")
 
                 return jsonify({"status": "success", "message": "Deposit processed"}), 200
 
