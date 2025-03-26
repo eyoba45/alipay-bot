@@ -289,12 +289,23 @@ def handle_deposit_webhook(data, session):
                 user.balance = current_balance + usd_amount
                 logger.info(f"Updating balance for user {telegram_id}: {current_balance} + {usd_amount} = {user.balance}")
 
-                # Send deposit confirmation message
+                # Create approved deposit record
+                new_deposit = PendingDeposit(
+                    user_id=user.id,
+                    amount=usd_amount,
+                    status='Approved'
+                )
                 try:
-                    from bot import bot
-                    bot.send_message(
-                        telegram_id,
-                        f"""
+                    session.add(new_deposit)
+                    session.commit()
+                    logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
+
+                    # Send deposit confirmation message
+                    try:
+                        from bot import bot
+                        bot.send_message(
+                            telegram_id,
+                            f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -310,26 +321,15 @@ def handle_deposit_webhook(data, session):
 
 <i>Browse AliExpress and submit your orders now!</i>
 """,
-                        parse_mode='HTML'
-                    )
-                except Exception as e:
-                    logger.error(f"Error sending deposit confirmation: {e}")
-
-                # Create new deposit record
-                new_deposit = PendingDeposit(
-                    user_id=user.id,
-                    amount=usd_amount,
-                    status='Approved'
-                )
-                try:
-                    session.add(new_deposit)
-                    session.commit()
-                    logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
+                            parse_mode='HTML'
+                        )
+                        logger.info(f"Sent deposit confirmation to user {telegram_id}")
+                    except Exception as e:
+                        logger.error(f"Error sending deposit confirmation: {e}")
                 except Exception as e:
                     logger.error(f"Database transaction error: {e}")
                     session.rollback()
                     return jsonify({"status": "error", "message": "Database transaction failed"}), 500
-
 
                 return jsonify({"status": "success", "message": "Deposit processed"}), 200
 
