@@ -258,6 +258,8 @@ def handle_deposit_webhook(data, session):
         tx_ref = data.get('tx_ref')
         logger.info(f"Processing payment: amount={amount}, tx_ref={tx_ref}")
 
+        telegram_id = None
+
         # Find user by tx_ref prefix pattern
         if tx_ref:
             # First try to find pending deposit by tx_ref
@@ -268,7 +270,7 @@ def handle_deposit_webhook(data, session):
                     telegram_id = user.telegram_id
                     logger.info(f"Found pending deposit for telegram_id={telegram_id}")
 
-            # Try pending approval as fallback
+            # Try pending approval as fallback if no telegram_id found
             if not telegram_id:
                 pending_approval = session.query(PendingApproval).filter_by(tx_ref=tx_ref).first()
                 if pending_approval:
