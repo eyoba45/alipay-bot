@@ -215,7 +215,7 @@ def get_phone(message):
         registration_data[chat_id]['telegram_id'] = chat_id
         user_states[chat_id] = 'waiting_for_payment'
 
-         # Move imports here to avoid circular imports
+        # Move imports here to avoid circular imports
         from chapa_payment import generate_registration_payment
 
         # Create a pending approval
@@ -428,7 +428,7 @@ Click the button below to securely pay the registration fee:
             try:
                 session = get_session()
                 existing_user = session.query(User).filter_by(telegram_id=chat_id).first()
-                
+
                 if existing_user:
                     logger.info(f"User {chat_id} is already registered")
                     bot.send_message(
@@ -443,7 +443,7 @@ Your account is active and ready to use.
                     )
                     safe_close_session(session)
                     return
-                
+
                 # Check for existing pending approval
                 existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
                 if existing_pending:
@@ -468,7 +468,7 @@ Your account is active and ready to use.
 
                 # Check if there's an existing pending approval
                 existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
-                
+
                 # If not, create a new user directly (auto-approve)
                 if not existing_pending:
                     # Create new user
@@ -497,7 +497,7 @@ Your account is active and ready to use.
                     session.delete(existing_pending)
                     session.commit()
                     logger.info(f"Converted pending approval to full user for {chat_id}")
-                
+
                 # Send notification to admin
                 if ADMIN_ID:
                     admin_msg = f"""
@@ -520,7 +520,7 @@ User has been automatically registered.
                         bot.send_photo(ADMIN_ID, file_id, caption="📸 Auto-approved Registration Payment")
                     except Exception as admin_error:
                         logger.error(f"Error notifying admin about auto-approval: {admin_error}")
-                
+
                 break
             except Exception as db_error:
                 logger.error(f"Database error (attempt {retry_count+1}/{max_retries}): {db_error}")
@@ -552,7 +552,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                 message_id=immediate_ack.message_id,
                 parse_mode='HTML'
             )
-            
+
             # Also send the main menu
             bot.send_message(
                 chat_id,
@@ -1066,7 +1066,7 @@ def process_custom_amount(message):
             usd_amount = birr_amount / 160
 
         # Check if amount is reasonable
-        if birr_amount < 1:
+        if birr_amount < 100:
             bot.send_message(
                 chat_id,
                 """
@@ -1132,7 +1132,7 @@ def handle_deposit_screenshot(message):
 
         # Auto-approve: Update user balance immediately
         user.balance += deposit_amount
-        
+
         # Create approved deposit record
         pending_deposit = PendingDeposit(
             user_id=user.id,
@@ -1141,7 +1141,7 @@ def handle_deposit_screenshot(message):
         )
         session.add(pending_deposit)
         session.commit()
-        
+
         logger.info(f"Auto-approved deposit of ${deposit_amount} for user {chat_id}")
 
         # Notify admin about auto-approved deposit
@@ -1445,6 +1445,10 @@ Please try again or press 'Back to Main Menu' to cancel.
         if ADMIN_ID:
             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
 
+        # Calculate remaining balance
+        remaining_balance = user.balance
+        birr_balance = int(remaining_balance * 160)  # Convert to birr
+
         # Notify user about order submission with enhanced beautiful design
         bot.edit_message_text(
             f"""
@@ -1459,16 +1463,24 @@ Please try again or press 'Back to Main Menu' to cancel.
 • Status: <b>Processing</b>
 • Time: {datetime.now().strftime('%I:%M %p, %d %b %Y')}
 
-<b>🔍 WHAT HAPPENS NEXT?</b>
-1️⃣ Our team will process your order immediately
-2️⃣ You'll receive confirmation when approved
-3️⃣ Your order ID will be generated
-4️⃣ Tracking details will be provided when shipped
+<b>💰 ACCOUNT BALANCE:</b>
+• Remaining: <code>{birr_balance:,}</code> birr (${remaining_balance:.2f})
 
-<b>📱 STAY UPDATED:</b>
-Use "<b>🔍 Track Order</b>" button anytime to check your order status!
+<b>🔍 TRACK YOUR ORDER:</b>
+1️⃣ Click "<b>🔍 Track Order</b>" in menu
+2️⃣ Enter Order #: <code>{new_order_number}</code>
 
-<i>Thank you for shopping with AliPay_ETH - Your Ethiopian gateway to AliExpress!</i>
+<b>📱 ORDER UPDATES:</b>
+• Processing ⏳
+• Confirmation ✅
+• Shipping 🚚
+• Delivery 📦
+
+<i>We'll notify you of all status changes!</i>
+
+<b>Need help?</b> Use ❓ Help Center anytime!
+
+<i>Thank you for shopping with AliPay_ETH!</i>
 """,
             chat_id=chat_id,
             message_id=processing_msg.message_id,
@@ -2417,7 +2429,7 @@ def check_subscription(message):
 
         # Calculate subscription status
         now = datetime.utcnow()
-        
+
         # Create attractive subscription renewal buttons first - fixed markup outside conditional
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -2426,7 +2438,7 @@ def check_subscription(message):
         markup.add(
             InlineKeyboardButton("🎁 View Premium Benefits", callback_data="sub_benefits")
         )
-        
+
         # Handle subscription date logic
         if user.subscription_date:
             days_passed = (now - user.subscription_date).days
@@ -2487,7 +2499,7 @@ def check_subscription(message):
 
         # Send the message with markup - moved outside conditionals
         bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
-        
+
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
         logger.error(traceback.format_exc())  # Add traceback for better debugging
@@ -2507,7 +2519,7 @@ def handle_subscription_renewal(call):
     try:
         # First acknowledge the callback to prevent timeout
         bot.answer_callback_query(call.id, "Processing your subscription renewal...")
-        
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if not user:
@@ -2535,7 +2547,7 @@ Please use the 💰 Deposit option to add funds.
 
         try:
             session.commit()
-            
+
             # Send a new message instead of editing the old one to avoid errors
             bot.send_message(
                 chat_id,
