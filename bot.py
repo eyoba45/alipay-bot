@@ -2644,19 +2644,73 @@ def handle_subscription_renewal(call):
             bot.send_message(chat_id, "User not found. Please try again or contact support.")
             return
 
-        # Check if user has enough balance for subscription
-        if user.balance is None or user.balance < 1.0:
+        # Import Chapa payment module
+        from chapa_payment import generate_registration_payment
+
+        # Create user data dict for payment
+        user_data = {
+            'telegram_id': chat_id,
+            'name': user.name,
+            'phone': user.phone,
+            'is_subscription': True
+        }
+
+        # Generate payment link
+        payment_link = generate_registration_payment(user_data)
+
+        if payment_link and 'checkout_url' in payment_link:
+            # Create inline keyboard with payment button
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
+
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Insufficient Balance</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-You need at least $1.00 in your account to renew your subscription.
-Please use the 💰 Deposit option to add funds.
+• Amount: <code>150</code> birr ($1.00)
+• Duration: 1 month
+• Instant activation
+
+Click below to pay securely with:
+• TeleBirr
+• CBE Birr
+• HelloCash
+• Credit/Debit Cards
+""",
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+        else:
+            # Fallback to manual payment
+            bot.send_message(
+                chat_id,
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Amount: <code>150</code> birr ($1.00)
+
+<b>Payment Methods:</b>
+
+🏦 <b>Commercial Bank (CBE)</b>
+• Account: <code>1000547241316</code>
+• Name: <code>Eyob Mulugeta</code>
+
+📱 <b>TeleBirr</b>
+• Number: <code>0986693062</code>
+• Name: <code>Eyob Mulugeta</code>
+
+Send payment screenshot below after payment.
 """,
                 parse_mode='HTML'
             )
-            return
+            
+            # Set state to wait for subscription payment
+            user_states[chat_id] = 'waiting_for_subscription_payment'
 
         # Deduct subscription fee and update date
         user.balance -= 1.0
