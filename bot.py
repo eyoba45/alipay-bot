@@ -1864,8 +1864,7 @@ def set_order_amount(message):
         safe_close_session(session)
 
 @bot.message_handler(commands=['updateorder'])
-def handle_order_admin_decision(message):
-    """Handle comprehensive order status updates from admin"""
+def handle_order_admin_decision(message):"""Handle comprehensive order status updates from admin"""
     chat_id = message.chat.id
 
     # Check if user is admin
@@ -2205,7 +2204,6 @@ if __name__ == "__main__":
 def track_order(message):
     """Handle track order button"""
     chat_id = message.chat.id
-    session = None
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
@@ -2218,13 +2216,10 @@ def track_order(message):
             )
             return
 
-        # Set state to wait for order number
         user_states[chat_id] = 'waiting_for_order_number'
-
-        # Create back button
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(KeyboardButton('Back to Main Menu'))
-        
+
         bot.send_message(
             chat_id,
             """
@@ -2243,8 +2238,9 @@ Or press 'Back to Main Menu' to return.
     except Exception as e:
         logger.error(f"Error in track order: {e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
+        if 'session' in locals():
+            safe_close_session(session)
+    
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
 def process_order_number(message):
@@ -2276,7 +2272,7 @@ def process_order_number(message):
     try:
         order_number = int(message.text.strip())
         session = get_session()
-        
+
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
 
@@ -2311,7 +2307,7 @@ Please check the number and try again.
 <b>Order Information:</b>
 • Order #: <code>{order.order_number}</code>
 • Status: <b>{order.status.upper()}</b>
-• Amount: ${order.amount:.2f}
+• Amount: ${order.amount:.2f if order.amount else 0.00}
 {f"• Tracking #: <code>{order.tracking_number}</code>" if order.tracking_number else ""}
 {tracking_info}
 
@@ -2337,186 +2333,6 @@ Please check the number and try again.
         )
     except Exception as e:
         logger.error(f"Error processing order number: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
-
-@bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
-def order_status(message):
-    """Handle order status button"""
-    chat_id = message.chat.id
-    session = None
-    try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.send_message(
-                chat_id,
-                "⚠️ Please register first to check orders!",
-                reply_markup=create_main_menu(is_registered=False)
-            )
-            return
-
-        # Get user's orders
-        orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
-
-        if not orders:
-            bot.send_message(
-                chat_id,
-                """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>ORDER HISTORY</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-No orders found. Start shopping to see your orders here!
-
-Use 📦 <b>Submit Order</b> to place your first order.
-""",
-                parse_mode='HTML',
-                reply_markup=create_main_menu(is_registered=True)
-            )
-            return
-
-        # Create order status message
-        status_msg = """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>YOUR ORDERS</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"""
-
-        for order in orders:
-            tracking_info = f"\n• Tracking: <code>{order.tracking_number}</code>" if order.tracking_number else ""
-            tracking_link = f"\n• <a href='https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}'>Track Package</a>" if order.tracking_number else ""
-            
-            status_msg += f"""
-📦 <b>Order #{order.order_number}</b>
-• Status: <b>{order.status.upper()}</b>
-• Amount: ${order.amount:.2f if order.amount else 0.00}{tracking_info}{tracking_link}
-• Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
-━━━━━━━━━━━━━━━━━━━━━━━\n"""
-
-        bot.send_message(
-            chat_id,
-            status_msg,
-            parse_mode='HTML',
-            disable_web_page_preview=True,
-            reply_markup=create_main_menu(is_registered=True)
-        )
-
-    except Exception as e:
-        logger.error(f"Error in order status: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
-
-@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
-def check_subscription(message):
-    """Check user's subscription status"""
-    chat_id = message.chat.id
-    session = None
-    try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.send_message(
-                chat_id,
-                "⚠️ Please register first to check subscription!",
-                reply_markup=create_main_menu(is_registered=False)
-            )
-            return
-
-        # Calculate subscription status
-        now = datetime.utcnow()
-        if user.subscription_date:
-            days_passed = (now - user.subscription_date).days
-            days_remaining = 30 - days_passed
-            if days_remaining > 0:
-                status = f"Active ({days_remaining} days remaining)"
-                status_emoji = "✅"
-            else:
-                status = "Expired"
-                status_emoji = "⚠️"
-        else:
-            status = "Not Active"
-            status_emoji = "❌"
-
-        # Create subscription markup
-        markup = InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            InlineKeyboardButton("💫 Renew 1 Month ($1)", callback_data="renew_1"),
-            InlineKeyboardButton("🎁 View Benefits", callback_data="sub_benefits")
-        )
-
-        bot.send_message(
-            chat_id,
-            f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✨ <b>SUBSCRIPTION STATUS</b> ✨  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-{status_emoji} <b>Status:</b> {status}
-💎 <b>Monthly Fee:</b> $1.00 (150 ETB)
-
-<b>Premium Benefits:</b>
-• 🛍️ Unlimited shopping
-• 💰 Special discounts
-• 🚚 Priority shipping
-• 👨‍💼 Premium support
-
-Click below to manage your subscription!
-""",
-            parse_mode='HTML',
-            reply_markup=markup
-        )
-
-    except Exception as e:
-        logger.error(f"Error checking subscription: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
-
-@bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
-def track_order(message):
-    """Handle track order button"""
-    chat_id = message.chat.id
-    session = None
-    try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.send_message(
-                chat_id,
-                "⚠️ Please register first to track orders!",
-                reply_markup=create_main_menu(is_registered=False)
-            )
-            return
-
-        # Set state to wait for order number
-        user_states[chat_id] = 'waiting_for_order_number'
-
-        # Create back button
-        markup = ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(KeyboardButton('Back to Main Menu'))
-        
-        bot.send_message(
-            chat_id,
-            """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔍 <b>TRACK YOUR ORDER</b> 🔍  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Please enter your order number.
-Example: <code>1</code>, <code>2</code>, etc.
-
-Or press 'Back to Main Menu' to return.
-""",
-            parse_mode='HTML',
-            reply_markup=markup
-        )
-    except Exception as e:
-        logger.error(f"Error in track order: {e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
@@ -2697,7 +2513,7 @@ def handle_subscription_renewal(call):
 
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.send_message(chat_id, "User not found. Please try again or contact support.")
             return
