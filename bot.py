@@ -2476,6 +2476,116 @@ Click below to manage your subscription!
     finally:
         safe_close_session(session)
 
+@bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
+def track_order(message):
+    """Handle track order button"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+
+        if not user:
+            bot.send_message(
+                chat_id,
+                "⚠️ Please register first to track orders!",
+                reply_markup=create_main_menu(is_registered=False)
+            )
+            return
+
+        # Set state to wait for order number
+        user_states[chat_id] = 'waiting_for_order_number'
+
+        # Create back button
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(KeyboardButton('Back to Main Menu'))
+        
+        bot.send_message(
+            chat_id,
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔍 <b>TRACK YOUR ORDER</b> 🔍  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Please enter your order number.
+Example: <code>1</code>, <code>2</code>, etc.
+
+Or press 'Back to Main Menu' to return.
+""",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+    except Exception as e:
+        logger.error(f"Error in track order: {e}")
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
+def order_status(message):
+    """Handle order status button"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+
+        if not user:
+            bot.send_message(
+                chat_id,
+                "⚠️ Please register first to check orders!",
+                reply_markup=create_main_menu(is_registered=False)
+            )
+            return
+
+        # Get user's orders
+        orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
+
+        if not orders:
+            bot.send_message(
+                chat_id,
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>ORDER HISTORY</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+No orders found. Start shopping to see your orders here!
+
+Use 📦 <b>Submit Order</b> to place your first order.
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            return
+
+        # Create order status message
+        status_msg = """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>YOUR ORDERS</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"""
+
+        for order in orders:
+            status_msg += f"""
+📦 <b>Order #{order.order_number}</b>
+• Status: <b>{order.status.upper()}</b>
+• Amount: ${order.amount:.2f if order.amount else 0.00}
+• Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
+━━━━━━━━━━━━━━━━━━━━━━━\n"""
+
+        bot.send_message(
+            chat_id,
+            status_msg,
+            parse_mode='HTML',
+            reply_markup=create_main_menu(is_registered=True)
+        )
+
+    except Exception as e:
+        logger.error(f"Error in order status: {e}")
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
 def check_subscription(message):
     """Check user's subscription status with enhanced visual appeal"""
     chat_id = message.chat.id
