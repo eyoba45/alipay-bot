@@ -1778,8 +1778,8 @@ User has been notified.
     finally:
         safe_close_session(session)
 
-            # Generate a dummy order ID if none exists (can be set manually later)
-          if not getattr(order, 'order_id', None):
+            # Generate a dummy order ID if it doesn't exist or is empty
+        if not getattr(order, 'order_id', None):
             # Format: AE-{user_id}-{order_number}-{random numbers}
             import random
             random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
