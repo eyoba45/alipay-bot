@@ -2308,15 +2308,14 @@ def handle_subscription_renewal(call):
     chat_id = call.message.chat.id
     session = None
     try:
-        try:
-            # First acknowledge the callback to prevent timeout
-            bot.answer_callback_query(call.id, "Processing your subscription renewal...")
+        # First acknowledge the callback to prevent timeout
+        bot.answer_callback_query(call.id, "Processing your subscription renewal...")
 
-            session = get_session()
-            user = session.query(User).filter_by(telegram_id=chat_id).first()
-            if not user:
-                bot.send_message(chat_id, "User not found. Please try again or contact support.")
-                return
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        if not user:
+            bot.send_message(chat_id, "User not found. Please try again or contact support.")
+            return
 
             # Import Chapa payment module
             from chapa_payment import generate_registration_payment
