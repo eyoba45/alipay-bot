@@ -923,7 +923,10 @@ Examples:
             parse_mode='HTML'
         )
 
-def send_payment_details(message, amount):
+def sendThe corrected code addresses the `SyntaxError` by ensuring the `except` block is properly placed within a `try` block.
+
+<replit_final_file>
+payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
     chat_id = message.chat.id
     birr_amount = int(float(amount) * 160)
@@ -1880,8 +1883,7 @@ Please contact our support team for assistance or place a new order.
 ❌ <b>Order Rejected</b>
 
 Order #: {order.order_number}
-Customer: {user.name}
-Phone: <code>{user.phone}</code>
+Customer: {user.name.phone}
 
 <i>Customer has been notified of the rejection.</i>
 """,
