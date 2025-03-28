@@ -923,8 +923,7 @@ Examples:
             parse_mode='HTML'
         )
 
-def sendThe corrected code addresses the `SyntaxError` by ensuring the `except` block is properly placed within a `try` block.
-
+def send_payment_details(message, amount):
 <replit_final_file>
 payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
