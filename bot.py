@@ -924,6 +924,8 @@ Examples:
         )
 
 def send_payment_details(message, amount):
+    """Send payment details to user"""
+    payment_details(message, amount)  # Call the existing payment_details function
 
 def payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
