@@ -1778,7 +1778,7 @@ User has been notified.
         safe_close_session(session)
 
             # Generate a dummy order ID if none exists (can be set manually later)
-             if not order.order_id:
+         if not order.order_id:
             # Format: AE-{user_id}-{order_number}-{random numbers}
             import random
             random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
