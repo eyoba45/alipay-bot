@@ -915,13 +915,7 @@ Examples:
         # Remove $ and convert to float
         amount = float(amount_text.replace('$', ''))
         # Use dollar amount for payment
-        send_payment_details(message, amount)
-    else:
-        bot.send_message(
-            message.chat.id,
-            "❌ Invalid amount format. Please try again.",
-            parse_mode='HTML'
-        )
+        send_payment_details(message, amount)  # Call the existing payment_details function
 
 def send_payment_details(message, amount):
     """Send payment details to user"""
@@ -1881,12 +1875,12 @@ Please contact our support team for assistance or place a new order.
             # Update admin message
             bot.edit_message_text(
                 f"""
-❌ <b>Order Rejected</b>
+❌ **Order Rejected**
 
 Order #: {order.order_number}
 Customer: {user.name.phone}
 
-<i>Customer has been notified of the rejection.</i>
+*Customer has been notified of the rejection.*
 """,
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
@@ -2012,7 +2006,7 @@ We couldn't find Order #{order_number} in your account.
 • Make sure the order belongs to your account
 • Try again with a different order number
 
-<i>Need help? Use the ❓ Help Center button.</i>
+*Need help? Use the ❓ Help Center button.*
 """,
                 chat_id=chat_id,
                 message_id=processing_msg.message_id,
@@ -2057,16 +2051,16 @@ We couldn't find Order #{order_number} in your account.
         else:
             tracking_info += """
 <b>📱 TRACKING INFORMATION</b>
-• Tracking #: <i>Not available yet</i>
-• <i>You'll be notified when your package ships</i>
+• Tracking #: *Not available yet*
+• *You'll be notified when your package ships*
 """
 
         tracking_info += f"""
 <b>🔗 PRODUCT INFORMATION</b>
 • <a href="{order.product_link}">View Product</a>
 
-<i>Your order status will be updated automatically.
-Please contact support if you have any questions.</i>
+*Your order status will be updated automatically.
+Please contact support if you have any questions.*
 """
 
         # Add inline keyboard for tracking link if available
@@ -2149,7 +2143,7 @@ def help_center(message):
 <b>💎 PREMIUM SUPPORT 💎</b>
 Our dedicated team is available 24/7 to assist you with all your shopping needs! Click the buttons below for instant support.
 
-<i>We're committed to making your AliExpress shopping experience seamless and enjoyable!</i>
+*We're committed to making your AliExpress shopping experience seamless and enjoyable!*
 """
     bot.send_message(message.chat.id, help_msg, parse_mode='HTML', reply_markup=help_markup)
 
@@ -2345,7 +2339,7 @@ Great news! Your order is on its way to you!
 You can check your order status anytime using the
 "🔍 Track Order" button.
 
-<i>Thank you for shopping with AliPay_ETH!</i>
+*Thank you for shopping with AliPay_ETH!*
 """
             else:  # delivered
                 notification = f"""
@@ -2363,7 +2357,7 @@ Your order has been marked as delivered!
 We hope you enjoy your purchase!
 Please let us know if you have any questions.
 
-<i>Thank you for shopping with AliPay_ETH!</i>
+*Thank you for shopping with AliPay_ETH!*
 """
 
             # Send the notification to customer
@@ -2600,7 +2594,7 @@ def check_subscription(message):
 • 🎯 Priority order processing
 • 🌟 Premium customer support
 
-<i>Click below to renew your membership!</i>
+*Click below to renew your membership!*
 """
         else:
             # No subscription date, but still show renewal options
@@ -2621,7 +2615,7 @@ def check_subscription(message):
 • 🎯 Priority order processing
 • 🌟 Premium customer support
 
-<i>Click below to activate your membership!</i>
+*Click below to activate your membership!*
 """
 
         # Send the message with markup - moved outside conditionals
@@ -2644,38 +2638,38 @@ def handle_subscription_renewal(call):
     chat_id = call.message.chat.id
     session = None
     try:
-    try:
-        # First acknowledge the callback to prevent timeout
-        bot.answer_callback_query(call.id, "Processing your subscription renewal...")
+        try:
+            # First acknowledge the callback to prevent timeout
+            bot.answer_callback_query(call.id, "Processing your subscription renewal...")
 
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-        if not user:
-            bot.send_message(chat_id, "User not found. Please try again or contact support.")
-            return
+            session = get_session()
+            user = session.query(User).filter_by(telegram_id=chat_id).first()
+            if not user:
+                bot.send_message(chat_id, "User not found. Please try again or contact support.")
+                return
 
-        # Import Chapa payment module
-        from chapa_payment import generate_registration_payment
+            # Import Chapa payment module
+            from chapa_payment import generate_registration_payment
 
-        # Create user data dict for payment
-        user_data = {
-            'telegram_id': chat_id,
-            'name': user.name,
-            'phone': user.phone,
-            'is_subscription': True
-        }
+            # Create user data dict for payment
+            user_data = {
+                'telegram_id': chat_id,
+                'name': user.name,
+                'phone': user.phone,
+                'is_subscription': True
+            }
 
-        # Generate payment link
-        payment_link = generate_registration_payment(user_data)
+            # Generate payment link
+            payment_link = generate_registration_payment(user_data)
 
-        if payment_link and 'checkout_url' in payment_link:
-            # Create inline keyboard with payment button
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
+            if payment_link and 'checkout_url' in payment_link:
+                # Create inline keyboard with payment button
+                markup = InlineKeyboardMarkup()
+                markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
 
-            bot.send_message(
-                chat_id,
-                """
+                bot.send_message(
+                    chat_id,
+                    """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -2690,14 +2684,14 @@ Click below to pay securely with:
 • HelloCash
 • Credit/Debit Cards
 """,
-                parse_mode='HTML',
-                reply_markup=markup
-            )
-        else:
-            # Fallback to manual payment
-            bot.send_message(
-                chat_id,
-                """
+                    parse_mode='HTML',
+                    reply_markup=markup
+                )
+            else:
+                # Fallback to manual payment
+                bot.send_message(
+                    chat_id,
+                    """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -2716,24 +2710,24 @@ Amount: <code>150</code> birr ($1.00)
 
 Send payment screenshot below after payment.
 """,
-                parse_mode='HTML'
-            )
+                    parse_mode='HTML'
+                )
 
-            # Set state to wait for subscription payment
-            user_states[chat_id] = 'waiting_for_subscription_payment'
+                # Set state to wait for subscription payment
+                user_states[chat_id] = 'waiting_for_subscription_payment'
 
-        # Deduct subscription fee and update date
-        user.balance -= 1.0
-        user.subscription_date = datetime.utcnow()
-        user.last_subscription_reminder = None  # Reset reminder
+            # Deduct subscription fee and update date
+            user.balance -= 1.0
+            user.subscription_date = datetime.utcnow()
+            user.last_subscription_reminder = None  # Reset reminder
 
-        try:
-            session.commit()
+            try:
+                session.commit()
 
-            # Send a new message instead of editing the old one to avoid errors
-            bot.send_message(
-                chat_id,
-                f"""
+                # Send a new message instead of editing the old one to avoid errors
+                bot.send_message(
+                    chat_id,
+                    f"""
 ✅ <b>Subscription Renewed!</b>
 
 Your subscription has been renewed for 1 month.
@@ -2742,20 +2736,20 @@ Current balance: ${user.balance:.2f}
 
 Thank you for using AliPay_ETH!
 """,
-                parse_mode='HTML'
-            )
-        except Exception as commit_error:
-            logger.error(f"Error committing subscription renewal: {commit_error}")
+                    parse_mode='HTML'
+                )
+            except Exception as commit_error:
+                logger.error(f"Error committing subscription renewal: {commit_error}")
+                logger.error(traceback.format_exc())
+                session.rollback()
+                bot.send_message(chat_id, "Database error, please try again.")
+                return
+        except Exception as e:
+            logger.error(f"Error renewing subscription: {e}")
             logger.error(traceback.format_exc())
-            session.rollback()
-            bot.send_message(chat_id, "Database error, please try again.")
-            return
-    except Exception as e:
-        logger.error(f"Error renewing subscription: {e}")
-        logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
-    finally:
-        safe_close_session(session)
+            bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
+        finally:
+            safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data == "sub_benefits")
 def handle_subscription_benefits(call):
@@ -2784,7 +2778,7 @@ def handle_subscription_benefits(call):
 • 🎁 <b>Referral Bonuses</b>
   Earn rewards for inviting friends
 
-<i>All this for just $1/month!</i>
+*All this for just $1/month!*
 """
         bot.answer_callback_query(call.id)
         bot.send_message(
