@@ -2421,6 +2421,13 @@ Thank you for using AliPay_ETH!
         finally:
             safe_close_session(session)
 
+except Exception as e:
+        logger.error(f"Error renewing subscription: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
+    finally:
+        safe_close_session(session)
+
 @bot.callback_query_handler(func=lambda call: call.data == "sub_benefits")
 def handle_subscription_benefits(call):
     """Handle subscription benefits button"""
