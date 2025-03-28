@@ -2421,7 +2421,26 @@ Thank you for using AliPay_ETH!
         finally:
             safe_close_session(session)
 
-except Exception as e:
+try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(chat_id, "User not found. Please try again or contact support.")
+            return
+            
+        # Process subscription renewal
+        user.subscription_date = datetime.utcnow()
+        user.last_subscription_reminder = None
+        session.commit()
+        
+        bot.send_message(
+            chat_id,
+            "✅ Subscription renewed successfully!",
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
         logger.error(f"Error renewing subscription: {e}")
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
