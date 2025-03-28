@@ -1778,19 +1778,19 @@ User has been notified.
         safe_close_session(session)
 
             # Generate a dummy order ID if none exists (can be set manually later)
-            if not order.order_id:
-                # Format: AE-{user_id}-{order_number}-{random numbers}
-                import random
-                random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
-                order.order_id = f"AE-{user.id}-{order.order_number}-{random_suffix}"
+             if not order.order_id:
+            # Format: AE-{user_id}-{order_number}-{random numbers}
+            import random
+            random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
+            order.order_id = f"AE-{user.id}-{order.order_number}-{random_suffix}"
 
-            # Deduct order amount from user balance if amount is set
-            if order.amount and order.amount > 0:
-                if user.balance >= order.amount:
-                    user.balance -= order.amount
-                    logger.info(f"Deducted ${order.amount} from user {user.id}'s balance for order {order.id}")
-                else:
-                    logger.warning(f"Insufficient balance: User {user.id} has ${user.balance} but order {order.id} costs ${order.amount}")
+        # Deduct order amount from user balance if amount is set
+        if order.amount and order.amount > 0:
+            if user.balance >= order.amount:
+                user.balance -= order.amount
+                logger.info(f"Deducted ${order.amount} from user {user.id}'s balance for order {order.id}")
+            else:
+                logger.warning(f"Insufficient balance: User {user.id} has ${user.balance} but order {order.id} costs ${order.amount}")
 
             session.commit()
 
