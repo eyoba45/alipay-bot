@@ -1651,8 +1651,26 @@ def handle_order_admin_decision(call):
         user = session.query(User).filter_by(id=order.user_id).first()
 
         if action == 'process':
-            # Update order status
-            order.status = 'Confirmed'
+            # Ask for order details
+            bot.answer_callback_query(call.id, "Please provide order details")
+            msg = bot.send_message(
+                call.message.chat.id,
+                """
+Please provide the following order details:
+
+1. AliExpress Order ID
+2. Tracking Number (if available)
+3. Product Price (in USD)
+
+Format: orderid|tracking|price
+Example: 8675309|LY123456789CN|25.99
+
+Enter 'cancel' to cancel processing.
+""",
+                parse_mode='HTML'
+            )
+            bot.register_next_step_handler(msg, process_order_details, order.id, user.telegram_id)
+            return
 
             # Generate a dummy order ID if none exists (can be set manually later)
             if not order.order_id:
@@ -1871,6 +1889,106 @@ def process_order_tracking(message):
                 reply_markup=create_main_menu(is_registered=False)
             )
             return
+
+
+def process_order_details(message, order_id, user_telegram_id):
+    """Process order details provided by admin"""
+    session = None
+    try:
+        if message.text.lower() == 'cancel':
+            bot.reply_to(message, "Order processing cancelled.")
+            return
+
+        # Parse order details
+        try:
+            order_details = message.text.strip().split('|')
+            if len(order_details) != 3:
+                raise ValueError("Invalid format")
+            
+            aliexpress_id, tracking, price = order_details
+            price = float(price)
+            
+        except (ValueError, IndexError):
+            bot.reply_to(message, "Invalid format. Please try again with format: orderid|tracking|price")
+            return
+
+        session = get_session()
+        order = session.query(Order).filter_by(id=order_id).first()
+        user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
+
+        if not order or not user:
+            bot.reply_to(message, "Order or user not found.")
+            return
+
+        # Check if user has sufficient balance
+        if user.balance < price:
+            bot.reply_to(message, f"❌ User has insufficient balance (${user.balance:.2f}) for order amount (${price:.2f})")
+            return
+
+        # Update order details
+        order.order_id = aliexpress_id
+        order.tracking_number = tracking
+        order.amount = price
+        order.status = 'Confirmed'
+
+        # Deduct amount from user balance
+        user.balance -= price
+        session.commit()
+
+        # Notify user with complete order details
+        bot.send_message(
+            user_telegram_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>ORDER CONFIRMED!</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🎁 <b>Congratulations!</b> Your order has been processed!
+
+📦 <b>Order Details:</b>
+• Order #: <code>{order.order_number}</code>
+• AliExpress ID: <code>{aliexpress_id}</code>
+• Amount: <code>${price:.2f}</code>
+• Tracking #: <code>{tracking}</code>
+• Status: <b>Confirmed</b>
+
+💰 <b>Account Update:</b>
+• Previous Balance: <code>${(user.balance + price):.2f}</code>
+• Order Amount: <code>${price:.2f}</code>
+• New Balance: <code>${user.balance:.2f}</code>
+
+🔍 <b>Track Your Order:</b>
+Use the "🔍 Track Order" button anytime to get 
+the latest status and tracking information!
+
+<i>Thank you for shopping with AliPay_ETH!</i>
+""",
+            parse_mode='HTML'
+        )
+
+        # Confirm to admin
+        bot.reply_to(
+            message,
+            f"""
+✅ <b>Order Processed Successfully!</b>
+
+Order #: {order.order_number}
+AliExpress ID: <code>{aliexpress_id}</code>
+Tracking #: <code>{tracking}</code>
+Amount: ${price:.2f}
+New Balance: ${user.balance:.2f}
+
+User has been notified.
+""",
+            parse_mode='HTML'
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing order details: {e}")
+        logger.error(traceback.format_exc())
+        bot.reply_to(message, "❌ Error processing order details. Please try again.")
+    finally:
+        safe_close_session(session)
 
         # Find the order
         order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
