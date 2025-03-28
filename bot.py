@@ -1868,7 +1868,8 @@ def handle_order_admin_decision(message):
     """Handle comprehensive order status updates from admin"""
     chat_id = message.chat.id
 
-    # Check if user is adminif chat_id != ADMIN_ID:
+    # Check if user is admin
+    if chat_id != ADMIN_ID:
         logger.error(f"Unauthorized /updateorder attempt from user {chat_id}. Admin ID is {ADMIN_ID}")
         return
 
