@@ -924,8 +924,8 @@ Examples:
         )
 
 def send_payment_details(message, amount):
-<replit_final_file>
-payment_details(message, amount):
+
+def payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
     chat_id = message.chat.id
     birr_amount = int(float(amount) * 160)
