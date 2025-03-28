@@ -910,7 +910,7 @@ Examples:
 
     # Extract amount from button text - handles format like "$5 (800 birr)"
     if '(' in message.text and ')' in message.text:
-        # Extract dollar amount from the start of the string
+        #        # Extract dollar amount from the start of the string
         amount_text = message.text.split('(')[0].strip()
         # Remove $ and convert to float
         amount = float(amount_text.replace('$', ''))
@@ -1854,7 +1854,7 @@ def set_order_amount(message):
         order.amount = amount
         session.commit()
 
-        bot.reply_to(message, f"✅ Order #{order_number} amount updated from ${old_amount:.2f} to ${amount:.2f}")
+        bot.reply_to(message, f"✅ Order #{order_number} amount updated from ${old_amount:..2f} to ${amount:.2f}")
 
     except Exception as e:
         logger.error(f"Error setting order amount: {e}")
