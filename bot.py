@@ -2427,6 +2427,10 @@ Use 📦 <b>Submit Order</b> to place your first order.
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
+def check_subscription(message):
+    """Check user's subscription status"""
+    chat_id = message.chat.id
+    session = None
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
