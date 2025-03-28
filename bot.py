@@ -2644,6 +2644,7 @@ def handle_subscription_renewal(call):
     chat_id = call.message.chat.id
     session = None
     try:
+    try:
         # First acknowledge the callback to prevent timeout
         bot.answer_callback_query(call.id, "Processing your subscription renewal...")
 
