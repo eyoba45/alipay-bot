@@ -2240,25 +2240,6 @@ Or press 'Back to Main Menu' to return.
             parse_mode='HTML',
             reply_markup=markup
         )
-
-        # Set state to wait for order number
-        user_states[chat_id] = 'waiting_for_order_number'
-        
-        bot.send_message(
-            chat_id,
-            """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔍 <b>TRACK YOUR ORDER</b> 🔍  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Please enter your order number.
-Example: <code>1</code>, <code>2</code>, etc.
-
-Or press 'Back to Main Menu' to return.
-""",
-            parse_mode='HTML',
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('Back to Main Menu'))
-        )
     except Exception as e:
         logger.error(f"Error in track order: {e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
@@ -2392,7 +2373,8 @@ No orders found. Start shopping to see your orders here!
 
 Use 📦 <b>Submit Order</b> to place your first order.
 """,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
             )
             return
 
@@ -2417,7 +2399,8 @@ Use 📦 <b>Submit Order</b> to place your first order.
             chat_id,
             status_msg,
             parse_mode='HTML',
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            reply_markup=create_main_menu(is_registered=True)
         )
 
     except Exception as e:
@@ -2438,56 +2421,57 @@ def check_subscription(message):
         if not user:
             bot.send_message(
                 chat_id,
-                "⚠️ Please register first to check orders!",
+                "⚠️ Please register first to check subscription!",
                 reply_markup=create_main_menu(is_registered=False)
             )
             return
 
-        # Get user's orders
-        orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
+        # Calculate subscription status
+        now = datetime.utcnow()
+        if user.subscription_date:
+            days_passed = (now - user.subscription_date).days
+            days_remaining = 30 - days_passed
+            if days_remaining > 0:
+                status = f"Active ({days_remaining} days remaining)"
+                status_emoji = "✅"
+            else:
+                status = "Expired"
+                status_emoji = "⚠️"
+        else:
+            status = "Not Active"
+            status_emoji = "❌"
 
-        if not orders:
-            bot.send_message(
-                chat_id,
-                """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>ORDER HISTORY</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-No orders found. Start shopping to see your orders here!
-
-Use 📦 <b>Submit Order</b> to place your first order.
-""",
-                parse_mode='HTML'
-            )
-            return
-
-        # Create order status message
-        status_msg = """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>YOUR ORDERS</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"""
-
-        for order in orders:
-            tracking_info = f"\n• Tracking: <code>{order.tracking_number}</code>" if order.tracking_number else ""
-            tracking_link = f"\n• <a href='https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}'>Track Package</a>" if order.tracking_number else ""
-            
-            status_msg += f"""
-📦 <b>Order #{order.order_number}</b>
-• Status: <b>{order.status.upper()}</b>
-• Amount: ${order.amount:.2f if order.amount else 0.00}{tracking_info}{tracking_link}
-• Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
-━━━━━━━━━━━━━━━━━━━━━━━\n"""
+        # Create subscription markup
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("💫 Renew 1 Month ($1)", callback_data="renew_1"),
+            InlineKeyboardButton("🎁 View Benefits", callback_data="sub_benefits")
+        )
 
         bot.send_message(
             chat_id,
-            status_msg,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✨ <b>SUBSCRIPTION STATUS</b> ✨  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+{status_emoji} <b>Status:</b> {status}
+💎 <b>Monthly Fee:</b> $1.00 (150 ETB)
+
+<b>Premium Benefits:</b>
+• 🛍️ Unlimited shopping
+• 💰 Special discounts
+• 🚚 Priority shipping
+• 👨‍💼 Premium support
+
+Click below to manage your subscription!
+""",
             parse_mode='HTML',
-            disable_web_page_preview=True
+            reply_markup=markup
         )
 
     except Exception as e:
-        logger.error(f"Error in order status: {e}")
+        logger.error(f"Error checking subscription: {e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
