@@ -2313,32 +2313,33 @@ def handle_subscription_renewal(call):
 
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
         if not user:
             bot.send_message(chat_id, "User not found. Please try again or contact support.")
             return
 
-            # Import Chapa payment module
-            from chapa_payment import generate_registration_payment
+        # Import Chapa payment module
+        from chapa_payment import generate_registration_payment
 
-            # Create user data dict for payment
-            user_data = {
-                'telegram_id': chat_id,
-                'name': user.name,
-                'phone': user.phone,
-                'is_subscription': True
-            }
+        # Create user data dict for payment
+        user_data = {
+            'telegram_id': chat_id,
+            'name': user.name,
+            'phone': user.phone,
+            'is_subscription': True
+        }
 
-            # Generate payment link
-            payment_link = generate_registration_payment(user_data)
+        # Generate payment link
+        payment_link = generate_registration_payment(user_data)
 
-            if payment_link and 'checkout_url' in payment_link:
-                # Create inline keyboard with payment button
-                markup = InlineKeyboardMarkup()
-                markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
+        if payment_link and 'checkout_url' in payment_link:
+            # Create inline keyboard with payment button
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
 
-                bot.send_message(
-                    chat_id,
-                    """
+            bot.send_message(
+                chat_id,
+                """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -2353,14 +2354,14 @@ Click below to pay securely with:
 • HelloCash
 • Credit/Debit Cards
 """,
-                    parse_mode='HTML',
-                    reply_markup=markup
-                )
-            else:
-                # Fallback to manual payment
-                bot.send_message(
-                    chat_id,
-                    """
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+        else:
+            # Fallback to manual payment
+            bot.send_message(
+                chat_id,
+                """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -2379,70 +2380,16 @@ Amount: <code>150</code> birr ($1.00)
 
 Send payment screenshot below after payment.
 """,
-                    parse_mode='HTML'
-                )
+                parse_mode='HTML'
+            )
 
-                # Set state to wait for subscription payment
-                user_states[chat_id] = 'waiting_for_subscription_payment'
+            # Set state to wait for subscription payment
+            user_states[chat_id] = 'waiting_for_subscription_payment'
 
-            # Deduct subscription fee and update date
-            user.balance -= 1.0
-            user.subscription_date = datetime.utcnow()
-            user.last_subscription_reminder = None  # Reset reminder
-
-            try:
-                session.commit()
-
-                # Send a new message instead of editing the old one to avoid errors
-                bot.send_message(
-                    chat_id,
-                    f"""
-✅ <b>Subscription Renewed!</b>
-
-Your subscription has been renewed for 1 month.
-New expiry date: {(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}
-Current balance: ${user.balance:.2f}
-
-Thank you for using AliPay_ETH!
-""",
-                    parse_mode='HTML'
-                )
-            except Exception as commit_error:
-                logger.error(f"Error committing subscription renewal: {commit_error}")
-                logger.error(traceback.format_exc())
-                session.rollback()
-                bot.send_message(chat_id, "Database error, please try again.")
-                return
-        except Exception as e:
-            logger.error(f"Error renewing subscription: {e}")
-            logger.error(traceback.format_exc())
-            bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
-        finally:
-            safe_close_session(session)
-
-try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
-        if not user:
-            bot.send_message(chat_id, "User not found. Please try again or contact support.")
-            return
-            
-        # Process subscription renewal
-        user.subscription_date = datetime.utcnow()
-        user.last_subscription_reminder = None
-        session.commit()
-        
-        bot.send_message(
-            chat_id,
-            "✅ Subscription renewed successfully!",
-            parse_mode='HTML'
-        )
-        
     except Exception as e:
-        logger.error(f"Error renewing subscription: {e}")
+        logger.error(f"Error processing subscription renewal: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Error renewing subscription. Please try again later.")
+        bot.send_message(chat_id, "Error processing subscription renewal. Please try again later.")
     finally:
         safe_close_session(session)
 
