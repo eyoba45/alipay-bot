@@ -407,8 +407,8 @@ if __name__ == '__main__':
         init_db()
         print("Registered Routes:")
         print(app.url_map)
-        port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port, debug=True)
+        port = int(os.environ.get('PORT', 8080))
+        app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Error running webhook server: {e}")
         raise
