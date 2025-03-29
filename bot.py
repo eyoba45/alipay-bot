@@ -2095,7 +2095,8 @@ def check_subscription_status():
 
                 if days_remaining <= 3:  # Notify when 3 or fewer days remain
                     # Only send reminder if we haven't sent one in the last 24 hours
-                    if (not user.last_subscription_reminder or 
+                    if (not hasattr(user, 'last_subscription_reminder') or 
+                        not user.last_subscription_reminder or 
                         (now - user.last_subscription_reminder).total_seconds() > 24 * 3600):
 
                         if days_remaining <= 0:
