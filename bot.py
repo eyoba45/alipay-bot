@@ -2345,11 +2345,16 @@ Please check the number and try again.
 def order_status(message):
     """Handle order status button"""
     chat_id = message.chat.id
+    logger.info(f"Order status requested by user {chat_id}")
     session = None
     try:
+        logger.info("Attempting to get database session")
         session = get_session()
+        logger.info("Database session obtained successfully")
         user = session.query(User).filter_by(telegram_id=chat_id).first()
+        logger.info(f"User query result: {user}")
         if not user:
+            logger.warning(f"No registered user found for chat_id {chat_id}")
             bot.send_message(
                 chat_id,
                 "⚠️ Please register first to check orders!",
