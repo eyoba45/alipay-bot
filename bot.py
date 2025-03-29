@@ -1864,7 +1864,8 @@ def set_order_amount(message):
         safe_close_session(session)
 
 @bot.message_handler(commands=['updateorder'])
-def handle_order_admin_decision(message):"""Handle comprehensive order status updates from admin"""
+def handle_order_admin_decision(message):
+    """Handle comprehensive order status updates from admin"""
     chat_id = message.chat.id
 
     # Check if user is admin
