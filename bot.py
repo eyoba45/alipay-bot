@@ -1650,6 +1650,11 @@ def handle_order_admin_decision(call):
         user = session.query(User).filter_by(id=order.user_id).first()
 
         if action == 'process':
+            # Update order status
+            order.status = 'Processing'
+            order.updated_at = datetime.utcnow()
+            session.commit()
+
             # Ask for order details
             bot.answer_callback_query(call.id, "Please provide order details")
             msg = bot.send_message(
@@ -2343,6 +2348,7 @@ Please check the number and try again.
 
 @bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
 def order_status(message):
+    """Handle order status button with improved tracking"""
     """Handle order status button"""
     chat_id = message.chat.id
     logger.info(f"Order status requested by user {chat_id}")
