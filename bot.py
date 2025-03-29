@@ -1861,8 +1861,7 @@ def set_order_amount(message):
 
         bot.reply_to(message, f"✅ Order #{order_number} amount updated from ${old_amount:..2f} to ${amount:.2f}")
 
-    except Exception as e:
-        logger.error(f"Error setting order amount: {e}")
+    except Exception as e:        logger.error(f"Error setting order amount: {e}")
         logger.error(traceback.format_exc())
         bot.reply_to(message, "❌ Error setting order amount")
     finally:
@@ -2249,7 +2248,7 @@ Or press 'Back to Main Menu' to return.
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
-    
+
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
 def process_order_number(message):
@@ -2349,18 +2348,12 @@ Please check the number and try again.
 @bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
 def order_status(message):
     """Handle order status button with improved tracking"""
-    """Handle order status button"""
     chat_id = message.chat.id
-    logger.info(f"Order status requested by user {chat_id}")
     session = None
     try:
-        logger.info("Attempting to get database session")
         session = get_session()
-        logger.info("Database session obtained successfully")
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        logger.info(f"User query result: {user}")
         if not user:
-            logger.warning(f"No registered user found for chat_id {chat_id}")
             bot.send_message(
                 chat_id,
                 "⚠️ Please register first to check orders!",
@@ -2368,15 +2361,7 @@ def order_status(message):
             )
             return
 
-        # Get user's orders with error handling
-        try:
-            orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
-        except Exception as db_error:
-            logger.error(f"Database query error: {db_error}")
-            safe_close_session(session)
-            session = get_session()
-            orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
-
+        orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
         if not orders:
             bot.send_message(
                 chat_id,
@@ -2393,21 +2378,18 @@ Use 📦 <b>Submit Order</b> to start shopping!
             )
             return
 
-        # Send a processing message first
         processing_msg = bot.send_message(
             chat_id,
             "⌛ Fetching your orders...",
             parse_mode='HTML'
         )
 
-        # Create order status message
         status_msg = """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    📊 <b>YOUR ORDERS</b> 📊  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯\n"""
 
         for order in orders:
-            # Add order status with proper formatting
             status_emoji = {
                 'processing': '⏳',
                 'confirmed': '✅',
@@ -2425,22 +2407,17 @@ Use 📦 <b>Submit Order</b> to start shopping!
 {f'• AliExpress ID: <code>{order.order_id}</code>' if order.order_id else ''}
 ━━━━━━━━━━━━━━━━━━━━━━━\n"""
 
-            # Check if adding this order would exceed message limit
             if len(status_msg + order_info) > 3800:
-                # Send current batch
                 bot.send_message(chat_id, status_msg, parse_mode='HTML')
-                # Start new batch
                 status_msg = "Continued...\n" + order_info
             else:
                 status_msg += order_info
 
-        # Delete processing message
         try:
             bot.delete_message(chat_id, processing_msg.message_id)
         except:
             pass
 
-        # Send final message
         if status_msg:
             bot.send_message(
                 chat_id,
