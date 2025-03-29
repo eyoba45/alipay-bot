@@ -2205,6 +2205,7 @@ if __name__ == "__main__":
 def track_order(message):
     """Handle track order button"""
     chat_id = message.chat.id
+    session = None
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
@@ -2238,9 +2239,10 @@ Or press 'Back to Main Menu' to return.
         )
     except Exception as e:
         logger.error(f"Error in track order: {e}")
+        logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-        if 'session' in locals():
-            safe_close_session(session)
+    finally:
+        safe_close_session(session)
     
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
@@ -2387,17 +2389,24 @@ Use 📦 <b>Submit Order</b> to place your first order.
 • Status: <b>{order.status.upper()}</b>
 • Amount: ${order.amount:.2f if order.amount else 0.00}
 • Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
+{f'• Tracking: <code>{order.tracking_number}</code>' if order.tracking_number else ''}
 ━━━━━━━━━━━━━━━━━━━━━━━\n"""
 
-        bot.send_message(
-            chat_id,
-            status_msg,
-            parse_mode='HTML',
-            reply_markup=create_main_menu(is_registered=True)
-        )
+            if len(status_msg) > 3500:  # Telegram message limit is 4096 characters
+                bot.send_message(chat_id, status_msg, parse_mode='HTML')
+                status_msg = "Continued...\n\n"
+
+        if status_msg:
+            bot.send_message(
+                chat_id,
+                status_msg,
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
+            )
 
     except Exception as e:
         logger.error(f"Error in order status: {e}")
+        logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
@@ -2533,33 +2542,11 @@ def handle_subscription_renewal(call):
         # Generate payment link
         payment_link = generate_registration_payment(user_data)
 
-        if payment_link and 'checkout_url' in payment_link:
-            # Create inline keyboard with payment button
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
-
-            bot.send_message(
-                chat_id,
-                """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-• Amount: <code>150</code> birr ($1.00)
-• Duration: 1 month
-• Instant activation
-
-Click below to pay securely with:
-• TeleBirr
-• CBE Birr
-• HelloCash
-• Credit/Debit Cards
-""",
-                parse_mode='HTML',
-                reply_markup=markup
-            )
-        else:
+        if not payment_link or 'checkout_url' not in payment_link:
             # Fallback to manual payment
+            markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            markup.add(KeyboardButton('Back to Main Menu'))
+
             bot.send_message(
                 chat_id,
                 """
@@ -2579,13 +2566,47 @@ Amount: <code>150</code> birr ($1.00)
 • Number: <code>0986693062</code>
 • Name: <code>Eyob Mulugeta</code>
 
-Send payment screenshot below after payment.
+📸 <b>After payment:</b>
+1. Take a clear screenshot
+2. Send it here
+3. Your subscription will be activated instantly
+
+<i>Your subscription will be activated as soon as we verify your payment!</i>
 """,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=markup
             )
 
             # Set state to wait for subscription payment
             user_states[chat_id] = 'waiting_for_subscription_payment'
+            return
+
+        # Create inline keyboard with payment button
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
+
+        bot.send_message(
+            chat_id,
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+• Amount: <code>150</code> birr ($1.00)
+• Duration: 1 month
+• Instant activation
+
+Click below to pay securely with:
+• TeleBirr
+• CBE Birr
+• HelloCash
+• Credit/Debit Cards
+
+<i>Your subscription will be activated automatically after payment!</i>
+""",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
 
     except Exception as e:
         logger.error(f"Error processing subscription renewal: {e}")
