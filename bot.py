@@ -2349,7 +2349,6 @@ def order_status(message):
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-
         if not user:
             bot.send_message(
                 chat_id,
@@ -2358,49 +2357,83 @@ def order_status(message):
             )
             return
 
-        # Get user's orders
-        orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
+        # Get user's orders with error handling
+        try:
+            orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
+        except Exception as db_error:
+            logger.error(f"Database query error: {db_error}")
+            safe_close_session(session)
+            session = get_session()
+            orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
 
         if not orders:
             bot.send_message(
                 chat_id,
                 """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>ORDER HISTORY</b> 📊  
+   📊 <b>NO ORDERS FOUND</b> 📊  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-No orders found. Start shopping to see your orders here!
-
-Use 📦 <b>Submit Order</b> to place your first order.
+You haven't placed any orders yet.
+Use 📦 <b>Submit Order</b> to start shopping!
 """,
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
 
+        # Send a processing message first
+        processing_msg = bot.send_message(
+            chat_id,
+            "⌛ Fetching your orders...",
+            parse_mode='HTML'
+        )
+
         # Create order status message
         status_msg = """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    📊 <b>YOUR ORDERS</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"""
+╰━━━━━━━━━━━━━━━━━━━━━━━╯\n"""
 
         for order in orders:
-            status_msg += f"""
-📦 <b>Order #{order.order_number}</b>
+            # Add order status with proper formatting
+            status_emoji = {
+                'processing': '⏳',
+                'confirmed': '✅',
+                'shipped': '🚚',
+                'delivered': '📦',
+                'cancelled': '❌'
+            }.get(order.status.lower(), '📋')
+
+            order_info = f"""
+{status_emoji} <b>Order #{order.order_number}</b>
 • Status: <b>{order.status.upper()}</b>
-• Amount: ${order.amount:.2f if order.amount else 0.00}
+• Amount: <code>${order.amount:.2f if order.amount else 0.00}</code>
 • Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
 {f'• Tracking: <code>{order.tracking_number}</code>' if order.tracking_number else ''}
+{f'• AliExpress ID: <code>{order.order_id}</code>' if order.order_id else ''}
 ━━━━━━━━━━━━━━━━━━━━━━━\n"""
 
-            if len(status_msg) > 3500:  # Telegram message limit is 4096 characters
+            # Check if adding this order would exceed message limit
+            if len(status_msg + order_info) > 3800:
+                # Send current batch
                 bot.send_message(chat_id, status_msg, parse_mode='HTML')
-                status_msg = "Continued...\n\n"
+                # Start new batch
+                status_msg = "Continued...\n" + order_info
+            else:
+                status_msg += order_info
 
+        # Delete processing message
+        try:
+            bot.delete_message(chat_id, processing_msg.message_id)
+        except:
+            pass
+
+        # Send final message
         if status_msg:
             bot.send_message(
                 chat_id,
-                status_msg,
+                status_msg + "\nUse 🔍 <b>Track Order</b> for detailed tracking information.",
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
@@ -2408,7 +2441,11 @@ Use 📦 <b>Submit Order</b> to place your first order.
     except Exception as e:
         logger.error(f"Error in order status: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        bot.send_message(
+            chat_id,
+            "❌ Sorry, there was an error fetching your orders. Please try again.",
+            reply_markup=create_main_menu(is_registered=True)
+        )
     finally:
         safe_close_session(session)
 
