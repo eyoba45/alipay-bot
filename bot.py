@@ -914,7 +914,7 @@ Examples:
         amount_text = message.text.split('(')[0].strip()
         # Remove $ and convert to float
         amount = float(amount_text.replace('$', ''))
-        # Use dollar amount for payment
+                # Use dollar amount for payment
         send_payment_details(message, amount)  # Call the existing payment_details function
 
 def send_payment_details(message, amount):
