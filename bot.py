@@ -1434,7 +1434,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 • Order #: <code>{new_order_number}</code>
 
 <b>🔗 PRODUCT LINK:</b>
-<code>{link}</code>
+<a href="{link}">{link}</a>
 
 <b>⏰ TIME:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -1793,7 +1793,7 @@ def help_center(message):
     )
     help_markup.add(
         InlineKeyboardButton("💬 Chat with Support", url="https://t.me/alipay_help_center"),
-        InlineKeyboardButton("📱 Contact Admin", url="https://t.me/alipay_eth_admin")
+        InlineKeyboardButton("📱 Contact Admin", url="https://t.me/eyob_787")
     )
 
     help_msg = """
@@ -1816,7 +1816,7 @@ def help_center(message):
 • 📅 Subscription - Manage account
 
 <b>💎 PREMIUM SUPPORT 💎</b>
-Our dedicated team is available 24/7 to assist you with all your shopping needs! Click the buttons below for instant support.
+Our dedicated team is available 24/7 to assist you with all your shopping needs! Click the buttons below for instant support or contact @eyob_787 directly.
 
 *We're committed to making your AliExpress shopping experience seamless and enjoyable!*
 """
@@ -1866,7 +1866,7 @@ def set_order_amount(message):
         logger.error(traceback.format_exc())
         bot.reply_to(message, "❌ Error setting order amount")
     finally:
-        safeclose_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(commands=['updateorder'])
 def handle_order_admin_decision(message):
@@ -2366,22 +2366,8 @@ def order_status(message):
         if not user:
             bot.send_message(chat_id, "Please register first to view orders!")
             return
-        if not orders:
-            bot.send_message(
-                chat_id,
-                """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>NO ORDERS FOUND</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-You haven't placed any orders yet.
-Use 📦 <b>Submit Order</b> to start shopping!
-""",
-                parse_mode='HTML',
-                reply_markup=create_main_menu(is_registered=True)
-            )
-            return
-
+            
+        # Get orders first, then check if they exist
         orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
         if not orders:
             bot.send_message(
