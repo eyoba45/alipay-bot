@@ -915,11 +915,10 @@ Examples:
         # Remove $ and convert to float
         amount = float(amount_text.replace('$', ''))
                 # Use dollar amount for payment
-        send_payment_details(message, amount)  # Call the existing payment_details function
+                send_payment_details(message, amount)  # Call the existing payment_details function
 
 def send_payment_details(message, amount):
-    """Send payment details to user"""
-    payment_details(message, amount)  # Call the existing payment_details function
+    """Send payment details to user"""    payment_details(message, amount)  # Call the existing payment_details function
 
 def payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
@@ -1358,7 +1357,7 @@ def process_order_link(message):
         finally:
             safe_close_session(session)
 
-    # First, send immediate acknowledgment
+    # First, send immediate acknowledgement
     processing_msg = bot.send_message(
         chat_id,
         "⏳ <b>Processing your order...</b>",
@@ -1861,11 +1860,12 @@ def set_order_amount(message):
 
         bot.reply_to(message, f"✅ Order #{order_number} amount updated from ${old_amount:..2f} to ${amount:.2f}")
 
-    except Exception as e:        logger.error(f"Error setting order amount: {e}")
+    except Exception as e:
+        logger.error(f"Error setting orderamount: {e}")
         logger.error(traceback.format_exc())
         bot.reply_to(message, "❌ Error setting order amount")
     finally:
-        safe_close_session(session)
+        safeclose_session(session)
 
 @bot.message_handler(commands=['updateorder'])
 def handle_order_admin_decision(message):
