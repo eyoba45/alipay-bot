@@ -2215,14 +2215,23 @@ def track_order(message):
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
         if not user:
-            bot.send_message(chat_id, "Please register first to track orders!")
+            bot.send_message(
+                chat_id, 
+                "⚠️ Please register first to track orders!", 
+                reply_markup=create_main_menu(is_registered=False)
+            )
             return
-            
+
+        # Set user state for tracking
         user_states[chat_id] = 'waiting_for_order_number'
+        
+        # Create keyboard with back button
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(KeyboardButton('Back to Main Menu'))
         
+        # Send tracking prompt
         bot.send_message(
             chat_id,
             """
@@ -2238,13 +2247,19 @@ Or press 'Back to Main Menu' to return.
             parse_mode='HTML',
             reply_markup=markup
         )
+        
+        logger.info(f"Track order prompt sent to user {chat_id}")
+        
     except Exception as e:
         logger.error(f"Error in track order: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        bot.send_message(
+            chat_id, 
+            "Sorry, there was an error. Please try again.",
+            reply_markup=create_main_menu(is_registered=True)
+        )
     finally:
-        if session:
-            safe_close_session(session)
+        safe_close_session(session)
 
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
