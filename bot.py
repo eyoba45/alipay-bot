@@ -910,15 +910,16 @@ Examples:
 
     # Extract amount from button text - handles format like "$5 (800 birr)"
     if '(' in message.text and ')' in message.text:
-        #        # Extract dollar amount from the start of the string
+        # Extract dollar amount from the start of the string
         amount_text = message.text.split('(')[0].strip()
         # Remove $ and convert to float
         amount = float(amount_text.replace('$', ''))
-                # Use dollar amount for payment
-                send_payment_details(message, amount)  # Call the existing payment_details function
+        # Use dollar amount for payment
+        payment_details(message, amount)  # Call the payment_details function directly
 
 def send_payment_details(message, amount):
-    """Send payment details to user"""    payment_details(message, amount)  # Call the existing payment_details function
+    """Send payment details to user"""
+    payment_details(message, amount)  # Call the existing payment_details function
 
 def payment_details(message, amount):
     """Send payment instructions with Chapa integration"""
