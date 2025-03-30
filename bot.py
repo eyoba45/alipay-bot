@@ -2211,30 +2211,11 @@ if __name__ == "__main__":
 def track_order(message):
     """Handle track order button"""
     chat_id = message.chat.id
-    session = None
     try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.send_message(
-                chat_id,
-                "⚠️ Please register first to track orders!",
-                reply_markup=create_main_menu(is_registered=False)
-            )
-            return
-
-        # Set state for getting order number
         user_states[chat_id] = 'waiting_for_order_number'
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(KeyboardButton('Back to Main Menu'))
         
-        # Create keyboard with back button
-        markup = ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(KeyboardButton('Back to Main Menu'))
-
-        user_states[chat_id] = 'waiting_for_order_number'
-        markup = ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(KeyboardButton('Back to Main Menu'))
-
         bot.send_message(
             chat_id,
             """
@@ -2250,6 +2231,9 @@ Or press 'Back to Main Menu' to return.
             parse_mode='HTML',
             reply_markup=markup
         )
+    except Exception as e:
+        logger.error(f"Error in track order: {e}")
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     except Exception as e:
         logger.error(f"Error in track order: {e}")
         logger.error(traceback.format_exc())
@@ -2428,12 +2412,20 @@ def order_status(message):
     session = None
     try:
         session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-        if not user:
+        orders = session.query(Order).all()
+        if not orders:
             bot.send_message(
                 chat_id,
-                "⚠️ Please register first to check orders!",
-                reply_markup=create_main_menu(is_registered=False)
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>NO ORDERS FOUND</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+You haven't placed any orders yet.
+Use 📦 <b>Submit Order</b> to start shopping!
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
             )
             return
 
