@@ -2211,7 +2211,14 @@ if __name__ == "__main__":
 def track_order(message):
     """Handle track order button"""
     chat_id = message.chat.id
+    session = None
     try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        if not user:
+            bot.send_message(chat_id, "Please register first to track orders!")
+            return
+            
         user_states[chat_id] = 'waiting_for_order_number'
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(KeyboardButton('Back to Main Menu'))
@@ -2412,7 +2419,10 @@ def order_status(message):
     session = None
     try:
         session = get_session()
-        orders = session.query(Order).all()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        if not user:
+            bot.send_message(chat_id, "Please register first to view orders!")
+            return
         if not orders:
             bot.send_message(
                 chat_id,
