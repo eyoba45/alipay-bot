@@ -2224,6 +2224,13 @@ def track_order(message):
             )
             return
 
+        # Set state for getting order number
+        user_states[chat_id] = 'waiting_for_order_number'
+        
+        # Create keyboard with back button
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(KeyboardButton('Back to Main Menu'))
+
         user_states[chat_id] = 'waiting_for_order_number'
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(KeyboardButton('Back to Main Menu'))
@@ -2257,16 +2264,84 @@ def process_order_number(message):
     chat_id = message.chat.id
     session = None
 
-    # Handle back button
-    if message.text == 'Back to Main Menu':
-        if chat_id in user_states:
-            del user_states[chat_id]
+    try:
+        # Handle back button
+        if message.text == 'Back to Main Menu':
+            if chat_id in user_states:
+                del user_states[chat_id]
+            bot.send_message(
+                chat_id,
+                "🏠 Returning to main menu...",
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            return
+
+        # Parse order number
+        order_number = int(message.text.strip())
+        
+        # Get user and order
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        if not user:
+            bot.send_message(chat_id, "⚠️ Please register first!")
+            return
+
+        order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
+        if not order:
+            bot.send_message(
+                chat_id,
+                f"❌ Order #{order_number} not found. Please check the number and try again.",
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            return
+
+        # Format status message
+        status_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📦 <b>ORDER DETAILS</b> 📦  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Order Information:</b>
+• Order #: <code>{order.order_number}</code>
+• Status: <b>{order.status.upper()}</b>
+• Amount: ${order.amount:.2f if order.amount else 0.00}
+{f"• Tracking #: <code>{order.tracking_number}</code>" if order.tracking_number else ""}
+
+{f"• Track your package: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}" if order.tracking_number else ""}
+
+<b>Order Timeline:</b>
+• Created: {order.created_at.strftime('%Y-%m-%d %H:%M')}
+{f"• Updated: {order.updated_at.strftime('%Y-%m-%d %H:%M')}" if order.updated_at else ""}
+
+<i>Updates will be sent automatically when available!</i>
+"""
         bot.send_message(
             chat_id,
-            "🏠 Returning to main menu...",
+            status_msg,
+            parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=create_main_menu(is_registered=True)
         )
-        return
+
+        # Clear user state
+        if chat_id in user_states:
+            del user_states[chat_id]
+
+    except ValueError:
+        bot.send_message(
+            chat_id,
+            "❌ Please enter a valid order number (numbers only).",
+            reply_markup=create_main_menu(is_registered=True)
+        )
+    except Exception as e:
+        logger.error(f"Error processing order number: {e}")
+        bot.send_message(
+            chat_id,
+            "Sorry, there was an error. Please try again.",
+            reply_markup=create_main_menu(is_registered=True)
+        )
+    finally:
+        safe_close_session(session)
 
     if message.text == 'Back to Main Menu':
         if chat_id in user_states:
