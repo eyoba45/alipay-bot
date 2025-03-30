@@ -2240,13 +2240,11 @@ Or press 'Back to Main Menu' to return.
         )
     except Exception as e:
         logger.error(f"Error in track order: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    except Exception as e:
-        logger.error(f"Error in track order: {e}")
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
-        safe_close_session(session)
+        if session:
+            safe_close_session(session)
 
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
@@ -2255,18 +2253,18 @@ def process_order_number(message):
     chat_id = message.chat.id
     session = None
 
-    try:
-        # Handle back button
-        if message.text == 'Back to Main Menu':
-            if chat_id in user_states:
-                del user_states[chat_id]
-            bot.send_message(
-                chat_id,
-                "🏠 Returning to main menu...",
-                reply_markup=create_main_menu(is_registered=True)
-            )
-            return
+    # Handle back button
+    if message.text == 'Back to Main Menu':
+        if chat_id in user_states:
+            del user_states[chat_id]
+        bot.send_message(
+            chat_id,
+            "🏠 Returning to main menu...",
+            reply_markup=create_main_menu(is_registered=True)
+        )
+        return
 
+    try:
         # Parse order number
         order_number = int(message.text.strip())
         
@@ -2286,6 +2284,13 @@ def process_order_number(message):
             )
             return
 
+        # Create tracking link if available
+        tracking_info = ""
+        if order.tracking_number:
+            tracking_info = f"""
+• <b>Track Package:</b>
+  <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">Click to track</a>"""
+
         # Format status message
         status_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -2297,8 +2302,7 @@ def process_order_number(message):
 • Status: <b>{order.status.upper()}</b>
 • Amount: ${order.amount:.2f if order.amount else 0.00}
 {f"• Tracking #: <code>{order.tracking_number}</code>" if order.tracking_number else ""}
-
-{f"• Track your package: https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}" if order.tracking_number else ""}
+{tracking_info}
 
 <b>Order Timeline:</b>
 • Created: {order.created_at.strftime('%Y-%m-%d %H:%M')}
@@ -2326,91 +2330,15 @@ def process_order_number(message):
         )
     except Exception as e:
         logger.error(f"Error processing order number: {e}")
+        logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
             "Sorry, there was an error. Please try again.",
             reply_markup=create_main_menu(is_registered=True)
         )
     finally:
-        safe_close_session(session)
-
-    if message.text == 'Back to Main Menu':
-        if chat_id in user_states:
-            del user_states[chat_id]
-        bot.send_message(
-            chat_id,
-            "🏠 Returning to main menu...",
-            reply_markup=create_main_menu(is_registered=True)
-        )
-        return
-
-    try:
-        order_number = int(message.text.strip())
-        session = get_session()
-
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-        order = session.query(Order).filter_by(user_id=user.id, order_number=order_number).first()
-
-        if not order:
-            bot.send_message(
-                chat_id,
-                f"""
-❌ <b>Order Not Found</b>
-
-No order found with number: <code>{order_number}</code>
-Please check the number and try again.
-""",
-                parse_mode='HTML'
-            )
-            return
-
-        # Create tracking link if available
-        tracking_info = ""
-        if order.tracking_number:
-            tracking_info = f"""
-• <b>Track Package:</b>
-  <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">Click to track</a>"""
-
-        # Send order details
-        bot.send_message(
-            chat_id,
-            f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📦 <b>ORDER DETAILS</b> 📦  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>Order Information:</b>
-• Order #: <code>{order.order_number}</code>
-• Status: <b>{order.status.upper()}</b>
-• Amount: ${order.amount:.2f if order.amount else 0.00}
-{f"• Tracking #: <code>{order.tracking_number}</code>" if order.tracking_number else ""}
-{tracking_info}
-
-<b>Order Timeline:</b>
-• Created: {order.created_at.strftime('%Y-%m-%d %H:%M')}
-{f"• Updated: {order.updated_at.strftime('%Y-%m-%d %H:%M')}" if order.updated_at else ""}
-
-<i>Updates will be sent automatically when available!</i>
-""",
-            parse_mode='HTML',
-            disable_web_page_preview=True,
-            reply_markup=create_main_menu(is_registered=True)
-        )
-
-        # Clear the state
-        if chat_id in user_states:
-            del user_states[chat_id]
-
-    except ValueError:
-        bot.send_message(
-            chat_id,
-            "❌ Please enter a valid order number (numbers only)."
-        )
-    except Exception as e:
-        logger.error(f"Error processing order number: {e}")
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
-    finally:
-        safe_close_session(session)
+        if session:
+            safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
 def order_status(message):
