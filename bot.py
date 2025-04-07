@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+w#!/usr/bin/env python3
 """
 Telegram Bot Runner with enhanced functionality
 """
@@ -959,6 +959,11 @@ def payment_details(message, amount):
             'name': user.name,
             'phone': user.phone
         }
+        
+        # Add subscription flag if this is a subscription renewal
+        if for_subscription:
+            user_data['for_subscription'] = True
+            logger.info(f"Creating payment for subscription renewal, user: {chat_id}")
 
         # Generate payment link
         payment_link = generate_deposit_payment(user_data, amount)
@@ -2307,7 +2312,7 @@ if __name__ == "__main__":
 
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 def track_order(message):
-    """Handle track order button"""
+    """Handle track order button with enhanced UI and options"""
     chat_id = message.chat.id
     session = None
     try:
@@ -2317,19 +2322,55 @@ def track_order(message):
         if not user:
             bot.send_message(
                 chat_id, 
-                "⚠️ Please register first to track orders!", 
+                """
+⚠️ <b>REGISTRATION REQUIRED</b>
+
+You need to register first before tracking orders.
+Please click 🔑 Register to create your account.
+""", 
+                parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=False)
+            )
+            return
+
+        # Check if user has any orders first
+        orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
+        if not orders:
+            bot.send_message(
+                chat_id, 
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>NO ORDERS FOUND</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+You haven't placed any orders yet!
+Use 📦 <b>Submit Order</b> to start shopping.
+""", 
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
             )
             return
 
         # Set user state for tracking
         user_states[chat_id] = 'waiting_for_order_number'
         
-        # Create keyboard with back button
+        # Create keyboard with back button and recent order numbers
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        
+        # Add up to 3 most recent order numbers
+        recent_orders = orders[:3]
+        row = []
+        for order in recent_orders:
+            row.append(KeyboardButton(f"Order #{order.order_number}"))
+            if len(row) == 2:  # Two buttons per row
+                markup.add(*row)
+                row = []
+        if row:
+            markup.add(*row)
+            
         markup.add(KeyboardButton('Back to Main Menu'))
         
-        # Send tracking prompt
+        # Send tracking prompt with animated-style format
         bot.send_message(
             chat_id,
             """
@@ -2337,10 +2378,11 @@ def track_order(message):
    🔍 <b>TRACK YOUR ORDER</b> 🔍  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Please enter your order number.
-Example: <code>1</code>, <code>2</code>, etc.
+Enter your order number or select a recent order below.
 
-Or press 'Back to Main Menu' to return.
+<b>🔢 Example:</b> <code>1</code>, <code>2</code>, etc.
+
+<i>💡 Quick Tip: Use 📊 <b>Order Status</b> to see all your orders at once!</i>
 """,
             parse_mode='HTML',
             reply_markup=markup
@@ -2378,8 +2420,12 @@ def process_order_number(message):
         return
 
     try:
-        # Parse order number
-        order_number = int(message.text.strip())
+        # Parse order number, handling both formats: "123" and "Order #123"
+        order_text = message.text.strip()
+        if order_text.startswith("Order #"):
+            order_number = int(order_text.replace("Order #", ""))
+        else:
+            order_number = int(order_text)
         
         # Get user and order
         session = get_session()
@@ -2397,31 +2443,55 @@ def process_order_number(message):
             )
             return
 
-        # Create tracking link if available
-        tracking_info = ""
+        # Choose status emoji based on order status
+        status_emoji = {
+            'processing': '⏳',
+            'confirmed': '✅',
+            'shipped': '🚚',
+            'delivered': '📦',
+            'cancelled': '❌'
+        }.get(order.status.lower(), '📋')
+        
+        # Create tracking link with better formatting
+        tracking_section = ""
         if order.tracking_number:
-            tracking_info = f"""
-• <b>Track Package:</b>
-  <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">Click to track</a>"""
+            tracking_section = f"""
+<b>📦 Tracking Information:</b>
+• Tracking #: <code>{order.tracking_number}</code>
+• <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">🔗 Track Your Package</a>"""
 
-        # Format status message
+        # Build beautiful order timeline
+        timeline_items = [
+            f"• 🕒 Order Created: {order.created_at.strftime('%Y-%m-%d %H:%M')}"
+        ]
+        
+        if order.updated_at and order.updated_at != order.created_at:
+            timeline_items.append(f"• 🔄 Last Updated: {order.updated_at.strftime('%Y-%m-%d %H:%M')}")
+            
+        if order.status.lower() == 'shipped' and order.tracking_number:
+            timeline_items.append(f"• 🚚 Shipped with tracking")
+            
+        if order.status.lower() == 'delivered':
+            timeline_items.append(f"• 📬 Delivered")
+            
+        timeline_section = "\n".join(timeline_items)
+
+        # Format status message with beautiful styling
         status_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📦 <b>ORDER DETAILS</b> 📦  
+   {status_emoji} <b>ORDER #{order.order_number} DETAILS</b> {status_emoji}  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>Order Information:</b>
-• Order #: <code>{order.order_number}</code>
+<b>📋 Order Information:</b>
 • Status: <b>{order.status.upper()}</b>
-• Amount: ${order.amount:.2f if order.amount else 0.00}
-{f"• Tracking #: <code>{order.tracking_number}</code>" if order.tracking_number else ""}
-{tracking_info}
+• Amount: <code>${order.amount:.2f if order.amount else 0.00}</code>
+{f'• AliExpress ID: <code>{order.order_id}</code>' if order.order_id else ''}
+{tracking_section}
 
-<b>Order Timeline:</b>
-• Created: {order.created_at.strftime('%Y-%m-%d %H:%M')}
-{f"• Updated: {order.updated_at.strftime('%Y-%m-%d %H:%M')}" if order.updated_at else ""}
+<b>⏱ Order Timeline:</b>
+{timeline_section}
 
-<i>Updates will be sent automatically when available!</i>
+<i>💡 You'll receive automatic updates on status changes!</i>
 """
         bot.send_message(
             chat_id,
@@ -2438,7 +2508,16 @@ def process_order_number(message):
     except ValueError:
         bot.send_message(
             chat_id,
-            "❌ Please enter a valid order number (numbers only).",
+            """
+⚠️ <b>INVALID INPUT</b>
+
+Please enter a valid order number (numbers only).
+Example: <code>1</code>, <code>2</code>, etc.
+
+You can also select from your recent orders or check
+📊 <b>Order Status</b> to see all your orders.
+""",
+            parse_mode='HTML',
             reply_markup=create_main_menu(is_registered=True)
         )
     except Exception as e:
@@ -2446,7 +2525,15 @@ def process_order_number(message):
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "Sorry, there was an error. Please try again.",
+            """
+❌ <b>TECHNICAL ERROR</b>
+
+We're sorry, but there was a technical issue processing your request.
+Please try again or contact support if the problem persists.
+
+You can use 📊 <b>Order Status</b> to view all your orders instead.
+""",
+            parse_mode='HTML',
             reply_markup=create_main_menu(is_registered=True)
         )
     finally:
@@ -2462,7 +2549,17 @@ def order_status(message):
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if not user:
-            bot.send_message(chat_id, "Please register first to view orders!")
+            bot.send_message(
+                chat_id, 
+                """
+⚠️ <b>REGISTRATION REQUIRED</b>
+
+You need to register first to view your orders.
+Please click 🔑 <b>Register</b> to create your account.
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=False)
+            )
             return
             
         # Get orders first, then check if they exist
@@ -2503,13 +2600,20 @@ Use 📦 <b>Submit Order</b> to start shopping!
                 'cancelled': '❌'
             }.get(order.status.lower(), '📋')
 
+            # Create tracking link if available
+            tracking_text = ""
+            if order.tracking_number:
+                tracking_text = f"""• Tracking: <code>{order.tracking_number}</code>
+• <a href="https://global.cainiao.com/detail.htm?mailNoList={order.tracking_number}">📦 Track Package</a>"""
+            
+            # Format each order with improved visual elements and clickable link
             order_info = f"""
-{status_emoji} <b>Order #{order.order_number}</b>
-• Status: <b>{order.status.upper()}</b>
-• Amount: <code>${order.amount:.2f if order.amount else 0.00}</code>
+{status_emoji} <b>Order #{order.order_number}</b> ({order.status.upper()})
 • Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}
-{f'• Tracking: <code>{order.tracking_number}</code>' if order.tracking_number else ''}
+• Amount: <code>${order.amount:.2f if order.amount else 0.00}</code>
+{tracking_text if order.tracking_number else ''}
 {f'• AliExpress ID: <code>{order.order_id}</code>' if order.order_id else ''}
+• <i><a href="tg://user?start=track_{order.order_number}">📋 View Details</a></i>
 ━━━━━━━━━━━━━━━━━━━━━━━\n"""
 
             if len(status_msg + order_info) > 3800:
@@ -2524,10 +2628,31 @@ Use 📦 <b>Submit Order</b> to start shopping!
             pass
 
         if status_msg:
+            # Count orders by status for the footer summary
+            order_counts = {}
+            for order in orders:
+                status = order.status.lower()
+                order_counts[status] = order_counts.get(status, 0) + 1
+                
+            # Create summary footer
+            footer = "\n<b>📋 Order Summary:</b>\n"
+            for status, count in order_counts.items():
+                status_emoji = {
+                    'processing': '⏳',
+                    'confirmed': '✅',
+                    'shipped': '🚚',
+                    'delivered': '📦',
+                    'cancelled': '❌'
+                }.get(status.lower(), '📋')
+                footer += f"• {status_emoji} {status.capitalize()}: {count}\n"
+                
+            footer += "\n<i>💡 Use 🔍 <b>Track Order</b> for more details and options.</i>"
+                
             bot.send_message(
                 chat_id,
-                status_msg + "\nUse 🔍 <b>Track Order</b> for detailed tracking information.",
+                status_msg + footer,
                 parse_mode='HTML',
+                disable_web_page_preview=True,
                 reply_markup=create_main_menu(is_registered=True)
             )
 
@@ -2536,7 +2661,15 @@ Use 📦 <b>Submit Order</b> to start shopping!
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Sorry, there was an error fetching your orders. Please try again.",
+            """
+❌ <b>TECHNICAL ERROR</b>
+
+We're sorry, but there was a technical issue fetching your orders.
+Please try again later or contact support if the problem persists.
+
+You can try using 🔍 <b>Track Order</b> to track a specific order instead.
+""",
+            parse_mode='HTML',
             reply_markup=create_main_menu(is_registered=True)
         )
     finally:
@@ -2554,7 +2687,16 @@ def check_subscription(message):
         if not user:
             bot.send_message(
                 chat_id, 
-                "✨ Please register first to access premium subscription features! ✨", 
+                """
+⚠️ <b>REGISTRATION REQUIRED</b>
+
+You need to register first to access premium subscription features.
+Create an account to enjoy unlimited shopping, priority service, 
+and exclusive discounts!
+
+Please click 🔑 <b>Register</b> to get started.
+""",
+                parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=False)
             )
             return
@@ -2659,90 +2801,25 @@ def handle_subscription_renewal(call):
             bot.send_message(chat_id, "User not found. Please try again or contact support.")
             return
 
-        # Import Chapa payment module
-        from chapa_payment import generate_registration_payment
-
-        # Create user data dict for payment
-        user_data = {
-            'telegram_id': chat_id,
-            'name': user.name,
-            'phone': user.phone,
-            'is_subscription': True
-        }
-
-        # Generate payment link
-        payment_link = generate_registration_payment(user_data)
-
-        if not payment_link or 'checkout_url' not in payment_link:
-            # Fallback to manual payment
-            markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add(KeyboardButton('Back to Main Menu'))
-
-            bot.send_message(
-                chat_id,
-                """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Amount: <code>150</code> birr ($1.00)
-
-<b>Payment Methods:</b>
-
-🏦 <b>Commercial Bank (CBE)</b>
-• Account: <code>1000547241316</code>
-• Name: <code>Eyob Mulugeta</code>
-
-📱 <b>TeleBirr</b>
-• Number: <code>0986693062</code>
-• Name: <code>Eyob Mulugeta</code>
-
-📸 <b>After payment:</b>
-1. Take a clear screenshot
-2. Send it here
-3. Your subscription will be activated instantly
-
-<i>Your subscription will be activated as soon as we verify your payment!</i>
-""",
-                parse_mode='HTML',
-                reply_markup=markup
-            )
-
-            # Set state to wait for subscription payment
-            user_states[chat_id] = 'waiting_for_subscription_payment'
-            return
-
-        # Create inline keyboard with payment button
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("💳 Pay Subscription Fee", url=payment_link['checkout_url']))
-
-        bot.send_message(
-            chat_id,
-            """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💫 <b>SUBSCRIPTION RENEWAL</b> 💫  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-• Amount: <code>150</code> birr ($1.00)
-• Duration: 1 month
-• Instant activation
-
-Click below to pay securely with:
-• TeleBirr
-• CBE Birr
-• HelloCash
-• Credit/Debit Cards
-
-<i>Your subscription will be activated automatically after payment!</i>
-""",
-            parse_mode='HTML',
-            reply_markup=markup
-        )
+        # Direct to deposit flow with subscription renewal flag
+        deposit_funds_internal(call.message, for_subscription=True)
 
     except Exception as e:
         logger.error(f"Error processing subscription renewal: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Error processing subscription renewal. Please try again later.")
+        bot.send_message(
+            chat_id, 
+            """
+❌ <b>SUBSCRIPTION ERROR</b>
+
+We're sorry, but there was a technical issue processing your subscription renewal.
+Please try again later or contact support if the problem persists.
+
+You can also try using 💰 <b>Deposit</b> and select the subscription renewal option.
+""",
+            parse_mode='HTML',
+            reply_markup=create_main_menu(is_registered=True)
+        )
     finally:
         safe_close_session(session)
 
@@ -2753,7 +2830,6 @@ def handle_deposit_for_renewal(call):
     bot.answer_callback_query(call.id, "Processing your deposit request...")
     
     # Redirect to deposit flow with the knowledge that this is for subscription renewal
-    deposit_for_subscription = True
     deposit_funds_internal(call.message, for_subscription=True)
 
 @bot.callback_query_handler(func=lambda call: call.data == "sub_benefits")
