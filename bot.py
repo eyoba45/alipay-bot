@@ -836,7 +836,18 @@ Please try registering again.
 @bot.message_handler(func=lambda msg: msg.text == '💰 Deposit')
 def deposit_funds(message):
     """Handle deposit button"""
+    return deposit_funds_internal(message, for_subscription=False)
+
+def deposit_funds_internal(message, for_subscription=False):
+    """Internal deposit handler with subscription renewal option"""
     chat_id = message.chat.id
+    # Store the subscription flag in user states
+    if for_subscription:
+        if chat_id not in user_states:
+            user_states[chat_id] = {}
+        elif not isinstance(user_states[chat_id], dict):
+            user_states[chat_id] = {}
+        user_states[chat_id]['for_subscription'] = True
     deposit_msg = """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    💰 <b>CHOOSE DEPOSIT AMOUNT</b> 💰  
@@ -1128,8 +1139,36 @@ def handle_deposit_screenshot(message):
             bot.send_message(chat_id, "Please register first before making a deposit.")
             return
 
-        # Auto-approve: Update user balance immediately
-        user.balance += deposit_amount
+        # Check if this is for subscription renewal
+        is_for_subscription = False
+        if isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
+            is_for_subscription = True
+            
+        # Check if user has a subscription date and if it needs renewal
+        now = datetime.utcnow()
+        subscription_updated = False
+        subscription_renewal_msg = ""
+        
+        if is_for_subscription or (user.subscription_date and (now - user.subscription_date).days >= 30):
+            # Determine if we should deduct subscription fee
+            if deposit_amount >= 1.0:  # Only if deposit is at least $1
+                user.balance += (deposit_amount - 1.0)  # Add amount after subscription fee
+                user.subscription_date = now  # Reset subscription date
+                subscription_updated = True
+                
+                if user.subscription_date:
+                    subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                else:
+                    subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                
+                logger.info(f"Subscription {'renewed' if user.subscription_date else 'activated'} for user {chat_id}")
+            else:
+                # Deposit too small for subscription, just add to balance
+                user.balance += deposit_amount
+                logger.info(f"Deposit amount ${deposit_amount} too small for subscription renewal")
+        else:
+            # Regular deposit, just add to balance
+            user.balance += deposit_amount
 
         # Create approved deposit record
         pending_deposit = PendingDeposit(
@@ -1168,9 +1207,8 @@ Screenshot attached below
                 logger.error(f"Error notifying admin about auto-approval: {admin_error}")
 
         # Send enhanced fancy confirmation to user
-        bot.send_message(
-            chat_id,
-            f"""
+        # Check if we need to add subscription information to the message
+        deposit_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -1178,6 +1216,8 @@ Screenshot attached below
 <b>💰 DEPOSIT DETAILS:</b>
 • Amount: <code>{birr_amount:,}</code> birr
 • USD Value: ${deposit_amount:.2f}
+{f"• Amount after subscription fee: ${deposit_amount - 1.0:.2f}" if subscription_updated else ""}
+{subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
 • New Balance: <code>{int(user.balance * 160):,}</code> birr
@@ -1185,7 +1225,11 @@ Screenshot attached below
 ✨ <b>You're ready to start shopping!</b> ✨
 
 <i>Browse AliExpress and submit your orders now!</i>
-""",
+"""
+        
+        bot.send_message(
+            chat_id,
+            deposit_msg,
             parse_mode='HTML'
         )
 
@@ -1554,15 +1598,45 @@ def handle_deposit_admin_decision(call):
             return
 
         if action == 'approve':
-            # Add amount to user balance
-            user.balance += amount
+            # Check subscription status to see if we need to deduct the subscription fee
+            now = datetime.utcnow()
+            subscription_deducted = False
+            subscription_renewal_msg = ""
+            
+            if user.subscription_date:
+                days_passed = (now - user.subscription_date).days
+                # If subscription has expired, deduct $1 for renewal
+                if days_passed >= 30:
+                    # Only deduct if they have enough to cover deposit + subscription
+                    if amount >= 1.0:
+                        amount_after_sub = amount - 1.0  # Deduct $1 subscription fee
+                        user.balance += amount_after_sub
+                        user.subscription_date = now  # Set new subscription date
+                        subscription_deducted = True
+                        subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
+                    else:
+                        # If deposit is less than $1, just add to balance without renewing
+                        user.balance += amount
+                else:
+                    # Subscription still active, add full amount
+                    user.balance += amount
+            else:
+                # No previous subscription, set initial subscription date and deduct fee
+                if amount >= 1.0:
+                    amount_after_sub = amount - 1.0  # Deduct $1 subscription fee
+                    user.balance += amount_after_sub
+                    user.subscription_date = now  # Set initial subscription date
+                    subscription_deducted = True
+                    subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
+                else:
+                    # If deposit is less than $1, just add to balance without subscription
+                    user.balance += amount
+            
             pending_deposit.status = 'Approved'
             session.commit()
 
             # Notify user
-            bot.send_message(
-                chat_id,
-                f"""
+            message_text = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -1570,6 +1644,8 @@ def handle_deposit_admin_decision(call):
 <b>💰 DEPOSIT DETAILS:</b>
 • Amount: <code>{int(amount * 160):,}</code> birr
 • USD Value: ${amount:.2f}
+{f"• Amount after subscription fee: ${amount - 1.0:.2f}" if subscription_deducted else ""}
+{subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
 • New Balance: <code>{int(user.balance * 160):,}</code> birr
@@ -1577,7 +1653,11 @@ def handle_deposit_admin_decision(call):
 ✨ <b>You're ready to start shopping!</b> ✨
 
 <i>Browse AliExpress and submit your orders now!</i>
-""",
+"""
+            
+            bot.send_message(
+                chat_id,
+                message_text,
                 parse_mode='HTML'
             )
 
@@ -2098,44 +2178,62 @@ def check_subscription_status():
                 days_passed = (now - user.subscription_date).days
                 days_remaining = 30 - days_passed
 
-                if days_remaining <= 3:  # Notify when 3 or fewer days remain
-                    # Only send reminder if we haven't sent one in the last 24 hours
-                    if (not hasattr(user, 'last_subscription_reminder') or 
-                        not user.last_subscription_reminder or 
-                        (now - user.last_subscription_reminder).total_seconds() > 24 * 3600):
+                # Check if we should send a reminder
+                should_remind = False
+                if user.last_subscription_reminder:
+                    days_since_last_reminder = (now - user.last_subscription_reminder).days
+                    if days_since_last_reminder >= 3:  # Don't spam users, minimum 3 days between reminders
+                        should_remind = True
+                else:
+                    should_remind = True
+                
+                if should_remind:
+                    # Case 1: Subscription is about to expire (5 days or less remaining)
+                    if 0 < days_remaining <= 5:
+                        renewal_markup = InlineKeyboardMarkup()
+                        renewal_markup.add(InlineKeyboardButton("💰 Deposit to Renew", callback_data="deposit_renew"))
+                        renewal_markup.add(InlineKeyboardButton("📋 Subscription Benefits", callback_data="sub_benefits"))
+                        
+                        bot.send_message(
+                            user.telegram_id,
+                            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ⚠️ <b>SUBSCRIPTION REMINDER</b> ⚠️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-                        if days_remaining <= 0:
-                            # Subscription expired
-                            bot.send_message(
-                                user.telegram_id,
-                                """
-SUBSCRIPTION
+Your subscription will expire in <b>{days_remaining} days</b>.
 
-Your subscription has expired!
+To maintain uninterrupted access to our services, please make a deposit of at least $1 (150 birr) before your subscription expires.
 
-Expired: {-days_remaining} days ago
-Renew now to continue using AliPay_ETH
-
-Use the 💳 <b>Subscription</b> menu to renew.
+<i>Note: Your next deposit will automatically renew your subscription for another month.</i>
 """,
-                                parse_mode='HTML'
-                            )
-                        else:
-                            # Subscription expiring soon
-                            bot.send_message(
-                                user.telegram_id,
-                                f"""
-REMINDER
+                            parse_mode='HTML',
+                            reply_markup=renewal_markup
+                        )
+                        logger.info(f"Sent subscription expiry reminder to user {user.telegram_id}, {days_remaining} days remaining")
+                    
+                    # Case 2: Subscription has expired
+                    elif days_remaining <= 0:
+                        renewal_markup = InlineKeyboardMarkup()
+                        renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                        
+                        bot.send_message(
+                            user.telegram_id,
+                            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🚫 <b>SUBSCRIPTION EXPIRED</b> 🚫  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Subscription ending soon!
+Your subscription has expired. It's been {abs(days_remaining)} days since your subscription ended.
 
-Days remaining: {days_remaining}
-Renew now to avoid interruption
+To continue using our services, please make a deposit of at least $1 (150 birr) to automatically renew your subscription.
 
-Use the 💳 <b>Subscription</b> menu to renew.
+<i>Your account features may be limited until you renew your subscription.</i>
 """,
-                                parse_mode='HTML'
-                            )
+                            parse_mode='HTML',
+                            reply_markup=renewal_markup
+                        )
+                        logger.info(f"Sent subscription expired notification to user {user.telegram_id}, expired {abs(days_remaining)} days ago")
 
                         # Update last reminder time
                         user.last_subscription_reminder = now
@@ -2647,6 +2745,16 @@ Click below to pay securely with:
         bot.send_message(chat_id, "Error processing subscription renewal. Please try again later.")
     finally:
         safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data == "deposit_renew")
+def handle_deposit_for_renewal(call):
+    """Handle deposit to renew subscription"""
+    chat_id = call.message.chat.id
+    bot.answer_callback_query(call.id, "Processing your deposit request...")
+    
+    # Redirect to deposit flow with the knowledge that this is for subscription renewal
+    deposit_for_subscription = True
+    deposit_funds_internal(call.message, for_subscription=True)
 
 @bot.callback_query_handler(func=lambda call: call.data == "sub_benefits")
 def handle_subscription_benefits(call):
