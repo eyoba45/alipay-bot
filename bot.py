@@ -1812,42 +1812,63 @@ Please check the order number and try again.
             
         # Format status with emoji
         status_emoji = "⏳"
+        status_color = "🟡"
         if order.status == "Completed":
             status_emoji = "✅"
+            status_color = "🟢"
         elif order.status == "Cancelled":
             status_emoji = "❌"
+            status_color = "🔴"
         elif order.status == "Processing":
             status_emoji = "🔄"
+            status_color = "🔵"
         elif order.status == "Shipped":
             status_emoji = "🚚"
+            status_color = "🟢"
         
         # Create tracking link if tracking number exists
         tracking_info = ""
         if order.tracking_number:
-            tracking_link = f"https://t.17track.net/en#nums={order.tracking_number}"
+            parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
             tracking_info = f"""
-<b>Tracking Number:</b> <code>{order.tracking_number}</code>
-<a href="{tracking_link}">Track Package on 17Track</a>
+<b>📬 TRACKING INFORMATION:</b>
+• Tracking Number: <code>{order.tracking_number}</code>
+• <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
+• <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
 """
             
-        # Create order message
+        # Create order message with enhanced design
         order_msg = f"""
-📦 <b>ORDER DETAILS</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🛍️ <b>ORDER DETAILS</b> 🛍️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>Order Number:</b> #{order.order_number}
-<b>Status:</b> {status_emoji} {order.status}
-<b>Amount:</b> ${order.amount:.2f}
-<b>Date:</b> {order.created_at.strftime('%Y-%m-%d')}
-{tracking_info}
+<b>📋 ORDER INFORMATION:</b>
+• Order: <b>#{order.order_number}</b>
+• Status: {status_emoji} <b>{order.status}</b> {status_color}
+• Amount: <b>${order.amount:.2f}</b>
+• Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
 """
         
         if order.order_id:
-            order_msg += f"<b>AliExpress ID:</b> <code>{order.order_id}</code>\n"
+            order_msg += f"""
+<b>🔖 ALIEXPRESS DETAILS:</b>
+• Order ID: <code>{order.order_id}</code>
+"""
+            
+        # Add tracking info if available
+        if tracking_info:
+            order_msg += f"\n{tracking_info}"
             
         if order.product_link:
             order_msg += f"""
-<b>Product Link:</b>
-<a href="{order.product_link}">View Product on AliExpress</a>
+<b>🔗 PRODUCT INFORMATION:</b>
+• <a href="{order.product_link}">View Product on AliExpress</a>
+"""
+
+        # Add footer with support info
+        order_msg += """
+<i>💫 Having issues with your order? Contact our support at @eyob_787 for assistance 💫</i>
 """
             
         bot.send_message(
@@ -1912,40 +1933,58 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
             )
             return
             
-        # Show all orders
+        # Show all orders with beautiful formatting
         orders_text = """
-📊 <b>YOUR ORDERS</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>YOUR ORDERS</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Here are your recent orders:
+<b>Recent orders summary:</b>
 """
         for order in orders:
             status_emoji = "⏳"
+            status_color = "🟡"  # Default yellow for pending
+            
             if order.status == "Completed":
                 status_emoji = "✅"
+                status_color = "🟢"
             elif order.status == "Cancelled":
                 status_emoji = "❌"
+                status_color = "🔴"
             elif order.status == "Processing":
                 status_emoji = "🔄"
+                status_color = "🔵"
             elif order.status == "Shipped":
                 status_emoji = "🚚"
+                status_color = "🟢"
                 
-            # Format order details
-            order_details = f"""
-<b>Order #{order.order_number}</b>
-Status: {status_emoji} <b>{order.status}</b>
-Amount: ${order.amount:.2f}
-Date: {order.created_at.strftime('%Y-%m-%d')}
-"""
+            # Format tracking info if available
+            tracking_info = ""
             if order.tracking_number:
-                order_details += f"Tracking: <code>{order.tracking_number}</code>\n"
+                parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
+                tracking_info = f"""• Tracking: <code>{order.tracking_number}</code>
+• <a href="{parcels_app_link}">📲 Track on ParcelsApp</a>"""
                 
-            if order.order_id:
-                order_details += f"AliExpress ID: <code>{order.order_id}</code>\n"
-                
+            # Format order details with emojis and nice formatting
+            order_details = f"""
+╭─────────────────────╮
+<b>🛍️ Order #{order.order_number}</b>
+• Status: {status_emoji} <b>{order.status}</b> {status_color}
+• Amount: <b>${order.amount:.2f}</b>
+• Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
+{f"• AliExpress ID: <code>{order.order_id}</code>" if order.order_id else ""}
+{tracking_info}
+╰─────────────────────╯
+"""                
             orders_text += order_details
             
         orders_text += """
-Use 🔍 <b>Track Order</b> to get detailed tracking information for a specific order.
+<b>🔹 TRACK YOUR ORDERS:</b>
+• Use 🔍 <b>Track Order</b> button for detailed tracking
+• Get real-time updates on ParcelsApp
+• Contact support @eyob_787 if you need help
+
+<i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
 """
         
         bot.send_message(
@@ -2016,6 +2055,158 @@ Enter 'cancel' to cancel processing.
     finally:
         safe_close_session(session)
 
+@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
+def check_subscription(message):
+    """Handle subscription button press with enhanced UI"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id, 
+                """
+⚠️ <b>REGISTRATION REQUIRED</b>
+
+Please register first to check your subscription status.
+You can register by clicking 🔑 Register on the main menu.
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu()
+            )
+            return
+            
+        now = datetime.utcnow()
+        subscription_active = False
+        days_remaining = 0
+        subscription_msg = ""
+        markup = create_main_menu(is_registered=True)
+        
+        # Check subscription status
+        if user.subscription_date:
+            days_passed = (now - user.subscription_date).days
+            days_remaining = 30 - days_passed
+            
+            if days_remaining > 0:
+                subscription_active = True
+                subscription_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>ACTIVE SUBSCRIPTION</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>📅 SUBSCRIPTION DETAILS:</b>
+• Status: <b>Active</b> 🟢
+• Expires in: <b>{days_remaining} days</b>
+• Renewal date: <b>{(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}</b>
+• Monthly fee: <b>$1.00</b> (150 birr)
+
+<i>Your subscription will automatically renew when you make your next deposit.</i>
+
+<b>✨ PREMIUM BENEFITS:</b>
+• Unlimited order processing
+• Priority customer support
+• Real-time tracking updates
+• Special promotions & discounts
+"""
+                # If expiring soon, add inline buttons for renewal
+                if days_remaining <= 5:
+                    renewal_markup = InlineKeyboardMarkup()
+                    renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                    renewal_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
+                    
+                    bot.send_message(
+                        chat_id,
+                        subscription_msg,
+                        parse_mode='HTML',
+                        reply_markup=renewal_markup
+                    )
+                    return
+            else:
+                # Subscription expired
+                days_expired = abs(days_remaining)
+                expired_text = "today" if days_expired == 0 else f"{days_expired} days ago"
+                
+                subscription_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🚫 <b>SUBSCRIPTION EXPIRED</b> 🚫  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>📅 SUBSCRIPTION DETAILS:</b>
+• Status: <b>Expired</b> 🔴
+• Expired: <b>{expired_text}</b>
+• Monthly fee: <b>$1.00</b> (150 birr)
+
+<i>Please renew your subscription to continue enjoying our premium services.</i>
+
+<b>🔄 HOW TO RENEW:</b>
+1. Make a deposit of at least $1
+2. Your subscription will automatically renew
+3. Enjoy uninterrupted service for another 30 days
+"""
+                # Add renewal buttons
+                renewal_markup = InlineKeyboardMarkup()
+                renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                renewal_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
+                
+                bot.send_message(
+                    chat_id,
+                    subscription_msg,
+                    parse_mode='HTML',
+                    reply_markup=renewal_markup
+                )
+                return
+        else:
+            # No subscription yet
+            subscription_msg = """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ℹ️ <b>NO SUBSCRIPTION</b> ℹ️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>📅 SUBSCRIPTION DETAILS:</b>
+• Status: <b>Not Active</b> ⚪
+• Monthly fee: <b>$1.00</b> (150 birr)
+
+<i>You don't have an active subscription yet. Subscribe now to access premium features!</i>
+
+<b>✨ PREMIUM BENEFITS:</b>
+• Unlimited order processing
+• Priority customer support
+• Real-time tracking updates
+• Special promotions & discounts
+
+<b>💡 HOW TO SUBSCRIBE:</b>
+Make a deposit of at least $1 to automatically activate your subscription.
+"""
+            # Add subscription buttons
+            subscription_markup = InlineKeyboardMarkup()
+            subscription_markup.add(InlineKeyboardButton("💰 Subscribe Now", callback_data="deposit_renew"))
+            subscription_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
+            
+            bot.send_message(
+                chat_id,
+                subscription_msg,
+                parse_mode='HTML',
+                reply_markup=subscription_markup
+            )
+            return
+        
+        # Send the message with markup only if we didn't return earlier
+        bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
+        
+    except Exception as e:
+        logger.error(f"Error checking subscription: {e}")
+        logger.error(traceback.format_exc())  # Add traceback for better debugging
+        bot.send_message(
+            chat_id, 
+            "⚠️ <b>Oops!</b> We encountered a temporary glitch. Please try again in a moment. ⚠️",
+            parse_mode='HTML'
+        )
+    finally:
+        if session:
+            safe_close_session(session)
+
 def process_order_details(message, order_id, user_telegram_id):
     """Process order details provided by admin"""
     session = None
@@ -2051,23 +2242,41 @@ def process_order_details(message, order_id, user_telegram_id):
         order.updated_at = datetime.utcnow()
         session.commit()
 
-        # Notify user
+        # Notify user with beautiful formatting
+        status_emoji = "🔄"
+        status_color = "🔵"
+        if order.status == "Shipped":
+            status_emoji = "🚚"
+            status_color = "🟢"
+            
+        tracking_info = ""
+        if tracking:
+            parcels_app_link = f"https://parcelsapp.com/en/tracking/{tracking}"
+            tracking_info = f"""
+<b>📬 TRACKING INFORMATION:</b>
+• Tracking Number: <code>{tracking}</code>
+• <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
+• <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
+"""
+
         bot.send_message(
             user_telegram_id,
             f"""
-📦 <b>ORDER UPDATE</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🎉 <b>ORDER UPDATE</b> 🎉  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Your order #{order.order_number} has been {order.status.lower()}!
+Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status.lower()}</b>!
 
-<b>Details:</b>
-• Status: {"🚚" if order.status == "Shipped" else "🔄"} <b>{order.status}</b>
+<b>📋 ORDER INFORMATION:</b>
+• Status: {status_emoji} <b>{order.status}</b> {status_color}
 • AliExpress Order ID: <code>{aliexpress_id}</code>
-• Amount: ${price:.2f}
-{f"• Tracking Number: <code>{tracking}</code>" if tracking else ""}
+• Amount: <b>${price:.2f}</b>
+• Updated: <b>{datetime.utcnow().strftime('%d %b %Y')}</b>
 
-{f'<a href="https://t.17track.net/en#nums={tracking}">Track your package</a>' if tracking else "Your tracking information will be added soon."}
+{tracking_info if tracking else "Your tracking information will be added soon."}
 
-Thank you for your order!
+<i>💫 Having issues with your order? Contact our support at @eyob_787 for assistance 💫</i>
 """,
             parse_mode='HTML',
             disable_web_page_preview=True
