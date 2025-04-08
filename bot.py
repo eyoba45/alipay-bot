@@ -1,4 +1,4 @@
-w#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Telegram Bot Runner with enhanced functionality
 """
