@@ -24,6 +24,7 @@ def cleanup():
         commands = [
             "pkill -f 'python.*bot.py' || true",
             "pkill -f 'telebot' || true",
+            "pkill -f 'payment_notifier.py' || true",
             "rm -f *.lock || true",
             "rm -f *.pid || true"
         ]
