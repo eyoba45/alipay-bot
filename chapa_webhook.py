@@ -251,13 +251,6 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                     parse_mode='HTML',
                     reply_markup=create_main_menu(is_registered=True)
                 )
-# Clear registration state if exists
-from bot import user_states, registration_data
-if telegram_id in user_states:
-    del user_states[telegram_id]
-if telegram_id in registration_data:
-    del registration_data[telegram_id]
-
 
                 logger.info(f"Sent registration confirmation messages to user {telegram_id}")
             except Exception as e:
