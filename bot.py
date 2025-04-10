@@ -926,13 +926,18 @@ Examples:
         # Remove $ and convert to float
         amount = float(amount_text.replace('$', ''))
         # Use dollar amount for payment
-        payment_details(message, amount)  # Call the payment_details function directly
+        # Check if this is for subscription renewal
+        for_subscription = False
+        if chat_id in user_states and isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
+            for_subscription = True
+            
+        payment_details(message, amount, for_subscription)  # Call with subscription flag
 
-def send_payment_details(message, amount):
+def send_payment_details(message, amount, for_subscription=False):
     """Send payment details to user"""
-    payment_details(message, amount)  # Call the existing payment_details function
+    payment_details(message, amount, for_subscription)  # Call the existing payment_details function with subscription flag
 
-def payment_details(message, amount):
+def payment_details(message, amount, for_subscription=False):
     """Send payment instructions with Chapa integration"""
     chat_id = message.chat.id
     birr_amount = int(float(amount) * 160)
@@ -1106,7 +1111,12 @@ For larger deposits, please contact support.
             return
 
         # Send payment details with the custom amount
-        send_payment_details(message, usd_amount)
+        # Check if this is for subscription renewal
+        for_subscription = False
+        if chat_id in user_states and isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
+            for_subscription = True
+        
+        send_payment_details(message, usd_amount, for_subscription)
 
     except ValueError:
         bot.send_message(
