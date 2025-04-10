@@ -2439,6 +2439,15 @@ def main():
         logger.info("Telebot connection optimizations applied")
     except Exception as optimization_error:
         logger.warning(f"Could not apply all performance optimizations: {optimization_error}")
+        
+    # Start payment notification checker
+    try:
+        logger.info("Starting payment notification checker...")
+        import payment_notifier
+        payment_notifier.start_checker()
+        logger.info("Payment notification checker started")
+    except Exception as e:
+        logger.error(f"Error starting payment notification checker: {e}")
 
     # Start polling with recovery
     while not shutdown_requested:
