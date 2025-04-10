@@ -8,7 +8,8 @@ import json
 import hashlib
 import hmac
 import traceback
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval, PendingDeposit
@@ -213,20 +214,33 @@ def handle_webhook(data):
             session.rollback()
             return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
-        # Send registration success message
+        # Send registration success message with improved handling
         bot, create_main_menu = get_bot()
         if bot:
             try:
+                # First send a notification message
                 bot.send_message(
                     telegram_id,
                     """
-✅ <b>Registration Approved!</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>REGISTRATION SUCCESSFUL!</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 🎉 <b>Welcome to AliPay_ETH!</b> 🎉
 
-Your account has been successfully activated! You're all set to start shopping on AliExpress using Ethiopian Birr!
-
-<b>📱 Your Services:</b>
+Your registration payment has been successfully processed! Your account is now fully activated.
+""",
+                    parse_mode='HTML'
+                )
+                
+                # Wait a moment to ensure messages appear in order
+                time.sleep(1)
+                
+                # Then send main menu with all options
+                bot.send_message(
+                    telegram_id,
+                    """
+<b>📱 YOUR SERVICES:</b>
 • 💰 <b>Deposit</b> - Add funds to your account
 • 📦 <b>Submit Order</b> - Place AliExpress orders
 • 📊 <b>Order Status</b> - Track your orders
@@ -237,6 +251,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                     parse_mode='HTML',
                     reply_markup=create_main_menu(is_registered=True)
                 )
+                logger.info(f"Sent registration confirmation messages to user {telegram_id}")
             except Exception as e:
                 logger.error(f"Error sending welcome message: {e}")
 
@@ -283,11 +298,76 @@ def handle_deposit_webhook(data, session):
             if user:
                 # Convert amount from birr to USD
                 usd_amount = float(amount) / 160.0
-
-                # Update user balance
                 current_balance = user.balance if user.balance is not None else 0
-                user.balance = current_balance + usd_amount
-                logger.info(f"Updating balance for user {telegram_id}: {current_balance} + {usd_amount} = {user.balance}")
+
+                # Check metadata to see if this is explicitly a subscription renewal
+                is_subscription_renewal = False
+                metadata = data.get('metadata', {})
+                if isinstance(metadata, dict) and metadata.get('for_subscription') == True:
+                    is_subscription_renewal = True
+                    logger.info(f"This is a subscription renewal payment for user {telegram_id}")
+                    
+                # Check subscription status to see if we need to deduct the subscription fee
+                now = datetime.utcnow()
+                subscription_deducted = False
+                subscription_renewal_msg = ""
+                
+                # Logic for handling subscription renewal
+                if is_subscription_renewal:
+                    # Always deduct subscription fee if this is specifically for renewal
+                    if usd_amount >= 1.0:
+                        usd_amount_after_sub = usd_amount - 1.0  # Deduct $1 subscription fee
+                        user.balance = current_balance + usd_amount_after_sub
+                        user.subscription_date = now  # Reset subscription date
+                        subscription_deducted = True
+                        
+                        if user.subscription_date:
+                            action = "renewed"
+                            subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                        else:
+                            action = "activated"
+                            subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                            
+                        logger.info(f"Subscription {action} for user {telegram_id}, date: {user.subscription_date}")
+                    else:
+                        # Deposit amount too small for subscription
+                        user.balance = current_balance + usd_amount
+                        logger.warning(f"Amount ${usd_amount} too small for subscription renewal")
+                else:
+                    # Regular deposit - check subscription status automatically
+                    if user.subscription_date:
+                        days_passed = (now - user.subscription_date).days
+                        # If subscription has expired, deduct $1 for renewal
+                        if days_passed >= 30:
+                            # Only deduct if they have enough to cover deposit + subscription
+                            if usd_amount >= 1.0:
+                                usd_amount_after_sub = usd_amount - 1.0  # Deduct $1 subscription fee
+                                user.balance = current_balance + usd_amount_after_sub
+                                user.subscription_date = now  # Set new subscription date
+                                subscription_deducted = True
+                                subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
+                                logger.info(f"Subscription renewed for user {telegram_id}, new date: {user.subscription_date}")
+                            else:
+                                # If deposit is less than $1, just add to balance without renewing
+                                user.balance = current_balance + usd_amount
+                        else:
+                            # Subscription still active, add full amount
+                            user.balance = current_balance + usd_amount
+                    else:
+                        # No previous subscription, set initial subscription date and deduct fee
+                        if usd_amount >= 1.0:
+                            usd_amount_after_sub = usd_amount - 1.0  # Deduct $1 subscription fee
+                            user.balance = current_balance + usd_amount_after_sub
+                            user.subscription_date = now  # Set initial subscription date
+                            subscription_deducted = True
+                            subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
+                            logger.info(f"Subscription activated for user {telegram_id}, date: {user.subscription_date}")
+                        else:
+                            # If deposit is less than $1, just add to balance without subscription
+                            user.balance = current_balance + usd_amount
+                
+                current_balance = user.balance if user.balance is not None else 0
+                logger.info(f"Updated balance for user {telegram_id}: ${current_balance}")
 
                 # Create approved deposit record
                 new_deposit = PendingDeposit(
@@ -300,32 +380,56 @@ def handle_deposit_webhook(data, session):
                     session.commit()
                     logger.info(f"Deposit approved for user {telegram_id}, amount: ${usd_amount}")
 
-                    # Send deposit confirmation message
+                    # Send deposit confirmation message with improved notification
                     try:
-                        from bot import bot
-                        bot.send_message(
-                            telegram_id,
-                            f"""
+                        # Get bot instance directly to ensure we have the freshest connection
+                        bot, create_main_menu = get_bot()
+                        if not bot:
+                            from bot import bot
+                        
+                        # First send a notification alert message
+                        alert_message = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT APPROVED</b> ✅  
+   ✅ <b>DEPOSIT SUCCESSFUL!</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
+<b>Your payment of {int(amount):,} birr has been processed!</b>
+"""
+                        
+                        bot.send_message(
+                            telegram_id,
+                            alert_message,
+                            parse_mode='HTML'
+                        )
+                        
+                        # Wait a moment to ensure messages appear in order
+                        time.sleep(1)
+                        
+                        # Then send detailed confirmation
+                        message_text = f"""
 <b>💰 DEPOSIT DETAILS:</b>
 • Amount: <code>{int(amount):,}</code> birr
 • USD Value: ${usd_amount:.2f}
+{f"• Amount after subscription fee: ${usd_amount - 1.0:.2f}" if subscription_deducted else ""}
+{subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>${user.balance:.2f}</code>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr (${user.balance:.2f})
 
 ✨ <b>You're ready to start shopping!</b> ✨
 
 <i>Browse AliExpress and submit your orders now!</i>
-""",
+"""
+                        
+                        bot.send_message(
+                            telegram_id,
+                            message_text,
                             parse_mode='HTML'
                         )
                         logger.info(f"Sent deposit confirmation to user {telegram_id}")
                     except Exception as e:
                         logger.error(f"Error sending deposit confirmation: {e}")
+                        logger.error(traceback.format_exc())
                 except Exception as e:
                     logger.error(f"Database transaction error: {e}")
                     session.rollback()
@@ -349,29 +453,51 @@ def handle_deposit_webhook(data, session):
                         session.rollback()
                         return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
-                    # Send notification
+                    # Send notification with improved handling
                     bot, create_main_menu = get_bot()
-                    if bot:
-                        try:
-                            bot.send_message(
-                                user.telegram_id,
-                                f"""
+                    if not bot:
+                        from bot import bot
+                        
+                    try:
+                        # First notification alert
+                        alert_message = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT SUCCESSFUL!</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>💰 Amount Deposited:</b>
-• {amount:,.2f} ETB
-• ${deposit.amount:.2f}
+<b>Your payment of {amount:,.2f} ETB has been processed!</b>
+"""
+                        bot.send_message(
+                            user.telegram_id,
+                            alert_message,
+                            parse_mode='HTML'
+                        )
+                        
+                        # Wait a moment to ensure messages appear in order
+                        time.sleep(1)
+                        
+                        # Detailed information
+                        detail_message = f"""
+<b>💰 DEPOSIT DETAILS:</b>
+• Amount: <code>{int(amount):,}</code> birr
+• USD Value: ${deposit.amount:.2f}
 
-<b>💳 New Balance:</b> ${user.balance:.2f}
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr (${user.balance:.2f})
 
-✨ You can now start shopping on AliExpress!
-""",
-                                parse_mode='HTML'
-                            )
-                        except Exception as e:
-                            logger.error(f"Error sending deposit confirmation message: {e}")
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
+"""
+                        bot.send_message(
+                            user.telegram_id,
+                            detail_message,
+                            parse_mode='HTML'
+                        )
+                        logger.info(f"Sent deposit confirmation messages to user {user.telegram_id}")
+                    except Exception as e:
+                        logger.error(f"Error sending deposit confirmation message: {e}")
+                        logger.error(traceback.format_exc())
 
                     return jsonify({"status": "success", "message": "Deposit processed"}), 200
 
@@ -389,14 +515,18 @@ def verify_webhook_signature(request_data, signature):
             return True
 
         # For testing/development, temporarily allow all signatures
+        # TODO: Implement proper signature verification once confirmed with Chapa
         logger.info("Temporarily allowing all webhook signatures for testing")
         return True
-
-        # The proper verification will be implemented once we confirm
-        # the correct signature format from Chapa
-    except Exception as e:
-        logger.error(f"Error verifying signature: {e}")
-        return True
+        
+        # The following code is commented out until we have proper signature format
+        # computed_signature = hmac.new(
+        #    webhook_secret.encode(),
+        #    request_data,
+        #    hashlib.sha256
+        # ).hexdigest()
+        # return hmac.compare_digest(computed_signature, signature)
+        
     except Exception as e:
         logger.error(f"Error verifying webhook signature: {e}")
         return False
