@@ -25,14 +25,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def get_bot():
-    """Get bot instance"""
-    try:
-        from bot import bot, create_main_menu
-        return bot, create_main_menu
-    except Exception as e:
-        logger.error(f"Error importing bot: {e}")
-        logger.error(traceback.format_exc())
-        return None, None
+    """
+    This function used to get the bot instance, but now we'll make it
+    completely independent to avoid thread and signal issues.
+    We'll still return None to maintain compatibility with existing code.
+    """
+    logger.info("Bot integration disabled for standalone payment notifier")
+    return None, None
 
 def notify_pending_registrations():
     """Check for pending registrations and send notifications"""
@@ -282,17 +281,86 @@ def notify_pending_deposits():
         logger.error(f"Error in notify_pending_deposits: {e}")
         logger.error(traceback.format_exc())
 
+def auto_approve_payments():
+    """Automatically approve pending registrations and deposits"""
+    try:
+        from database import get_session, safe_close_session
+        from models import PendingApproval, PendingDeposit, User
+        
+        session = get_session()
+        try:
+            # Auto-approve all pending registrations
+            pending_approvals = session.query(PendingApproval).all()
+            logger.info(f"Found {len(pending_approvals)} pending registrations")
+            
+            for pending in pending_approvals:
+                try:
+                    # Check if user already exists
+                    user = session.query(User).filter_by(telegram_id=pending.telegram_id).first()
+                    
+                    if not user:
+                        # Create new user
+                        logger.info(f"Auto-approving registration for user {pending.telegram_id}")
+                        new_user = User(
+                            telegram_id=pending.telegram_id,
+                            name=pending.name,
+                            phone=pending.phone,
+                            address=pending.address,
+                            balance=0.0,
+                            subscription_date=datetime.utcnow()
+                        )
+                        session.add(new_user)
+                        session.delete(pending)
+                        session.commit()
+                        logger.info(f"User {pending.telegram_id} auto-registered successfully")
+                    else:
+                        # User already exists
+                        logger.info(f"User {pending.telegram_id} already exists, removing pending approval")
+                        session.delete(pending)
+                        session.commit()
+                except Exception as e:
+                    logger.error(f"Error auto-approving registration for {pending.telegram_id}: {e}")
+                    logger.error(traceback.format_exc())
+                    session.rollback()
+            
+            # Auto-approve all pending deposits
+            pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+            logger.info(f"Found {len(pending_deposits)} pending deposits")
+            
+            for deposit in pending_deposits:
+                try:
+                    user = session.query(User).filter_by(id=deposit.user_id).first()
+                    if user:
+                        logger.info(f"Auto-approving deposit for user {user.telegram_id}, amount: ${deposit.amount}")
+                        user.balance += deposit.amount
+                        deposit.status = 'Approved'
+                        session.commit()
+                        logger.info(f"Deposit for user {user.telegram_id} approved automatically")
+                except Exception as e:
+                    logger.error(f"Error auto-approving deposit for user_id {deposit.user_id}: {e}")
+                    logger.error(traceback.format_exc())
+                    session.rollback()
+        except Exception as e:
+            logger.error(f"Error in auto_approve_payments: {e}")
+            logger.error(traceback.format_exc())
+            session.rollback()
+        finally:
+            safe_close_session(session)
+    except Exception as e:
+        logger.error(f"Fatal error in auto_approve_payments: {e}")
+        logger.error(traceback.format_exc())
+
 def notification_checker():
     """Main notification checker function"""
     logger.info("Starting payment notification checker...")
+    logger.info("Running in standalone mode: will auto-approve payments but not send notifications")
     
     while True:
         try:
-            # Check for pending registrations and notify users
-            notify_pending_registrations()
+            # Skip notification attempts in standalone mode
+            # Just auto-approve all payments in database
+            auto_approve_payments()
             
-            # Check for pending deposits and notify users
-            notify_pending_deposits()
         except Exception as e:
             logger.error(f"Error in notification checker: {e}")
             logger.error(traceback.format_exc())
