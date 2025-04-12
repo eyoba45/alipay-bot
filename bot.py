@@ -16,6 +16,7 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from database import init_db, get_session, safe_close_session
 from models import User, Order, PendingApproval, PendingDeposit
 from datetime import datetime, timedelta
+from sqlalchemy import func
 
 # Configure logging
 logging.basicConfig(
@@ -48,17 +49,32 @@ signal.signal(signal.SIGINT, signal_handler)
 
 # Get Telegram token
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-ADMIN_ID = os.environ.get('ADMIN_CHAT_ID')
+ADMIN_ID_STR = os.environ.get('ADMIN_CHAT_ID', '')
 
 if not TOKEN:
     logger.error("❌ TELEGRAM_BOT_TOKEN not found!")
     sys.exit(1)
 
+# Support for multiple admin IDs, comma-separated
+ADMIN_IDS = []
 try:
-    ADMIN_ID = int(ADMIN_ID)
-except (ValueError, TypeError):
+    # Parse comma-separated admin IDs
+    for admin_id in ADMIN_ID_STR.split(','):
+        admin_id = admin_id.strip()
+        if admin_id:
+            ADMIN_IDS.append(int(admin_id))
+    
+    # Keep ADMIN_ID for backward compatibility
+    ADMIN_ID = ADMIN_IDS[0] if ADMIN_IDS else None
+    
+    if ADMIN_IDS:
+        logger.info(f"✅ Configured {len(ADMIN_IDS)} admin IDs")
+    else:
+        logger.warning("⚠️ No valid admin IDs found. Admin features will be disabled.")
+except (ValueError, TypeError, IndexError):
     logger.warning("⚠️ ADMIN_CHAT_ID is not valid. Admin notifications will be skipped.")
     ADMIN_ID = None
+    ADMIN_IDS = []
 
 # Initialize bot with large timeout
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
@@ -68,9 +84,16 @@ _user_cache = {}
 user_states = {}
 registration_data = {}
 
-def create_main_menu(is_registered=False):
-    """Create the main menu keyboard based on registration status"""
+def is_admin(chat_id):
+    """Check if a user is an admin"""
+    return chat_id in ADMIN_IDS
+
+def create_main_menu(is_registered=False, chat_id=None):
+    """Create the main menu keyboard based on registration status and admin status"""
     menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+
+    # Check if this is an admin user
+    is_admin_user = chat_id is not None and is_admin(chat_id)
 
     if is_registered:
         menu.add(
@@ -89,13 +112,39 @@ def create_main_menu(is_registered=False):
             KeyboardButton('👥 Join Community'),
             KeyboardButton('❓ Help Center')
         )
+        
+        # Add admin buttons for admin users
+        if is_admin_user:
+            menu.add(KeyboardButton('🔐 Admin Dashboard'))
     else:
         menu.add(KeyboardButton('🔑 Register'))
         menu.add(
             KeyboardButton('👥 Join Community'),
             KeyboardButton('❓ Help Center')
         )
+        
+        # Add admin buttons for admin users, even if not registered
+        if is_admin_user:
+            menu.add(KeyboardButton('🔐 Admin Dashboard'))
+            
     return menu
+
+@bot.message_handler(commands=['admin'])
+def admin_command(message):
+    """Direct access to admin dashboard via command"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.send_message(
+            chat_id,
+            "⚠️ You don't have permission to access the admin dashboard.",
+            reply_markup=create_main_menu(False, chat_id)
+        )
+        return
+    
+    # If admin, redirect to admin dashboard
+    admin_dashboard(message)
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
@@ -114,7 +163,27 @@ def start_message(message):
         if chat_id in registration_data:
             del registration_data[chat_id]
 
-        welcome_msg = """
+        # Check if user is admin
+        is_admin_user = is_admin(chat_id)
+        
+        # Different welcome message for admins
+        if is_admin_user:
+            welcome_msg = """
+✨ <b>Welcome to AliPay_ETH Admin Panel!</b> ✨
+
+You are logged in as an administrator. You have access to all regular user functions plus admin features.
+
+🔐 <b>ADMIN FEATURES:</b>
+• User management
+• Order management
+• Deposit management
+• System statistics
+• Subscription management
+
+Click '🔐 Admin Dashboard' to access admin features.
+"""
+        else:
+            welcome_msg = """
 ✨ <b>Welcome to AliPay_ETH!</b> ✨
 
 Your trusted Ethiopian payment solution for AliExpress shopping!
@@ -135,13 +204,13 @@ Your trusted Ethiopian payment solution for AliExpress shopping!
         bot.send_message(
             chat_id,
             welcome_msg,
-            reply_markup=create_main_menu(is_registered),
+            reply_markup=create_main_menu(is_registered, chat_id),
             parse_mode='HTML'
         )
         logger.info(f"Sent welcome message to user {chat_id}")
     except Exception as e:
         logger.error(f"❌ Error in start command: {traceback.format_exc()}")
-        bot.send_message(chat_id, "Welcome to AliPay_ETH!", reply_markup=create_main_menu())
+        bot.send_message(chat_id, "Welcome to AliPay_ETH!", reply_markup=create_main_menu(False, chat_id))
     finally:
         safe_close_session(session)
 
@@ -1293,10 +1362,27 @@ def check_balance(message):
 @bot.message_handler(func=lambda msg: msg.text == '👥 Join Community')
 def join_community(message):
     """Join community button"""
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("📢 Our Channel", url="https://t.me/alipay_eth"))
+    markup.add(InlineKeyboardButton("👥 Our Group", url="https://t.me/aliexpresstax"))
+    
     bot.send_message(
         message.chat.id,
-        "Join our community: [AliExpress Tax](https://t.me/aliexpresstax)",
-        parse_mode='Markdown'
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👥 <b>JOIN OUR COMMUNITY!</b> 👥  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Stay Connected With Us!</b>
+
+📢 <b>Our Channel:</b> Get the latest updates, promotions, and announcements directly from our team.
+
+👥 <b>Our Group:</b> Connect with other users, share experiences, and get community support.
+
+<i>Join both for the complete AliPay_ETH experience!</i>
+""",
+        parse_mode='HTML',
+        reply_markup=markup
     )
 
 @bot.message_handler(func=lambda msg: msg.text == '📦 Submit Order')
@@ -1878,7 +1964,7 @@ Please check the order number and try again.
 
         # Add footer with support info
         order_msg += """
-<i>💫 Having issues with your order? Contact our support at @eyob_787 for assistance 💫</i>
+<i>💫 Having issues with your order? Contact our support at @alipay_help_center for assistance 💫</i>
 """
             
         bot.send_message(
@@ -1992,7 +2078,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
 <b>🔹 TRACK YOUR ORDERS:</b>
 • Use 🔍 <b>Track Order</b> button for detailed tracking
 • Get real-time updates on ParcelsApp
-• Contact support @eyob_787 if you need help
+• Contact support @alipay_help_center if you need help
 
 <i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
 """
@@ -2286,7 +2372,7 @@ Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status
 
 {tracking_info if tracking else "Your tracking information will be added soon."}
 
-<i>💫 Having issues with your order? Contact our support at @eyob_787 for assistance 💫</i>
+<i>💫 Having issues with your order? Contact our support at @alipay_help_center for assistance 💫</i>
 """,
             parse_mode='HTML',
             disable_web_page_preview=True
@@ -2413,6 +2499,1659 @@ def run_subscription_checker():
             logger.error(f"Error in subscription checker: {e}")
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
+        
+# Admin Dashboard Function Handlers
+@bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')
+def admin_dashboard(message):
+    """Show admin dashboard with all admin features"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.send_message(
+            chat_id,
+            "⚠️ You don't have permission to access the admin dashboard.",
+            reply_markup=create_main_menu(True, chat_id)
+        )
+        return
+    
+    # Create admin menu
+    admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    admin_menu.add(
+        KeyboardButton('👥 User Management'),
+        KeyboardButton('📦 Order Management')
+    )
+    admin_menu.add(
+        KeyboardButton('💰 Deposit Management'),
+        KeyboardButton('📊 System Stats')
+    )
+    admin_menu.add(
+        KeyboardButton('📅 Subscription Management'),
+        KeyboardButton('⚙️ Bot Settings')
+    )
+    admin_menu.add(
+        KeyboardButton('🔙 Back to Main Menu')
+    )
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔐 <b>ADMIN DASHBOARD</b> 🔐  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Welcome to the Admin Dashboard! Select a management option:
+
+<b>Available Admin Features:</b>
+• 👥 <b>User Management</b> - View and manage users
+• 📦 <b>Order Management</b> - View and manage orders
+• 💰 <b>Deposit Management</b> - View and manage deposits
+• 📊 <b>System Stats</b> - View system statistics
+• 📅 <b>Subscription Management</b> - Manage user subscriptions
+• ⚙️ <b>Bot Settings</b> - Configure bot settings
+
+<i>Select any option to continue or go back to the main menu.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=admin_menu
+    )
+
+@bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Main Menu')
+def back_to_main_menu(message):
+    """Return to main menu from admin dashboard"""
+    chat_id = message.chat.id
+    session = None
+    
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        is_registered = user is not None
+        
+        bot.send_message(
+            chat_id,
+            "🏠 Returning to main menu...",
+            reply_markup=create_main_menu(is_registered, chat_id)
+        )
+    except Exception as e:
+        logger.error(f"Error returning to main menu: {e}")
+        bot.send_message(
+            chat_id,
+            "🏠 Returning to main menu...",
+            reply_markup=create_main_menu(True, chat_id)
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '👥 User Management')
+def user_management(message):
+    """Show user management options"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    # Create user management menu
+    user_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    user_mgmt_menu.add(
+        KeyboardButton('📋 List All Users'),
+        KeyboardButton('🔍 Find User')
+    )
+    user_mgmt_menu.add(
+        KeyboardButton('➕ Add User'),
+        KeyboardButton('🚫 Block User')
+    )
+    user_mgmt_menu.add(
+        KeyboardButton('✅ Pending Approvals'),
+        KeyboardButton('🔙 Back to Admin')
+    )
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👥 <b>USER MANAGEMENT</b> 👥  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Manage all user accounts from this panel.
+
+<b>Available Actions:</b>
+• 📋 <b>List All Users</b> - View all registered users
+• 🔍 <b>Find User</b> - Search for a specific user
+• ➕ <b>Add User</b> - Manually add a new user
+• 🚫 <b>Block User</b> - Block a user from using the bot
+• ✅ <b>Pending Approvals</b> - View pending registration approvals
+
+<i>Select an action or go back to the admin dashboard.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=user_mgmt_menu
+    )
+
+@bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Admin')
+def back_to_admin(message):
+    """Return to admin dashboard"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    admin_dashboard(message)
+
+@bot.message_handler(func=lambda msg: msg.text == '📋 List All Users')
+def list_all_users(message):
+    """List all registered users with pagination"""
+    chat_id = message.chat.id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        session = get_session()
+        # Get total users count for pagination
+        total_users = session.query(User).count()
+        
+        if total_users == 0:
+            bot.send_message(
+                chat_id,
+                "No users are registered in the system yet.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Set up pagination (first page)
+        page = 1
+        per_page = 10
+        offset = (page - 1) * per_page
+        
+        # Get users for the current page
+        users = session.query(User).order_by(User.created_at.desc()).limit(per_page).offset(offset).all()
+        
+        # Format user list with emojis and nice formatting
+        users_text = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📋 <b>USER LIST</b> (Page {page})  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Total Registered Users:</b> {total_users}
+
+"""
+        
+        for i, user in enumerate(users, 1):
+            # Format subscription status
+            subscription_status = "❌ Inactive"
+            if user.subscription_date:
+                days_passed = (datetime.utcnow() - user.subscription_date).days
+                if days_passed < 30:
+                    subscription_status = f"✅ Active ({30 - days_passed} days left)"
+            
+            # Format balance
+            balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
+            
+            # Format date
+            join_date = user.created_at.strftime("%Y-%m-%d")
+            
+            users_text += f"""
+<b>{offset + i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
+📱 Phone: <code>{user.phone}</code>
+💰 Balance: <b>{balance}</b>
+📅 Subscription: {subscription_status}
+🗓️ Joined: {join_date}
+"""
+        
+        # Add pagination controls if needed
+        if total_users > per_page:
+            markup = InlineKeyboardMarkup()
+            
+            # Only add Next button on first page
+            if page == 1:
+                markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"users_page_{page+1}"))
+            # Add navigation buttons for middle pages
+            elif page * per_page < total_users:
+                markup.add(
+                    InlineKeyboardButton("⬅️ Previous", callback_data=f"users_page_{page-1}"),
+                    InlineKeyboardButton("➡️ Next", callback_data=f"users_page_{page+1}")
+                )
+            # Only add Previous button on last page
+            else:
+                markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"users_page_{page-1}"))
+            
+            users_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
+            
+            bot.send_message(
+                chat_id,
+                users_text,
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+        else:
+            bot.send_message(
+                chat_id,
+                users_text,
+                parse_mode='HTML'
+            )
+        
+    except Exception as e:
+        logger.error(f"Error listing users: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error listing users. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('users_page_'))
+def handle_users_pagination(call):
+    """Handle user list pagination"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.answer_callback_query(call.id, "You don't have permission to view this data")
+        return
+    
+    try:
+        # Extract page number from callback data
+        page = int(call.data.split('_')[-1])
+        per_page = 10
+        offset = (page - 1) * per_page
+        
+        session = get_session()
+        total_users = session.query(User).count()
+        
+        # Get users for the requested page
+        users = session.query(User).order_by(User.created_at.desc()).limit(per_page).offset(offset).all()
+        
+        # Format user list with emojis and nice formatting
+        users_text = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📋 <b>USER LIST</b> (Page {page})  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Total Registered Users:</b> {total_users}
+
+"""
+        
+        for i, user in enumerate(users, 1):
+            # Format subscription status
+            subscription_status = "❌ Inactive"
+            if user.subscription_date:
+                days_passed = (datetime.utcnow() - user.subscription_date).days
+                if days_passed < 30:
+                    subscription_status = f"✅ Active ({30 - days_passed} days left)"
+            
+            # Format balance
+            balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
+            
+            # Format date
+            join_date = user.created_at.strftime("%Y-%m-%d")
+            
+            users_text += f"""
+<b>{offset + i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
+📱 Phone: <code>{user.phone}</code>
+💰 Balance: <b>{balance}</b>
+📅 Subscription: {subscription_status}
+🗓️ Joined: {join_date}
+"""
+        
+        # Create pagination markup
+        markup = InlineKeyboardMarkup()
+        
+        # First page - only Next button
+        if page == 1 and total_users > per_page:
+            markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"users_page_{page+1}"))
+        # Last page - only Previous button
+        elif page * per_page >= total_users:
+            markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"users_page_{page-1}"))
+        # Middle pages - both Previous and Next buttons
+        else:
+            markup.add(
+                InlineKeyboardButton("⬅️ Previous", callback_data=f"users_page_{page-1}"),
+                InlineKeyboardButton("➡️ Next", callback_data=f"users_page_{page+1}")
+            )
+        
+        users_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
+        
+        # Update the message with the new page
+        bot.edit_message_text(
+            users_text,
+            chat_id=chat_id,
+            message_id=message_id,
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        
+        # Acknowledge the callback
+        bot.answer_callback_query(call.id, f"Showing page {page}")
+        
+    except Exception as e:
+        logger.error(f"Error in users pagination: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error loading users")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '🔍 Find User')
+def find_user_prompt(message):
+    """Prompt admin to search for a user"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    # Update user state to wait for search query
+    user_states[chat_id] = 'waiting_for_user_search'
+    
+    # Create a cancel button
+    cancel_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    cancel_markup.add(KeyboardButton('🔙 Back to Admin'))
+    
+    bot.send_message(
+        chat_id,
+        """
+🔍 <b>FIND USER</b>
+
+Please enter any of the following to search for a user:
+• Telegram ID
+• Name (full or partial)
+• Phone number (full or partial)
+
+<i>Or click '🔙 Back to Admin' to cancel.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=cancel_markup
+    )
+
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_user_search')
+def search_user(message):
+    """Search for a user based on input"""
+    chat_id = message.chat.id
+    search_query = message.text.strip()
+    session = None
+    
+    # Check if user canceled the search
+    if search_query == '🔙 Back to Admin':
+        del user_states[chat_id]
+        back_to_admin(message)
+        return
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        session = get_session()
+        users = []
+        
+        # Try to parse as Telegram ID (int)
+        try:
+            telegram_id = int(search_query)
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
+            if user:
+                users = [user]
+        except ValueError:
+            # Not a Telegram ID, search by name or phone
+            users = session.query(User).filter(
+                (User.name.ilike(f'%{search_query}%')) |
+                (User.phone.ilike(f'%{search_query}%'))
+            ).all()
+        
+        # Clear the user state
+        if chat_id in user_states:
+            del user_states[chat_id]
+        
+        if not users:
+            bot.send_message(
+                chat_id,
+                f"❌ No users found matching '{search_query}'",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Display the search results
+        results_text = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔍 <b>SEARCH RESULTS</b>  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Found <b>{len(users)}</b> user(s) matching '{search_query}':
+
+"""
+        
+        for i, user in enumerate(users, 1):
+            # Format subscription status
+            subscription_status = "❌ Inactive"
+            if user.subscription_date:
+                days_passed = (datetime.utcnow() - user.subscription_date).days
+                if days_passed < 30:
+                    subscription_status = f"✅ Active ({30 - days_passed} days left)"
+            
+            # Format balance
+            balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
+            
+            # Format date
+            join_date = user.created_at.strftime("%Y-%m-%d")
+            
+            # Add inline keyboard for each user for detailed actions
+            user_markup = InlineKeyboardMarkup()
+            user_markup.add(InlineKeyboardButton(f"👤 Manage User #{i}", callback_data=f"manage_user_{user.telegram_id}"))
+            
+            user_text = f"""
+<b>{i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
+📱 Phone: <code>{user.phone}</code>
+🏠 Address: {user.address}
+💰 Balance: <b>{balance}</b>
+📅 Subscription: {subscription_status}
+🗓️ Joined: {join_date}
+"""
+            
+            # For first result, append to results text. For subsequent results, send as separate messages
+            if i == 1:
+                results_text += user_text
+                bot.send_message(
+                    chat_id,
+                    results_text,
+                    parse_mode='HTML',
+                    reply_markup=user_markup
+                )
+            else:
+                bot.send_message(
+                    chat_id,
+                    user_text,
+                    parse_mode='HTML',
+                    reply_markup=user_markup
+                )
+        
+    except Exception as e:
+        logger.error(f"Error searching users: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error searching users. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('manage_user_'))
+def handle_manage_user(call):
+    """Handle user management options for a specific user"""
+    chat_id = call.message.chat.id
+    user_id = int(call.data.split('_')[-1])
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.answer_callback_query(call.id, "You don't have permission to manage users")
+        return
+    
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        
+        if not user:
+            bot.answer_callback_query(call.id, "User not found")
+            return
+        
+        # Create user management markup
+        user_markup = InlineKeyboardMarkup(row_width=2)
+        user_markup.add(
+            InlineKeyboardButton("💰 Edit Balance", callback_data=f"edit_balance_{user.telegram_id}"),
+            InlineKeyboardButton("📅 Update Subscription", callback_data=f"update_sub_{user.telegram_id}")
+        )
+        user_markup.add(
+            InlineKeyboardButton("📋 View Orders", callback_data=f"view_orders_{user.telegram_id}"),
+            InlineKeyboardButton("💬 Send Message", callback_data=f"send_msg_{user.telegram_id}")
+        )
+        user_markup.add(
+            InlineKeyboardButton("🚫 Block User", callback_data=f"block_user_{user.telegram_id}")
+        )
+        
+        # Format subscription status
+        subscription_status = "❌ Inactive"
+        if user.subscription_date:
+            days_passed = (datetime.utcnow() - user.subscription_date).days
+            if days_passed < 30:
+                subscription_status = f"✅ Active ({30 - days_passed} days left)"
+        
+        # Get user stats
+        order_count = session.query(Order).filter_by(user_id=user.id).count()
+        pending_deposits = session.query(PendingDeposit).filter_by(user_id=user.id, status='Processing').count()
+        
+        # Send user details message
+        bot.send_message(
+            chat_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👤 <b>USER MANAGEMENT</b>  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>User:</b> {user.name}
+<b>Telegram ID:</b> <code>{user.telegram_id}</code>
+<b>Phone:</b> <code>{user.phone}</code>
+<b>Address:</b> {user.address}
+
+<b>💰 FINANCIAL INFO:</b>
+• Balance: <b>${user.balance:.2f}</b>
+• Orders: {order_count}
+• Pending Deposits: {pending_deposits}
+
+<b>📅 SUBSCRIPTION:</b>
+• Status: {subscription_status}
+• Start Date: {user.subscription_date.strftime('%Y-%m-%d') if user.subscription_date else 'N/A'}
+
+<b>📊 ACTIVITY:</b>
+• Joined: {user.created_at.strftime('%Y-%m-%d')}
+• Last Updated: {user.updated_at.strftime('%Y-%m-%d')}
+
+<i>Select an action below to manage this user.</i>
+""",
+            parse_mode='HTML',
+            reply_markup=user_markup
+        )
+        
+        # Acknowledge the callback
+        bot.answer_callback_query(call.id, f"Managing {user.name}")
+        
+    except Exception as e:
+        logger.error(f"Error managing user: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error loading user details")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '📦 Order Management')
+def order_management(message):
+    """Show order management options"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    # Create order management menu
+    order_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    order_mgmt_menu.add(
+        KeyboardButton('📋 List All Orders'),
+        KeyboardButton('🔍 Find Order')
+    )
+    order_mgmt_menu.add(
+        KeyboardButton('⏳ Pending Orders'),
+        KeyboardButton('🚚 Shipping Orders')
+    )
+    order_mgmt_menu.add(
+        KeyboardButton('✅ Completed Orders'),
+        KeyboardButton('🔙 Back to Admin')
+    )
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📦 <b>ORDER MANAGEMENT</b> 📦  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Manage all customer orders from this panel.
+
+<b>Available Actions:</b>
+• 📋 <b>List All Orders</b> - View all orders in the system
+• 🔍 <b>Find Order</b> - Search for a specific order
+• ⏳ <b>Pending Orders</b> - View orders awaiting processing
+• 🚚 <b>Shipping Orders</b> - View orders in transit
+• ✅ <b>Completed Orders</b> - View delivered orders
+
+<i>Select an action or go back to the admin dashboard.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=order_mgmt_menu
+    )
+
+@bot.message_handler(func=lambda msg: msg.text == '📋 List All Orders')
+def list_all_orders(message):
+    """List all orders with pagination"""
+    chat_id = message.chat.id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        session = get_session()
+        # Get total orders count for pagination
+        total_orders = session.query(Order).count()
+        
+        if total_orders == 0:
+            bot.send_message(
+                chat_id,
+                "No orders have been placed in the system yet.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Set up pagination (first page)
+        page = 1
+        per_page = 5
+        offset = (page - 1) * per_page
+        
+        # Get orders for the current page with user info
+        orders = session.query(Order, User).join(User).order_by(Order.created_at.desc()).limit(per_page).offset(offset).all()
+        
+        # Format order list with emojis and nice formatting
+        orders_text = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📋 <b>ORDER LIST</b> (Page {page})  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Total Orders:</b> {total_orders}
+
+"""
+        
+        for i, (order, user) in enumerate(orders, 1):
+            # Format status with emoji
+            status_emoji = "⏳"
+            if order.status == "Shipping":
+                status_emoji = "🚚"
+            elif order.status == "Completed":
+                status_emoji = "✅"
+            
+            # Format date
+            order_date = order.created_at.strftime("%Y-%m-%d")
+            
+            # Truncate product link to avoid message too long
+            product_link = order.product_link
+            if len(product_link) > 30:
+                product_link = product_link[:27] + "..."
+            
+            orders_text += f"""
+<b>{offset + i}. Order #{order.order_number}</b> - {status_emoji} {order.status}
+👤 Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
+🛍️ Product: <i>{product_link}</i>
+💰 Amount: <b>${order.amount:.2f}</b>
+📅 Date: {order_date}
+"""
+            if order.order_id:
+                orders_text += f"🆔 AliExpress ID: <code>{order.order_id}</code>\n"
+            if order.tracking_number:
+                orders_text += f"📦 Tracking: <code>{order.tracking_number}</code>\n"
+        
+        # Add pagination controls if needed
+        if total_orders > per_page:
+            markup = InlineKeyboardMarkup()
+            
+            # Only add Next button on first page
+            if page == 1:
+                markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"orders_page_{page+1}"))
+            # Add navigation buttons for middle pages
+            elif page * per_page < total_orders:
+                markup.add(
+                    InlineKeyboardButton("⬅️ Previous", callback_data=f"orders_page_{page-1}"),
+                    InlineKeyboardButton("➡️ Next", callback_data=f"orders_page_{page+1}")
+                )
+            # Only add Previous button on last page
+            else:
+                markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"orders_page_{page-1}"))
+            
+            orders_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
+            
+            bot.send_message(
+                chat_id,
+                orders_text,
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+        else:
+            bot.send_message(
+                chat_id,
+                orders_text,
+                parse_mode='HTML'
+            )
+        
+    except Exception as e:
+        logger.error(f"Error listing orders: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error listing orders. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('orders_page_'))
+def handle_orders_pagination(call):
+    """Handle order list pagination"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.answer_callback_query(call.id, "You don't have permission to view this data")
+        return
+    
+    try:
+        # Extract page number from callback data
+        page = int(call.data.split('_')[-1])
+        per_page = 5
+        offset = (page - 1) * per_page
+        
+        session = get_session()
+        total_orders = session.query(Order).count()
+        
+        # Get orders for the requested page
+        orders = session.query(Order, User).join(User).order_by(Order.created_at.desc()).limit(per_page).offset(offset).all()
+        
+        # Format order list with emojis and nice formatting
+        orders_text = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📋 <b>ORDER LIST</b> (Page {page})  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Total Orders:</b> {total_orders}
+
+"""
+        
+        for i, (order, user) in enumerate(orders, 1):
+            # Format status with emoji
+            status_emoji = "⏳"
+            if order.status == "Shipping":
+                status_emoji = "🚚"
+            elif order.status == "Completed":
+                status_emoji = "✅"
+            
+            # Format date
+            order_date = order.created_at.strftime("%Y-%m-%d")
+            
+            # Truncate product link to avoid message too long
+            product_link = order.product_link
+            if len(product_link) > 30:
+                product_link = product_link[:27] + "..."
+            
+            orders_text += f"""
+<b>{offset + i}. Order #{order.order_number}</b> - {status_emoji} {order.status}
+👤 Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
+🛍️ Product: <i>{product_link}</i>
+💰 Amount: <b>${order.amount:.2f}</b>
+📅 Date: {order_date}
+"""
+            if order.order_id:
+                orders_text += f"🆔 AliExpress ID: <code>{order.order_id}</code>\n"
+            if order.tracking_number:
+                orders_text += f"📦 Tracking: <code>{order.tracking_number}</code>\n"
+        
+        # Create pagination markup
+        markup = InlineKeyboardMarkup()
+        
+        # First page - only Next button
+        if page == 1 and total_orders > per_page:
+            markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"orders_page_{page+1}"))
+        # Last page - only Previous button
+        elif page * per_page >= total_orders:
+            markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"orders_page_{page-1}"))
+        # Middle pages - both Previous and Next buttons
+        else:
+            markup.add(
+                InlineKeyboardButton("⬅️ Previous", callback_data=f"orders_page_{page-1}"),
+                InlineKeyboardButton("➡️ Next", callback_data=f"orders_page_{page+1}")
+            )
+        
+        orders_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
+        
+        # Update the message with the new page
+        bot.edit_message_text(
+            orders_text,
+            chat_id=chat_id,
+            message_id=message_id,
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        
+        # Acknowledge the callback
+        bot.answer_callback_query(call.id, f"Showing page {page}")
+        
+    except Exception as e:
+        logger.error(f"Error in orders pagination: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error loading orders")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '💰 Deposit Management')
+def deposit_management(message):
+    """Show deposit management options"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    # Create deposit management menu
+    deposit_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    deposit_mgmt_menu.add(
+        KeyboardButton('📋 Pending Deposits'),
+        KeyboardButton('🔍 Find Deposit')
+    )
+    deposit_mgmt_menu.add(
+        KeyboardButton('📊 Deposit Summary'),
+        KeyboardButton('➕ Add Balance')
+    )
+    deposit_mgmt_menu.add(
+        KeyboardButton('🔙 Back to Admin')
+    )
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>DEPOSIT MANAGEMENT</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Manage user deposits and balance from this panel.
+
+<b>Available Actions:</b>
+• 📋 <b>Pending Deposits</b> - View deposits awaiting approval
+• 🔍 <b>Find Deposit</b> - Search for a specific deposit
+• 📊 <b>Deposit Summary</b> - View deposit statistics
+• ➕ <b>Add Balance</b> - Manually add balance to a user
+
+<i>Select an action or go back to the admin dashboard.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=deposit_mgmt_menu
+    )
+
+@bot.message_handler(func=lambda msg: msg.text == '📋 Pending Deposits')
+def list_pending_deposits(message):
+    """List pending deposits for approval"""
+    chat_id = message.chat.id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        session = get_session()
+        # Get all pending deposits with user info
+        pending_deposits = session.query(PendingDeposit, User).join(User).filter(
+            PendingDeposit.status == 'Processing'
+        ).order_by(PendingDeposit.created_at.desc()).all()
+        
+        if not pending_deposits:
+            bot.send_message(
+                chat_id,
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📋 <b>PENDING DEPOSITS</b>  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+✅ <b>No pending deposits!</b>
+
+All deposits have been processed. There are no deposits waiting for approval.
+""",
+                parse_mode='HTML',
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Send introduction message
+        bot.send_message(
+            chat_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>PENDING DEPOSITS</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Found <b>{len(pending_deposits)}</b> deposits pending approval.
+
+<i>Each deposit will be shown below with approval options.</i>
+""",
+            parse_mode='HTML'
+        )
+        
+        # Send each pending deposit as a separate message with approve/reject buttons
+        for deposit, user in pending_deposits:
+            # Create inline keyboard for approval
+            markup = InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{deposit.id}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{deposit.id}")
+            )
+            
+            # Format deposit message
+            deposit_date = deposit.created_at.strftime("%Y-%m-%d %H:%M")
+            
+            deposit_msg = f"""
+<b>Deposit #{deposit.id}</b>
+
+👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+⏰ <b>Requested:</b> {deposit_date}
+
+<i>Use the buttons below to approve or reject this deposit.</i>
+"""
+            
+            bot.send_message(
+                chat_id,
+                deposit_msg,
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+        
+    except Exception as e:
+        logger.error(f"Error listing pending deposits: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error listing pending deposits. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
+def handle_deposit_approval(call):
+    """Handle deposit approval or rejection"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.answer_callback_query(call.id, "You don't have permission to manage deposits")
+        return
+    
+    try:
+        action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
+        deposit_id = int(call.data.split('_')[-1])
+        
+        session = get_session()
+        
+        # Get deposit and user
+        deposit_info = session.query(PendingDeposit, User).join(User).filter(
+            PendingDeposit.id == deposit_id
+        ).first()
+        
+        if not deposit_info:
+            bot.answer_callback_query(call.id, "Deposit not found or already processed")
+            bot.edit_message_text(
+                "This deposit has already been processed or was not found.",
+                chat_id=chat_id,
+                message_id=message_id
+            )
+            return
+        
+        deposit, user = deposit_info
+        
+        if action == 'approve':
+            # Update user balance
+            user.balance += deposit.amount
+            
+            # Update deposit status
+            deposit.status = 'Approved'
+            
+            session.commit()
+            
+            # Send notification to user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
+
+<b>New Balance:</b> ${user.balance:.2f}
+
+<i>Thank you for using AliPay_ETH!</i>
+""",
+                parse_mode='HTML'
+            )
+            
+            # Update admin message
+            bot.edit_message_text(
+                f"""
+<b>Deposit #{deposit.id}</b> - ✅ APPROVED
+
+👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+💳 <b>New Balance:</b> ${user.balance:.2f}
+⏰ <b>Approved at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified of the approval.</i>
+""",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+            
+            bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} approved")
+        
+        else:  # Reject
+            # Update deposit status
+            deposit.status = 'Rejected'
+            session.commit()
+            
+            # Send notification to user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>DEPOSIT REJECTED</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> has been rejected.
+
+<b>Reason:</b> The payment could not be verified.
+
+Please contact customer support for assistance or try again with a clearer payment proof.
+
+<i>For help, please contact @alipay_help_center</i>
+""",
+                parse_mode='HTML'
+            )
+            
+            # Update admin message
+            bot.edit_message_text(
+                f"""
+<b>Deposit #{deposit.id}</b> - ❌ REJECTED
+
+👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+⏰ <b>Rejected at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified of the rejection.</i>
+""",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+            
+            bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} rejected")
+        
+    except Exception as e:
+        logger.error(f"Error handling deposit approval: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing deposit")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '➕ Add Balance')
+def add_balance_prompt(message):
+    """Prompt admin to add balance to a user"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    # Update user state to wait for user ID
+    user_states[chat_id] = 'waiting_for_balance_user_id'
+    
+    # Create a cancel button
+    cancel_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    cancel_markup.add(KeyboardButton('🔙 Back to Admin'))
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ➕ <b>ADD USER BALANCE</b> ➕  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Please enter the user's Telegram ID to add balance to their account.
+
+<i>Or click '🔙 Back to Admin' to cancel.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=cancel_markup
+    )
+
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_balance_user_id')
+def process_balance_user_id(message):
+    """Process the user ID for adding balance"""
+    chat_id = message.chat.id
+    user_input = message.text.strip()
+    session = None
+    
+    # Check if user canceled
+    if user_input == '🔙 Back to Admin':
+        if chat_id in user_states:
+            del user_states[chat_id]
+        back_to_admin(message)
+        return
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        # Try to parse as Telegram ID (int)
+        try:
+            user_telegram_id = int(user_input)
+        except ValueError:
+            bot.send_message(
+                chat_id,
+                "❌ Invalid Telegram ID. Please enter a valid numeric ID.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Check if user exists
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id,
+                f"❌ No user found with Telegram ID {user_telegram_id}",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Store user info and update state to wait for amount
+        user_states[chat_id] = {
+            'state': 'waiting_for_balance_amount',
+            'user_telegram_id': user_telegram_id,
+            'user_name': user.name,
+            'current_balance': user.balance
+        }
+        
+        # Send user info and prompt for amount
+        bot.send_message(
+            chat_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👤 <b>USER FOUND</b> 👤  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>User:</b> {user.name}
+<b>Telegram ID:</b> <code>{user.telegram_id}</code>
+<b>Current Balance:</b> ${user.balance:.2f}
+
+Please enter the amount in USD to add to the user's balance.
+(e.g., 10 for $10.00)
+
+<i>Or click '🔙 Back to Admin' to cancel.</i>
+""",
+            parse_mode='HTML',
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing user ID for balance: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error processing user ID. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_balance_amount')
+def process_balance_amount(message):
+    """Process the amount to add to user balance"""
+    chat_id = message.chat.id
+    amount_input = message.text.strip()
+    session = None
+    
+    # Check if user canceled
+    if amount_input == '🔙 Back to Admin':
+        if chat_id in user_states:
+            del user_states[chat_id]
+        back_to_admin(message)
+        return
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        # Get user info from state
+        user_info = user_states[chat_id]
+        user_telegram_id = user_info['user_telegram_id']
+        user_name = user_info['user_name']
+        current_balance = user_info['current_balance']
+        
+        # Try to parse as float
+        try:
+            amount = float(amount_input)
+            if amount <= 0:
+                raise ValueError("Amount must be positive")
+        except ValueError:
+            bot.send_message(
+                chat_id,
+                "❌ Invalid amount. Please enter a positive number.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Update user balance
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id,
+                "❌ User not found. They may have been deleted.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            )
+            return
+        
+        # Add balance
+        new_balance = user.balance + amount
+        user.balance = new_balance
+        session.commit()
+        
+        # Clear user state
+        if chat_id in user_states:
+            del user_states[chat_id]
+        
+        # Notify admin of success
+        bot.send_message(
+            chat_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>BALANCE ADDED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>User:</b> {user_name}
+<b>Telegram ID:</b> <code>{user_telegram_id}</code>
+<b>Amount Added:</b> ${amount:.2f}
+<b>Previous Balance:</b> ${current_balance:.2f}
+<b>New Balance:</b> ${new_balance:.2f}
+
+<i>The user has been notified of the balance update.</i>
+""",
+            parse_mode='HTML',
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+        
+        # Notify user of balance update
+        bot.send_message(
+            user_telegram_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>BALANCE UPDATED</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Amount Added:</b> ${amount:.2f}
+<b>New Balance:</b> ${new_balance:.2f}
+
+Your account balance has been updated by the administrator.
+
+<i>Thank you for using AliPay_ETH!</i>
+""",
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error adding balance: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error adding balance. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+        
+@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription Management')
+def subscription_management(message):
+    """Show subscription management options"""
+    chat_id = message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    # Create subscription management menu
+    subscription_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    subscription_mgmt_menu.add(
+        KeyboardButton('📋 List Subscriptions'),
+        KeyboardButton('🔍 Find Subscription')
+    )
+    subscription_mgmt_menu.add(
+        KeyboardButton('⏰ Expiring Soon'),
+        KeyboardButton('➕ Extend Subscription')
+    )
+    subscription_mgmt_menu.add(
+        KeyboardButton('🔙 Back to Admin')
+    )
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📅 <b>SUBSCRIPTION MANAGEMENT</b> 📅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Manage user subscriptions from this panel.
+
+<b>Available Actions:</b>
+• 📋 <b>List Subscriptions</b> - View all active subscriptions
+• 🔍 <b>Find Subscription</b> - Search for a user's subscription
+• ⏰ <b>Expiring Soon</b> - View subscriptions expiring soon
+• ➕ <b>Extend Subscription</b> - Manually extend a subscription
+
+<i>Select an action or go back to the admin dashboard.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=subscription_mgmt_menu
+    )
+
+@bot.message_handler(func=lambda msg: msg.text == '📊 System Stats')
+def system_stats(message):
+    """Show system statistics"""
+    chat_id = message.chat.id
+    session = None
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        return
+    
+    try:
+        session = get_session()
+        
+        # Gather statistics
+        total_users = session.query(User).count()
+        
+        # Active subscriptions (less than 30 days since subscription date)
+        active_subs_query = session.query(User).filter(
+            User.subscription_date.isnot(None),
+            (datetime.utcnow() - User.subscription_date) < timedelta(days=30)
+        )
+        active_subscriptions = active_subs_query.count()
+        
+        # Orders statistics
+        total_orders = session.query(Order).count()
+        processing_orders = session.query(Order).filter_by(status='Processing').count()
+        completed_orders = session.query(Order).filter_by(status='Completed').count()
+        shipped_orders = session.query(Order).filter_by(status='Shipped').count()
+        
+        # Deposit statistics
+        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').count()
+        
+        # Financial statistics
+        total_balance = session.query(func.sum(User.balance)).scalar() or 0
+        
+        # Recent activity
+        recent_users = session.query(User).order_by(User.created_at.desc()).limit(5).all()
+        recent_orders = session.query(Order).order_by(Order.created_at.desc()).limit(5).all()
+        
+        # Format the stats message
+        stats_message = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>SYSTEM STATISTICS</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>📆 DATE:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+<b>👥 USER STATISTICS:</b>
+• Total Users: {total_users}
+• Active Subscriptions: {active_subscriptions}
+• Subscription Rate: {int(active_subscriptions/total_users*100) if total_users > 0 else 0}%
+
+<b>📦 ORDER STATISTICS:</b>
+• Total Orders: {total_orders}
+• Processing: {processing_orders}
+• Shipped: {shipped_orders}
+• Completed: {completed_orders}
+
+<b>💰 FINANCIAL STATISTICS:</b>
+• Total User Balance: ${total_balance:.2f}
+• Pending Deposits: {pending_deposits}
+
+<b>🔄 RECENT ACTIVITY:</b>
+"""
+        
+        # Add recent users
+        stats_message += "\n<b>New Users:</b>"
+        for user in recent_users:
+            stats_message += f"\n• {user.name} ({user.created_at.strftime('%Y-%m-%d')})"
+        
+        # Add recent orders
+        stats_message += "\n\n<b>Recent Orders:</b>"
+        for order in recent_orders:
+            stats_message += f"\n• Order #{order.order_number} - {order.status} ({order.created_at.strftime('%Y-%m-%d')})"
+        
+        bot.send_message(
+            chat_id,
+            stats_message,
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating system stats: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ Error generating system statistics. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+        )
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
+def help_center(message):
+    """Handle Help Center button with all necessary information"""
+    chat_id = message.chat.id
+    
+    # Create help center inline buttons
+    help_markup = InlineKeyboardMarkup(row_width=1)
+    help_markup.add(
+        InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
+        InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
+        InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
+        InlineKeyboardButton("🔍 How to Track Orders", callback_data="help_track"),
+        InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center")
+    )
+    
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❓ <b>HELP CENTER</b> ❓  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Welcome to AliPay_ETH Help Center!</b>
+
+How can we assist you today? Select a topic below to get detailed information and step-by-step guides.
+
+<b>📋 AVAILABLE HELP TOPICS:</b>
+• Registration Process
+• Deposit Methods
+• Ordering from AliExpress
+• Tracking Your Orders
+• Subscription Benefits
+
+<i>If you need direct assistance, click 'Contact Support' to chat with our team.</i>
+
+<b>💡 TIP:</b> Our team is available 7 days a week to help you with any questions!
+""",
+        parse_mode='HTML',
+        reply_markup=help_markup
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('help_'))
+def handle_help_buttons(call):
+    """Handle help center button callbacks"""
+    chat_id = call.message.chat.id
+    help_topic = call.data.split('_')[1]
+    
+    # Back button for all help responses
+    back_markup = InlineKeyboardMarkup()
+    back_markup.add(InlineKeyboardButton("◀️ Back to Help Center", callback_data="help_main"))
+    back_markup.add(InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center"))
+    
+    if help_topic == "register":
+        bot.send_message(
+            chat_id,
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📝 <b>HOW TO REGISTER</b> 📝  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Registration Process:</b>
+
+1️⃣ Click <b>🔑 Register</b> on the main menu
+2️⃣ Enter your full name when prompted
+3️⃣ Provide your complete delivery address
+4️⃣ Enter your phone number (format: 09xxxxxxxx)
+5️⃣ Pay the one-time registration fee of 100 birr
+
+<b>After Registration:</b>
+• Your account will be activated immediately
+• You'll gain access to all features
+• You can start depositing funds and placing orders
+
+<b>💡 TIP:</b> Make sure to provide accurate details for smooth delivery of your orders.
+""",
+            parse_mode='HTML',
+            reply_markup=back_markup
+        )
+    
+    elif help_topic == "deposit":
+        bot.send_message(
+            chat_id,
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>HOW TO DEPOSIT</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Deposit Process:</b>
+
+1️⃣ Click <b>💰 Deposit</b> on the main menu
+2️⃣ Select an amount or choose "Customize"
+3️⃣ Transfer the exact amount to our payment details
+4️⃣ Take a screenshot of your payment confirmation
+5️⃣ Send the screenshot to the bot
+
+<b>Payment Methods:</b>
+• Commercial Bank of Ethiopia (CBE)
+• TeleBirr mobile money
+
+<b>After Deposit:</b>
+• Your payment will be verified
+• Your balance will be updated automatically
+• You can start placing orders immediately
+
+<b>💡 TIP:</b> Remember that a $1 (150 birr) monthly subscription fee is automatically deducted from your first deposit.
+""",
+            parse_mode='HTML',
+            reply_markup=back_markup
+        )
+    
+    elif help_topic == "order":
+        bot.send_message(
+            chat_id,
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🛍️ <b>HOW TO ORDER</b> 🛍️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Ordering Process:</b>
+
+1️⃣ Browse AliExpress and find your desired product
+2️⃣ Copy the complete product URL/link
+3️⃣ Click <b>📦 Submit Order</b> on the main menu
+4️⃣ Paste the AliExpress link when prompted
+5️⃣ Wait for order confirmation from our team
+
+<b>After Ordering:</b>
+• Our team will process your order
+• You'll receive an order confirmation with details
+• Your balance will be deducted once the price is confirmed
+• You'll receive tracking information when available
+
+<b>💡 TIP:</b> Make sure you have sufficient balance before placing orders. Check your balance anytime with the 💳 Balance button.
+""",
+            parse_mode='HTML',
+            reply_markup=back_markup
+        )
+    
+    elif help_topic == "track":
+        bot.send_message(
+            chat_id,
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔍 <b>HOW TO TRACK ORDERS</b> 🔍  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Tracking Process:</b>
+
+1️⃣ Click <b>🔍 Track Order</b> on the main menu
+2️⃣ Enter your order number when prompted
+3️⃣ View your order details and current status
+
+<b>Alternatively:</b>
+• Click <b>📊 Order Status</b> to see all your orders
+• Use the tracking links provided to track on ParcelsApp
+
+<b>Order Statuses:</b>
+• <b>Processing</b> - Order received and being processed
+• <b>Confirmed</b> - Order placed on AliExpress
+• <b>Shipped</b> - Order shipped with tracking available
+• <b>Delivered</b> - Order arrived at destination
+• <b>Cancelled</b> - Order cancelled
+
+<b>💡 TIP:</b> You'll receive automatic notifications when your order status changes!
+""",
+            parse_mode='HTML',
+            reply_markup=back_markup
+        )
+    
+    elif help_topic == "main":
+        # Return to the main help center menu
+        help_markup = InlineKeyboardMarkup(row_width=1)
+        help_markup.add(
+            InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
+            InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
+            InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
+            InlineKeyboardButton("🔍 How to Track Orders", callback_data="help_track"),
+            InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center")
+        )
+        
+        bot.edit_message_text(
+            """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❓ <b>HELP CENTER</b> ❓  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Welcome to AliPay_ETH Help Center!</b>
+
+How can we assist you today? Select a topic below to get detailed information and step-by-step guides.
+
+<b>📋 AVAILABLE HELP TOPICS:</b>
+• Registration Process
+• Deposit Methods
+• Ordering from AliExpress
+• Tracking Your Orders
+• Subscription Benefits
+
+<i>If you need direct assistance, click 'Contact Support' to chat with our team.</i>
+
+<b>💡 TIP:</b> Our team is available 7 days a week to help you with any questions!
+""",
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            parse_mode='HTML',
+            reply_markup=help_markup
+        )
+    
+    # Acknowledge the callback
+    bot.answer_callback_query(call.id)
 
 def main():
     """Main function to start the bot with optimized performance"""
