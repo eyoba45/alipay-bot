@@ -148,7 +148,7 @@ def admin_command(message):
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
-    """Handle /start command"""
+    """Handle /start command with animated welcome"""
     chat_id = message.chat.id
     session = None
     try:
@@ -165,6 +165,15 @@ def start_message(message):
 
         # Check if user is admin
         is_admin_user = is_admin(chat_id)
+        
+        # Import welcome animation
+        from welcome_animation import send_personalized_welcome
+        
+        # Get user's name if registered
+        user_name = user.name if user else message.from_user.first_name if message.from_user else None
+        
+        # Send animated welcome message
+        send_personalized_welcome(bot, chat_id, {'name': user_name})
         
         # Different welcome message for admins
         if is_admin_user:
@@ -201,6 +210,10 @@ Your trusted Ethiopian payment solution for AliExpress shopping!
 
 🌟 Ready to start shopping? Click '<b>🔑 Register</b>' below to begin your journey! 🌟
 """
+        # Slight delay to allow animation to complete
+        time.sleep(1.5)
+        
+        # Send detailed welcome information
         bot.send_message(
             chat_id,
             welcome_msg,
