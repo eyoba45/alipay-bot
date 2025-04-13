@@ -166,27 +166,57 @@ def start_message(message):
         # Check if user is admin
         is_admin_user = is_admin(chat_id)
         
-        # Import welcome animation with absolute path
-        import os
-        import sys
-        
-        # Add the current directory to the system path to ensure imports work
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        if current_dir not in sys.path:
-            sys.path.append(current_dir)
-        
-        # Now import the welcome animation module
-        try:
-            from welcome_animation import send_personalized_welcome
-            logger.info("Successfully imported welcome_animation module")
-        except ImportError as e:
-            logger.error(f"Error importing welcome_animation module: {e}")
-            # Define a fallback function in case import fails
-            def send_personalized_welcome(bot, chat_id, user_data=None):
-                name = user_data.get('name', 'there') if user_data else 'there'
+        # Define welcome animation function directly in the file
+        def send_personalized_welcome(bot, chat_id, user_data=None):
+            """Send a personalized welcome message"""
+            try:
+                # Get user's name if available
+                name = "there"
+                if user_data and 'name' in user_data and user_data['name']:
+                    name = user_data['name']
+                
+                # First send a typing indicator to create anticipation
+                bot.send_chat_action(chat_id, 'typing')
+                
+                # Send loading message
+                bot.send_message(
+                    chat_id, 
+                    "🔄 Preparing your personalized experience...",
+                    parse_mode='HTML'
+                )
+                
+                # Send another typing indicator
+                bot.send_chat_action(chat_id, 'typing')
+                
+                # Create a more decorative welcome message
+                welcome_message = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✨ <b>WELCOME, {name.upper()}!</b> ✨  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🌟 <b>AliPay_ETH at Your Service!</b> 🌟
+
+🛍️ Your Ethiopian gateway to AliExpress
+💳 Easy payments in Ethiopian Birr
+🚚 Reliable order tracking & delivery
+💯 Trusted by thousands of customers
+
+<i>We're excited to have you join our community!</i>
+                """
+                
+                # Send welcome message
                 return bot.send_message(
                     chat_id,
-                    f"<b>Hello, {name}!</b>\n\n✨ Welcome to AliPay_ETH! ✨",
+                    welcome_message,
+                    parse_mode='HTML'
+                )
+                
+            except Exception as e:
+                logger.error(f"Error in personalized welcome: {e}")
+                # Return simple message on error
+                return bot.send_message(
+                    chat_id,
+                    f"<b>Hello!</b>\n\n✨ Welcome to AliPay_ETH! ✨",
                     parse_mode='HTML'
                 )
         
@@ -194,6 +224,7 @@ def start_message(message):
         user_name = user.name if user else message.from_user.first_name if message.from_user else None
         
         # Send animated welcome message
+        logger.info(f"Sending personalized welcome to user {chat_id}")
         send_personalized_welcome(bot, chat_id, {'name': user_name})
         
         # Different welcome message for admins
