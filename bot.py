@@ -168,48 +168,93 @@ def start_message(message):
         
         # Define welcome animation function directly in the file
         def send_personalized_welcome(bot, chat_id, user_data=None):
-            """Send a personalized welcome message"""
+            """Send a personalized welcome message with captivating animation sequence"""
             try:
                 # Get user's name if available
                 name = "there"
                 if user_data and 'name' in user_data and user_data['name']:
                     name = user_data['name']
                 
+                # ANIMATION SEQUENCE STARTS
+                
                 # First send a typing indicator to create anticipation
                 bot.send_chat_action(chat_id, 'typing')
+                time.sleep(1)  # Pause for effect
                 
-                # Send loading message
-                bot.send_message(
+                # First animation frame - loading
+                loading_msg = bot.send_message(
                     chat_id, 
-                    "🔄 Preparing your personalized experience...",
+                    "⏳ <b>Initializing AliPay_ETH services...</b>",
+                    parse_mode='HTML'
+                )
+                time.sleep(1.5)  # Pause for effect
+                
+                # Second animation frame
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text="🔍 <b>Searching for user profile...</b>",
                     parse_mode='HTML'
                 )
                 
-                # Send another typing indicator
+                # Show typing indicator again
                 bot.send_chat_action(chat_id, 'typing')
+                time.sleep(1.2)  # Slightly different pause for natural feel
                 
-                # Create a more decorative welcome message
+                # Third animation frame
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text=f"✅ <b>User found: {name}</b>\n🔄 Preparing customized interface...",
+                    parse_mode='HTML'
+                )
+                time.sleep(1.2)
+                
+                # Final animation frame before welcome message
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text="🚀 <b>Launching personalized experience...</b>",
+                    parse_mode='HTML'
+                )
+                time.sleep(1)
+                
+                # MAIN WELCOME MESSAGE
+                
+                # Create an eye-catching welcome message with custom formatting
                 welcome_message = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✨ <b>WELCOME, {name.upper()}!</b> ✨  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+    ✨✨✨ <b>WELCOME TO ALIPAY_ETH</b> ✨✨✨
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
 
-🌟 <b>AliPay_ETH at Your Service!</b> 🌟
+🌟 <b>Hello, {name.upper()}!</b> 🌟
 
-🛍️ Your Ethiopian gateway to AliExpress
-💳 Easy payments in Ethiopian Birr
-🚚 Reliable order tracking & delivery
-💯 Trusted by thousands of customers
+We're thrilled to have you join our community of savvy Ethiopian shoppers!
 
-<i>We're excited to have you join our community!</i>
+┏━━━━━━ <b>OUR SERVICES</b> ━━━━━━┓
+┃                                 ┃
+┃  🛍️ Shop AliExpress with ETB    ┃
+┃  💳 Easy local payments         ┃
+┃  🚚 Reliable delivery tracking  ┃
+┃  🔐 Secure transaction handling ┃
+┃  💬 24/7 customer support      ┃
+┃                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+<i>Your seamless shopping experience begins now!</i>
                 """
                 
-                # Send welcome message
-                return bot.send_message(
+                # Delete the animation message
+                bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
+                
+                # Send the final welcome message
+                final_msg = bot.send_message(
                     chat_id,
                     welcome_message,
                     parse_mode='HTML'
                 )
+                
+                return final_msg
                 
             except Exception as e:
                 logger.error(f"Error in personalized welcome: {e}")
@@ -1212,14 +1257,14 @@ def process_custom_amount(message):
         if is_usd:
             # User entered USD, store as USD
             usd_amount = float(clean_amount)
-            birr_amount = int(usd_amount * 160)
+            birr_amount = int(usd_amount * 166.67)
         else:
             # User entered birr, convert to USD
             birr_amount = int(float(clean_amount))
-            usd_amount = birr_amount / 160
+            usd_amount = birr_amount / 166.67
 
         # Check if amount is reasonable
-        if birr_amount < 10:
+        if birr_amount < 100:
             bot.send_message(
                 chat_id,
                 """
@@ -1369,7 +1414,7 @@ Screenshot attached below
 {subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 160):,}</code> birr
+• New Balance: <code>{int(user.balance * 166.67):,}</code> birr
 
 ✨ <b>You're ready to start shopping!</b> ✨
 
@@ -1403,7 +1448,7 @@ def check_balance(message):
         if user:
             # Default to 0 if balance is None
             balance = user.balance if user.balance is not None else 0
-            birr_balance = int(balance * 160)
+            birr_balance = int(balance * 166.67)  # Use correct ETB/USD rate (1 USD = 166.67 ETB)
             bot.send_message(
                 chat_id,
                 f"""
@@ -1655,7 +1700,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 
         # Calculate remaining balance
         remaining_balance = user.balance
-        birr_balance = int(remaining_balance * 160)  # Convert to birr
+        birr_balance = int(remaining_balance * 166.67)  # Convert to birr (1 USD = 166.67 ETB)
 
         # Notify user about order submission with enhanced beautiful design
         bot.edit_message_text(
@@ -1808,13 +1853,13 @@ def handle_deposit_admin_decision(call):
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{int(amount * 160):,}</code> birr
+• Amount: <code>{int(amount * 166.67):,}</code> birr
 • USD Value: ${amount:.2f}
 {f"• Amount after subscription fee: ${amount - 1.0:.2f}" if subscription_deducted else ""}
 {subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 160):,}</code> birr
+• New Balance: <code>{int(user.balance * 166.67):,}</code> birr
 
 ✨ <b>You're ready to start shopping!</b> ✨
 
