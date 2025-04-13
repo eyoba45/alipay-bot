@@ -166,8 +166,29 @@ def start_message(message):
         # Check if user is admin
         is_admin_user = is_admin(chat_id)
         
-        # Import welcome animation
-        from welcome_animation import send_personalized_welcome
+        # Import welcome animation with absolute path
+        import os
+        import sys
+        
+        # Add the current directory to the system path to ensure imports work
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.append(current_dir)
+        
+        # Now import the welcome animation module
+        try:
+            from welcome_animation import send_personalized_welcome
+            logger.info("Successfully imported welcome_animation module")
+        except ImportError as e:
+            logger.error(f"Error importing welcome_animation module: {e}")
+            # Define a fallback function in case import fails
+            def send_personalized_welcome(bot, chat_id, user_data=None):
+                name = user_data.get('name', 'there') if user_data else 'there'
+                return bot.send_message(
+                    chat_id,
+                    f"<b>Hello, {name}!</b>\n\n✨ Welcome to AliPay_ETH! ✨",
+                    parse_mode='HTML'
+                )
         
         # Get user's name if registered
         user_name = user.name if user else message.from_user.first_name if message.from_user else None
