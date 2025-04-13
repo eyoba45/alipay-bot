@@ -1219,7 +1219,7 @@ def process_custom_amount(message):
             usd_amount = birr_amount / 160
 
         # Check if amount is reasonable
-        if birr_amount < 100:
+        if birr_amount < 10:
             bot.send_message(
                 chat_id,
                 """
