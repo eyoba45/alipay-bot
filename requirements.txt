@@ -9,4 +9,15 @@ werkzeug>=2.0.2
 gunicorn>=20.1.0
 statistics==1.0.3.5
 tabulate
-psutil 
+psutil
+psutil
+python-dotenv
+flask
+psutil
+flask
+psycopg2-binary
+pytelegrambotapi
+requests
+sqlalchemy
+aiofiles
+pytelegrambotapi
