@@ -251,7 +251,6 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                     parse_mode='HTML',
                     reply_markup=create_main_menu(is_registered=True)
                 )
-
                 logger.info(f"Sent registration confirmation messages to user {telegram_id}")
             except Exception as e:
                 logger.error(f"Error sending welcome message: {e}")
@@ -297,8 +296,8 @@ def handle_deposit_webhook(data, session):
         if telegram_id:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if user:
-                # Convert amount from birr to USD
-                usd_amount = float(amount) / 160.0
+                # Convert amount from birr to USD (1 USD = 166.67 birr)
+                usd_amount = float(amount) / 166.67
                 current_balance = user.balance if user.balance is not None else 0
 
                 # Check metadata to see if this is explicitly a subscription renewal
@@ -441,7 +440,7 @@ def handle_deposit_webhook(data, session):
         # If no user found or telegram_id missing, check old method
         pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
         for deposit in pending_deposits:
-            if abs(deposit.amount - (amount/160)) < 0.01:
+            if abs(deposit.amount - (amount/166.67)) < 0.01:
                 user = session.query(User).filter_by(id=deposit.user_id).first()
                 if user:
                     user.balance += deposit.amount
