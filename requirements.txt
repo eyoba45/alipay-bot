@@ -28,3 +28,10 @@ pytelegrambotapi
 requests
 sqlalchemy
 cairosvg
+anthropic
+pytelegrambotapi
+sqlalchemy
+anthropic
+python-telegram-bot
+sqlalchemy
+pytelegrambotapi
