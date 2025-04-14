@@ -10,7 +10,7 @@ import time
 import random
 from datetime import datetime, timedelta
 
-import anthropic
+from groq_api import GroqClient
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from database import session_scope
@@ -30,15 +30,16 @@ class DigitalCompanion:
         """Initialize the digital companion"""
         self.bot = bot
         self.logger = logging.getLogger('digital_companion')
-        self.anthropic_client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        self.ai_client = GroqClient(api_key=os.environ.get("GROQ_API_KEY"))
         self.companion_profiles = COMPANION_PROFILES
         self.avatar_folder = "avatars"
+        self.model = "llama3-8b-8192"  # Default Llama model on Groq
         
         # Create avatars folder if it doesn't exist
         if not os.path.exists(self.avatar_folder):
             os.makedirs(self.avatar_folder)
         
-        self.logger.info("Digital Companion initialized with Anthropic API")
+        self.logger.info("Digital Companion initialized with Groq API using Llama models")
     
     def get_user_companion(self, user_id):
         """Get or create companion profile for a user"""
@@ -196,18 +197,17 @@ class DigitalCompanion:
         return True
     
     def _generate_ai_response(self, user_text, user_data):
-        """Generate AI response using Anthropic Claude"""
-        # The newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
+        """Generate AI response using Groq with Llama model"""
         try:
             # Create system prompt with companion personality
             system_prompt = self._create_system_prompt(user_data)
             
             # Log request
-            self.logger.info(f"Sending request to Anthropic for user {user_data['user_telegram_id']}")
+            self.logger.info(f"Sending request to Groq API for user {user_data['user_telegram_id']}")
             
-            # Make API call to Anthropic
-            response = self.anthropic_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            # Make API call to Groq
+            response = self.ai_client.messages.create(
+                model=self.model,
                 max_tokens=1024,
                 system=system_prompt,
                 messages=[
@@ -215,11 +215,11 @@ class DigitalCompanion:
                 ]
             )
             
-            # Return text response from Claude
+            # Return text response from Llama
             return response.content[0].text
             
         except Exception as e:
-            self.logger.error(f"Anthropic API error: {e}")
+            self.logger.error(f"Groq API error: {e}")
             return "ይቅርታ, አሁን መልስ ለመስጠት አልቻልኩም። እባክዎ ቆይተው ይሞክሩ። (Sorry, I couldn't respond right now. Please try again later.)"
     
     def _create_system_prompt(self, user_data):
@@ -480,35 +480,17 @@ class DigitalCompanion:
         self.bot.send_chat_action(chat_id, 'record_audio')
         
         try:
-            # Generate voice using Anthropic's text-to-speech
-            # The newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
-            self.logger.info(f"Generating TTS with Anthropic for user {chat_id}")
+            self.logger.info(f"Voice message functionality temporarily disabled, sending text for user {chat_id}")
+            # For now, we'll just send the text message since Groq doesn't offer TTS
+            # In the future, this could be replaced with another TTS service
             
-            # Create audio file using Anthropic TTS
-            speech = self.anthropic_client.synthesize_speech(
-                model="claude-3-5-sonnet-20241022",
-                input=amharic_text,
-                voice="default", # Using default voice for now
-            )
-            
-            # Save to temporary file
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_audio:
-                temp_audio.write(speech.content)
-                temp_audio_path = temp_audio.name
-            
-            # Send voice message
-            with open(temp_audio_path, 'rb') as audio:
-                self.bot.send_voice(chat_id, audio, caption=text)
-                
-            # Clean up
-            import os
-            os.remove(temp_audio_path)
+            # Fall back to text response
+            self.bot.send_message(chat_id, text)
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Voice generation error: {e}")
+            self.logger.error(f"Voice message error: {e}")
             # Fall back to text response
             self.bot.send_message(chat_id, text)
             return False
@@ -540,9 +522,9 @@ class DigitalCompanion:
             Always provide both Amharic and English translations, with Amharic first.
             """
             
-            # Generate briefing with Claude
-            response = self.anthropic_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            # Generate briefing with Groq Llama model
+            response = self.ai_client.messages.create(
+                model=self.model,
                 max_tokens=1024,
                 system=system_prompt,
                 messages=[
