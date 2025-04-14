@@ -17,6 +17,12 @@ class User(Base):
     phone = Column(String)
     address = Column(String)
     balance = Column(Float, default=0.0)
+    
+    # Referral system fields
+    referral_code = Column(String, unique=True, nullable=True)
+    referred_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    referral_points = Column(Integer, default=0)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -25,6 +31,12 @@ class User(Base):
     pending_deposits = relationship("PendingDeposit", back_populates="user")
     companion_profile = relationship("CompanionProfile", back_populates="user", uselist=False)
     companion_interactions = relationship("CompanionInteraction", back_populates="user")
+    
+    # Referral relationships
+    referred_users = relationship("User", backref="referred_by", remote_side=[id])
+    referral_rewards = relationship("ReferralReward", back_populates="user")
+    referrals_made = relationship("Referral", back_populates="referrer", foreign_keys="Referral.referrer_id")
+    referrals_received = relationship("Referral", back_populates="referred", foreign_keys="Referral.referred_id")
 
     def __repr__(self):
         return f"<User(telegram_id={self.telegram_id}, name='{self.name}', balance=${self.balance:.2f})>"
@@ -127,3 +139,40 @@ class CompanionProfile(Base):
     
     def __repr__(self):
         return f"<CompanionProfile(user_id={self.user_id}, name='{self.companion_name}', relationship_level={self.relationship_level})>"
+
+class Referral(Base):
+    __tablename__ = 'referrals'
+    
+    id = Column(Integer, primary_key=True)
+    referrer_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    referred_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    referral_code = Column(String, nullable=False)
+    status = Column(String, default='pending')  # pending, completed, rewarded
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    referrer = relationship("User", foreign_keys=[referrer_id], back_populates="referrals_made")
+    referred = relationship("User", foreign_keys=[referred_id], back_populates="referrals_received")
+    
+    def __repr__(self):
+        return f"<Referral(referrer_id={self.referrer_id}, referred_id={self.referred_id}, status='{self.status}')>"
+
+class ReferralReward(Base):
+    __tablename__ = 'referral_rewards'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    referral_id = Column(Integer, ForeignKey('referrals.id'), nullable=True)
+    points = Column(Integer, nullable=False)
+    reward_type = Column(String, nullable=False)  # 'signup', 'deposit', 'subscription', 'order', 'bonus'
+    description = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="referral_rewards")
+    referral = relationship("Referral", backref="rewards")
+    
+    def __repr__(self):
+        return f"<ReferralReward(user_id={self.user_id}, points={self.points}, type='{self.reward_type}')>"
