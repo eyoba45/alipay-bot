@@ -296,8 +296,8 @@ def handle_deposit_webhook(data, session):
         if telegram_id:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if user:
-                # Convert amount from birr to USD (1 USD = 166.67 birr)
-                usd_amount = float(amount) / 166.67
+                # Convert amount from birr to USD (1 USD = 160 birr)
+                usd_amount = float(amount) / 160
                 current_balance = user.balance if user.balance is not None else 0
 
                 # Check metadata to see if this is explicitly a subscription renewal
