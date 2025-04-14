@@ -14,9 +14,17 @@ import fcntl
 import requests
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database import init_db, get_session, safe_close_session
-from models import User, Order, PendingApproval, PendingDeposit
+from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction
 from datetime import datetime, timedelta
 from sqlalchemy import func
+
+# Import the Digital Shopping Companion
+try:
+    from digital_companion import DigitalCompanion
+    COMPANION_ENABLED = True
+except ImportError as e:
+    logger.warning(f"Digital Shopping Companion not available: {e}")
+    COMPANION_ENABLED = False
 
 # Configure logging
 logging.basicConfig(
@@ -113,6 +121,10 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('❓ Help Center')
         )
         
+        # Add Digital Shopping Companion button if enabled
+        if COMPANION_ENABLED:
+            menu.add(KeyboardButton('👧 ሰላም Shopping Assistant'))
+        
         # Add admin buttons for admin users
         if is_admin_user:
             menu.add(KeyboardButton('🔐 Admin Dashboard'))
@@ -122,6 +134,10 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('👥 Join Community'),
             KeyboardButton('❓ Help Center')
         )
+        
+        # Add Digital Shopping Companion button for unregistered users too
+        if COMPANION_ENABLED:
+            menu.add(KeyboardButton('👧 ሰላም Shopping Assistant'))
         
         # Add admin buttons for admin users, even if not registered
         if is_admin_user:
@@ -1264,7 +1280,7 @@ def process_custom_amount(message):
             usd_amount = birr_amount / 160
 
         # Check if amount is reasonable
-        if birr_amount < 10:
+        if birr_amount < 100:
             bot.send_message(
                 chat_id,
                 """
@@ -1414,7 +1430,7 @@ Screenshot attached below
 {subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 166.67):,}</code> birr
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
 
 ✨ <b>You're ready to start shopping!</b> ✨
 
@@ -1700,7 +1716,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 
         # Calculate remaining balance
         remaining_balance = user.balance
-        birr_balance = int(remaining_balance * 166.67)  # Convert to birr (1 USD = 166.67 ETB)
+        birr_balance = int(remaining_balance * 160)  # Convert to birr (1 USD = 160 ETB)
 
         # Notify user about order submission with enhanced beautiful design
         bot.edit_message_text(
@@ -4263,9 +4279,69 @@ How can we assist you today? Select a topic below to get detailed information an
     # Acknowledge the callback
     bot.answer_callback_query(call.id)
 
+# Digital Shopping Companion handlers
+@bot.message_handler(commands=['companion'])
+def start_companion(message):
+    """Start interaction with digital shopping companion"""
+    if not COMPANION_ENABLED:
+        bot.send_message(message.chat.id, "Digital Shopping Companion is not available.")
+        return
+    
+    # Initialize the companion if needed
+    global digital_companion
+    if not digital_companion:
+        digital_companion = DigitalCompanion(bot)
+    
+    # Send greeting
+    digital_companion.send_greeting(message.chat.id)
+
+@bot.message_handler(func=lambda msg: msg.text == '👧 ሰላም Shopping Assistant')
+def handle_companion_button(message):
+    """Handle the companion button press"""
+    start_companion(message)
+
+@bot.message_handler(func=lambda msg: msg.text and msg.text.startswith('ሰላም') or msg.text.startswith('Selam'))
+def handle_companion_message(message):
+    """Handle messages directed to digital companion"""
+    if not COMPANION_ENABLED:
+        return
+    
+    # Initialize the companion if needed
+    global digital_companion
+    if not digital_companion:
+        digital_companion = DigitalCompanion(bot)
+    
+    # Process the message
+    digital_companion.process_message(message)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('companion_'))
+def handle_companion_callback(call):
+    """Handle companion button callbacks"""
+    if not COMPANION_ENABLED:
+        return
+    
+    # Initialize the companion if needed
+    global digital_companion
+    if not digital_companion:
+        digital_companion = DigitalCompanion(bot)
+    
+    # Handle the callback
+    digital_companion.handle_callback(call)
+
 def main():
     """Main function to start the bot with optimized performance"""
+    global digital_companion
+    
     logger.info("🚀 Starting bot in polling mode...")
+    
+    # Initialize Digital Shopping Companion if enabled
+    if COMPANION_ENABLED:
+        try:
+            digital_companion = DigitalCompanion(bot)
+            logger.info("✅ Digital Shopping Companion initialized with beautiful Ethiopian female personality")
+        except Exception as e:
+            logger.error(f"Failed to initialize Digital Shopping Companion: {e}")
+            digital_companion = None
 
     # Delete any existing webhook
     try:
