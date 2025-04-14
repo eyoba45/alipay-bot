@@ -1257,14 +1257,14 @@ def process_custom_amount(message):
         if is_usd:
             # User entered USD, store as USD
             usd_amount = float(clean_amount)
-            birr_amount = int(usd_amount * 166.67)
+            birr_amount = int(usd_amount * 160)
         else:
             # User entered birr, convert to USD
             birr_amount = int(float(clean_amount))
-            usd_amount = birr_amount / 166.67
+            usd_amount = birr_amount / 160
 
         # Check if amount is reasonable
-        if birr_amount < 100:
+        if birr_amount < 10:
             bot.send_message(
                 chat_id,
                 """
