@@ -22,7 +22,13 @@ from sqlalchemy import func
 try:
     from digital_companion import DigitalCompanion
     COMPANION_ENABLED = True
+    logger = logging.getLogger('bot')
+    logger.info("Digital Companion module loaded successfully")
 except ImportError as e:
+    COMPANION_ENABLED = False
+    logger = logging.getLogger('bot')
+    logger.warning(f"Digital Companion not available: {e}")
+    logger.warning("Bot will run without digital companion features")
     logger.warning(f"Digital Shopping Companion not available: {e}")
     COMPANION_ENABLED = False
 
@@ -91,6 +97,7 @@ bot_instance = bot  # Store reference for signal handling
 _user_cache = {}
 user_states = {}
 registration_data = {}
+digital_companion = None  # Will be initialized in main() if COMPANION_ENABLED
 
 def is_admin(chat_id):
     """Check if a user is an admin"""
@@ -1273,11 +1280,11 @@ def process_custom_amount(message):
         if is_usd:
             # User entered USD, store as USD
             usd_amount = float(clean_amount)
-            birr_amount = int(usd_amount * 160)
+            birr_amount = int(usd_amount * 166.67)
         else:
             # User entered birr, convert to USD
             birr_amount = int(float(clean_amount))
-            usd_amount = birr_amount / 160
+            usd_amount = birr_amount / 166.67
 
         # Check if amount is reasonable
         if birr_amount < 100:
@@ -1430,7 +1437,7 @@ Screenshot attached below
 {subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 160):,}</code> birr
+• New Balance: <code>{int(user.balance * 166.67):,}</code> birr
 
 ✨ <b>You're ready to start shopping!</b> ✨
 
@@ -1716,7 +1723,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 
         # Calculate remaining balance
         remaining_balance = user.balance
-        birr_balance = int(remaining_balance * 160)  # Convert to birr (1 USD = 160 ETB)
+        birr_balance = int(remaining_balance * 166.67)  # Convert to birr (1 USD = 166.67 ETB)
 
         # Notify user about order submission with enhanced beautiful design
         bot.edit_message_text(
