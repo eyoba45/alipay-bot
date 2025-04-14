@@ -18,6 +18,10 @@ from models import User, Order, PendingApproval, PendingDeposit, CompanionProfil
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
+# Dictionary to track users in active companion conversations
+# Key: chat_id, Value: Boolean (True if in companion conversation)
+companion_conversations = {}
+
 # Import the Digital Shopping Companion
 try:
     from digital_companion import DigitalCompanion
@@ -4290,9 +4294,14 @@ How can we assist you today? Select a topic below to get detailed information an
 @bot.message_handler(commands=['companion'])
 def start_companion(message):
     """Start interaction with digital shopping companion"""
+    chat_id = message.chat.id
+    
     if not COMPANION_ENABLED:
-        bot.send_message(message.chat.id, "Digital Shopping Companion is not available.")
+        bot.send_message(chat_id, "Digital Shopping Companion is not available.")
         return
+    
+    # Set user in companion conversation mode
+    companion_conversations[chat_id] = True
     
     # Initialize the companion if needed
     global digital_companion
@@ -4300,18 +4309,90 @@ def start_companion(message):
         digital_companion = DigitalCompanion(bot)
     
     # Send greeting
-    digital_companion.send_greeting(message.chat.id)
+    digital_companion.send_greeting(chat_id)
+    
+    # Show helper info
+    bot.send_message(
+        chat_id,
+        "<i>💡 You can now chat directly with Selam! Type 'exit' or '/exit' to return to the main menu.</i>",
+        parse_mode='HTML'
+    )
 
 @bot.message_handler(func=lambda msg: msg.text == '👧 ሰላም Shopping Assistant')
 def handle_companion_button(message):
     """Handle the companion button press"""
+    chat_id = message.chat.id
+    
+    # Add user to the companion conversation state
+    companion_conversations[chat_id] = True
+    
+    # Show a transitional message
+    bot.send_message(
+        chat_id,
+        "🌟 <b>Connecting to Selam, your Ethiopian shopping assistant...</b> 🌟",
+        parse_mode='HTML'
+    )
+    
+    # Start the companion interaction
     start_companion(message)
 
-@bot.message_handler(func=lambda msg: msg.text and msg.text.startswith('ሰላም') or msg.text.startswith('Selam'))
+# Handle ANY message from users who are in an active conversation with the companion
+@bot.message_handler(func=lambda msg: msg.chat.id in companion_conversations and companion_conversations.get(msg.chat.id))
 def handle_companion_message(message):
-    """Handle messages directed to digital companion"""
+    """Handle any messages from users in an active companion conversation"""
     if not COMPANION_ENABLED:
         return
+    
+    chat_id = message.chat.id
+    
+    # Check for exit commands
+    if message.text == '/exit' or message.text == 'exit' or message.text == 'back' or message.text == 'main menu':
+        companion_conversations[chat_id] = False
+        
+        # Send exit message
+        bot.send_message(
+            chat_id,
+            "🌟 <b>Leaving conversation with Selam...</b>\nReturning to main menu!",
+            parse_mode='HTML'
+        )
+        
+        # Return to main menu
+        session = None
+        try:
+            session = get_session()
+            user = session.query(User).filter_by(telegram_id=chat_id).first()
+            is_registered = user is not None
+            bot.send_message(
+                chat_id,
+                "How else can I help you today?",
+                reply_markup=create_main_menu(is_registered=is_registered, chat_id=chat_id)
+            )
+        except Exception as e:
+            logger.error(f"Error returning to main menu: {e}")
+            bot.send_message(chat_id, "Back to main menu", reply_markup=create_main_menu(False, chat_id))
+        finally:
+            safe_close_session(session)
+        return
+    
+    # Initialize the companion if needed
+    global digital_companion
+    if not digital_companion:
+        digital_companion = DigitalCompanion(bot)
+    
+    # Process the message
+    digital_companion.process_message(message)
+
+# Also keep this handler for messages that start with Selam/ሰላም for users not in active conversation
+@bot.message_handler(func=lambda msg: (msg.text and (msg.text.startswith('ሰላም') or msg.text.startswith('Selam'))) and msg.chat.id not in companion_conversations)
+def handle_selam_greeting(message):
+    """Handle greeting messages to Selam when not in active conversation"""
+    if not COMPANION_ENABLED:
+        return
+    
+    chat_id = message.chat.id
+    
+    # Add user to companion conversations
+    companion_conversations[chat_id] = True
     
     # Initialize the companion if needed
     global digital_companion
