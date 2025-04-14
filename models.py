@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger, ForeignKey, Text, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -23,6 +23,8 @@ class User(Base):
     # Relationships
     orders = relationship("Order", back_populates="user")
     pending_deposits = relationship("PendingDeposit", back_populates="user")
+    companion_profile = relationship("CompanionProfile", back_populates="user", uselist=False)
+    companion_interactions = relationship("CompanionInteraction", back_populates="user")
 
     def __repr__(self):
         return f"<User(telegram_id={self.telegram_id}, name='{self.name}', balance=${self.balance:.2f})>"
@@ -88,3 +90,40 @@ class PendingDeposit(Base):
 
     def __repr__(self):
         return f"<PendingDeposit(user_id={self.user_id}, amount=${self.amount:.2f})>"
+
+class CompanionInteraction(Base):
+    __tablename__ = 'companion_interactions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    message_text = Column(Text, nullable=False)
+    interaction_type = Column(String, nullable=False)  # 'greeting', 'question', 'recommendation', etc.
+    sentiment = Column(String, nullable=True)  # 'positive', 'negative', 'neutral'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship with user
+    user = relationship("User", back_populates="companion_interactions")
+    
+    def __repr__(self):
+        return f"<CompanionInteraction(user_id={self.user_id}, type='{self.interaction_type}')>"
+
+class CompanionProfile(Base):
+    __tablename__ = 'companion_profiles'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
+    companion_name = Column(String, default="Selam")
+    relationship_level = Column(Integer, default=1)  # 1-10 scale of relationship development
+    preferred_language = Column(String, default="amharic")
+    favorite_categories = Column(String, nullable=True)  # Comma-separated list
+    interaction_style = Column(String, default="friendly")  # 'friendly', 'professional', 'casual'
+    last_interaction = Column(DateTime, nullable=True)
+    morning_brief = Column(Boolean, default=True)  # Whether to send morning briefings
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship with user
+    user = relationship("User", back_populates="companion_profile")
+    
+    def __repr__(self):
+        return f"<CompanionProfile(user_id={self.user_id}, name='{self.companion_name}', relationship_level={self.relationship_level})>"
