@@ -180,6 +180,18 @@ def start_message(message):
     session = None
     try:
         logger.info(f"Received /start from user {chat_id}")
+        
+        # Check for referral code in the start command
+        referral_code = None
+        if message.text and len(message.text.split()) > 1:
+            # Extract potential referral code
+            referral_code = message.text.split()[1].strip()
+            logger.info(f"Start command with potential referral code: {referral_code}")
+            # Store in registration data for later use
+            if chat_id not in registration_data:
+                registration_data[chat_id] = {}
+            registration_data[chat_id]['referral_code'] = referral_code
+        
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         is_registered = user is not None
@@ -187,9 +199,13 @@ def start_message(message):
         # Reset user state if any
         if chat_id in user_states:
             del user_states[chat_id]
-        if chat_id in registration_data:
-            del registration_data[chat_id]
-
+        
+        # Keep referral code if present
+        if referral_code and referral_code not in registration_data.get(chat_id, {}):
+            if chat_id not in registration_data:
+                registration_data[chat_id] = {}
+            registration_data[chat_id]['referral_code'] = referral_code
+        
         # Check if user is admin
         is_admin_user = is_admin(chat_id)
         
@@ -971,12 +987,43 @@ def handle_admin_decision(call):
             session.add(new_user)
             session.delete(pending)
             session.commit()
+            
+            # Get the ID of the newly created user
+            session.refresh(new_user)
+            
+            # Process referral if one exists in the registration data
+            referral_code = None
+            if user_id in registration_data and 'referral_code' in registration_data[user_id]:
+                referral_code = registration_data[user_id]['referral_code']
+                logger.info(f"Found referral code {referral_code} for user {user_id}")
+                
+            # Handle referral code processing
+            if referral_code:
+                try:
+                    from referral_system import process_referral_code, complete_referral
+                    success, result = process_referral_code(user_id, referral_code)
+                    if success and hasattr(result, 'id'):
+                        # Complete the referral and award points
+                        complete_success, reward = complete_referral(result.id)
+                        if complete_success:
+                            logger.info(f"Completed referral for user {user_id} with code {referral_code}")
+                        else:
+                            logger.warning(f"Failed to complete referral: {reward}")
+                except Exception as ref_err:
+                    logger.error(f"Error processing referral: {ref_err}")
+            
+            # Generate a referral code for the new user
+            try:
+                from referral_system import assign_referral_code
+                user_referral_code = assign_referral_code(new_user.id)
+                logger.info(f"Generated referral code {user_referral_code} for user {user_id}")
+            except Exception as ref_err:
+                logger.error(f"Error generating referral code: {ref_err}")
+            
             logger.info(f"User {user_id} approved and added to database")
 
             # Send confirmation to user with enhanced welcome message
-            bot.send_message(
-                user_id,
-                """
+            welcome_message = """
 ✅ <b>Registration Approved!</b>
 
 🎉 <b>Welcome to AliPay_ETH!</b> 🎉
@@ -988,9 +1035,33 @@ Your account has been successfully activated and you're all set to start shoppin
 • 📦 <b>Submit Order</b> - Place AliExpress orders
 • 📊 <b>Order Status</b> - Track your orders
 • 💳 <b>Balance</b> - Check your current balance
+• 🎁 <b>Refer Friends</b> - Earn points and rewards
 
 Need assistance? Use ❓ <b>Help Center</b> anytime!
-""",
+"""
+
+            # Add referral info if available
+            try:
+                from referral_system import get_referral_url
+                user = session.query(User).filter_by(id=new_user.id).first()
+                referral_code = user.referral_code
+                if referral_code:
+                    referral_url = get_referral_url(referral_code)
+                    welcome_message += f"""
+
+<b>🎁 YOUR REFERRAL PROGRAM:</b>
+• Your referral code: <code>{referral_code}</code>
+• Your referral link: <code>{referral_url}</code>
+
+Share your code or link with friends and earn points!
+Each successful referral earns you points that can be converted to account balance.
+"""
+            except Exception as ref_err:
+                logger.error(f"Error getting referral URL: {ref_err}")
+
+            bot.send_message(
+                user_id,
+                welcome_message,
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
