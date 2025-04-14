@@ -82,12 +82,18 @@ class DigitalCompanion:
                 self.logger.warning(f"Cannot send greeting to {chat_id} - user not found")
                 return False
         
+        # We'll handle conversation state in the bot.py module directly
+        # No need to modify any state here to avoid circular imports
+            
         # Prepare greeting message with companion image
         companion_config = user_data["config"]
         greeting = self._select_greeting(user_data)
         
         # Send companion avatar image
         avatar_path = companion_config["avatar_image"]
+        
+        # Show typing indicator before sending message
+        self.bot.send_chat_action(chat_id, 'typing')
         
         if avatar_path and os.path.exists(avatar_path):
             with open(avatar_path, 'rb') as photo:
@@ -288,6 +294,9 @@ class DigitalCompanion:
         callback_data = call.data
         user_id = call.from_user.id
         user_data = self.get_user_companion(user_id)
+        
+        # We'll handle conversation state in the bot.py module directly
+        # No need to modify any state here to avoid circular imports
         
         if not user_data:
             self.logger.warning(f"Cannot handle callback for {user_id} - user not found")
