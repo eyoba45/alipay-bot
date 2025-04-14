@@ -176,3 +176,39 @@ class ReferralReward(Base):
     
     def __repr__(self):
         return f"<ReferralReward(user_id={self.user_id}, points={self.points}, type='{self.reward_type}')>"
+
+class UserBalance(Base):
+    __tablename__ = 'user_balances'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
+    balance = Column(Float, default=0.0)
+    last_deposit_date = Column(DateTime, nullable=True)
+    last_spend_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", backref="user_balance")
+    
+    def __repr__(self):
+        return f"<UserBalance(user_id={self.user_id}, balance=${self.balance:.2f})>"
+
+class Transaction(Base):
+    __tablename__ = 'transactions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    amount = Column(Float, nullable=False)
+    transaction_type = Column(String, nullable=False)  # deposit, order_payment, refund, subscription, referral_redemption
+    description = Column(String, nullable=False)
+    reference = Column(String, nullable=True)  # External reference number
+    status = Column(String, default='completed')  # pending, completed, failed, refunded
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", backref="transactions")
+    
+    def __repr__(self):
+        return f"<Transaction(user_id={self.user_id}, type='{self.transaction_type}', amount=${self.amount:.2f})>"
