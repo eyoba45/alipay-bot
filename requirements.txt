@@ -21,3 +21,10 @@ requests
 sqlalchemy
 aiofiles
 pytelegrambotapi
+anthropic
+anthropic
+pillow
+pytelegrambotapi
+requests
+sqlalchemy
+cairosvg
