@@ -12,7 +12,7 @@ from models import PendingApproval, PendingDeposit
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None, phone_number=None):
+def create_payment(amount, currency, email, first_name, last_name, tx_ref, callback_url=None, return_url=None, phone_number=None, metadata=None):
     """Create a new payment with Chapa"""
     try:
         chapa_key = os.environ.get('CHAPA_SECRET_KEY')
@@ -59,6 +59,11 @@ def create_payment(amount, currency, email, first_name, last_name, tx_ref, callb
             "title": "AliPay ETH",
             "description": "Payment for AliExpress service"
         }
+        
+        # Add metadata if provided
+        if metadata:
+            payload["metadata"] = metadata
+            logger.info(f"Adding metadata to payment: {metadata}")
 
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
@@ -100,7 +105,7 @@ def generate_registration_payment(user_data):
 
         # Create the payment
         response = create_payment(
-            amount=150.0,  # Registration fee is 150 birr
+            amount=350.0,  # 200 birr registration fee + 150 birr first month subscription
             currency="ETB",
             email=email,
             first_name=first_name,
@@ -150,8 +155,14 @@ def generate_deposit_payment(user_data, amount):
             elif phone.startswith('0'):
                 phone_number = '+251' + phone[1:]
 
-        # Amount is already in USD, convert to birr for payment (1 USD = 160 ETB)
-        birr_amount = float(amount) * 160
+        # Amount is already in USD, convert to birr for payment (1 USD = 166.67 ETB)
+        birr_amount = float(amount) * 166.67
+
+        # Check if this is a subscription renewal payment
+        metadata = {}
+        if 'for_subscription' in user_data and user_data['for_subscription']:
+            metadata['for_subscription'] = True
+            logger.info(f"Creating payment for subscription renewal, user: {user_data['telegram_id']}")
 
         session = None
         try:
@@ -166,7 +177,8 @@ def generate_deposit_payment(user_data, amount):
                 phone_number=phone_number,
                 tx_ref=tx_ref,
                 callback_url=f"https://web-production-d2ed.up.railway.app/chapa/webhook",
-                return_url=f"https://t.me/ali_paybot"
+                return_url=f"https://t.me/ali_paybot",
+                metadata=metadata if metadata else None
             )
         except Exception as e:
             logger.error(f"Error generating deposit payment: {e}")
@@ -241,7 +253,7 @@ def generate_registration_payment(user_data):
             session = get_session()
             # Create the payment
             response = create_payment(
-                amount=1.0,  # Registration fee is 150 birr
+                amount=350.0,  # 200 birr registration fee + 150 birr first month subscription
                 currency="ETB", 
                 email=email,
                 first_name=first_name,
