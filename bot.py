@@ -22,7 +22,7 @@ from sqlalchemy import func
 # Key: chat_id, Value: Boolean (True if in companion conversation)
 companion_conversations = {}
 
-# Import the Digital Shopping Companion
+# Import the AI Assistant
 try:
     from digital_companion import DigitalCompanion
     COMPANION_ENABLED = True
@@ -33,7 +33,7 @@ except ImportError as e:
     logger = logging.getLogger('bot')
     logger.warning(f"Digital Companion not available: {e}")
     logger.warning("Bot will run without digital companion features")
-    logger.warning(f"Digital Shopping Companion not available: {e}")
+    logger.warning(f"AI Assistant not available: {e}")
     COMPANION_ENABLED = False
 
 # Configure logging
@@ -135,7 +135,7 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('❓ Help Center')
         )
 
-        # Add Digital Shopping Companion button if enabled
+        # Add AI Assistant button if enabled
         if COMPANION_ENABLED:
             menu.add(KeyboardButton('🤖 AI Assistant'))
 
@@ -149,7 +149,7 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('❓ Help Center')
         )
 
-        # Add Digital Shopping Companion button for unregistered users too
+        # Add AI Assistant button for unregistered users too
         if COMPANION_ENABLED:
             menu.add(KeyboardButton('🤖 AI Assistant'))
 
@@ -4555,14 +4555,14 @@ How can we assist you today? Select a topic below to get detailed information an
     # Acknowledge the callback
     bot.answer_callback_query(call.id)
 
-# Digital Shopping Companion handlers
+# AI Assistant handlers
 @bot.message_handler(commands=['companion'])
 def start_companion(message):
-    """Start interaction with digital shopping companion"""
+    """Start interaction with AI Assistant"""
     chat_id = message.chat.id
 
     if not COMPANION_ENABLED:
-        bot.send_message(chat_id, "Digital Shopping Companion is not available.")
+        bot.send_message(chat_id, "AI Assistant is not available.")
         return
 
     # Set user in companion conversation mode
@@ -4963,13 +4963,13 @@ def main():
 
     logger.info("🚀 Starting bot in polling mode...")
 
-    # Initialize Digital Shopping Companion if enabled
+    # Initialize AI Assistant if enabled
     if COMPANION_ENABLED:
         try:
             digital_companion = DigitalCompanion(bot)
             logger.info("✅ AI Assistant initialized with complete knowledge of bot features")
         except Exception as e:
-            logger.error(f"Failed to initialize Digital Shopping Companion: {e}")
+            logger.error(f"Failed to initialize AI Assistant: {e}")
             digital_companion = None
 
     # Delete any existing webhook
