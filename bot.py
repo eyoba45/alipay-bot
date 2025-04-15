@@ -4579,11 +4579,11 @@ def start_companion(message):
     # Show helper info
     bot.send_message(
         chat_id,
-        "<i>💡 You can now chat directly with Selam! Type 'exit' or '/exit' to return to the main menu.</i>",
+        "<i>💡 You can now chat directly with the AI Assistant! Type 'exit' or '/exit' to return to the main menu.</i>",
         parse_mode='HTML'
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '👧 ሰላም Shopping Assistant')
+@bot.message_handler(func=lambda msg: msg.text == '🤖 AI Assistant')
 def handle_companion_button(message):
     """Handle the companion button press"""
     chat_id = message.chat.id
@@ -4594,7 +4594,7 @@ def handle_companion_button(message):
     # Show a transitional message
     bot.send_message(
         chat_id,
-        "🌟 <b>Connecting to Selam, your Ethiopian shopping assistant...</b> 🌟",
+        "🌟 <b>Connecting to AI Assistant, your shopping companion...</b> 🌟",
         parse_mode='HTML'
     )
 
@@ -4617,7 +4617,7 @@ def handle_companion_message(message):
         # Send exit message
         bot.send_message(
             chat_id,
-            "🌟 <b>Leaving conversation with Selam...</b>\nReturning to main menu!",
+            "🌟 <b>Leaving conversation with AI Assistant...</b>\nReturning to main menu!",
             parse_mode='HTML'
         )
 
@@ -4967,7 +4967,7 @@ def main():
     if COMPANION_ENABLED:
         try:
             digital_companion = DigitalCompanion(bot)
-            logger.info("✅ Digital Shopping Companion initialized with beautiful Ethiopian female personality")
+            logger.info("✅ AI Assistant initialized with complete knowledge of bot features")
         except Exception as e:
             logger.error(f"Failed to initialize Digital Shopping Companion: {e}")
             digital_companion = None
