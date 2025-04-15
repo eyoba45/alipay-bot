@@ -33,13 +33,14 @@ class DigitalCompanion:
         self.ai_client = GroqClient(api_key=os.environ.get("GROQ_API_KEY"))
         self.companion_profiles = COMPANION_PROFILES
         self.avatar_folder = "avatars"
-        self.model = "llama3-70b-8192"  # Default Llama model on Groq
+        # Use the most advanced model available on Groq
+        self.model = "llama3-70b-8192"  # Most capable Llama model on Groq
         
         # Create avatars folder if it doesn't exist
         if not os.path.exists(self.avatar_folder):
             os.makedirs(self.avatar_folder)
         
-        self.logger.info("Digital Companion initialized with Groq API using Llama models")
+        self.logger.info("AI Assistant initialized with Groq API using the advanced Llama 3 70B model")
     
     def get_user_companion(self, user_id):
         """Get or create companion profile for a user"""
