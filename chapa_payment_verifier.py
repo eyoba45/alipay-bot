@@ -18,8 +18,8 @@ from models import User, PendingApproval, PendingDeposit
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Verification interval in seconds (check every 5 minutes)
-VERIFICATION_INTERVAL = 300
+# Verification interval in seconds (check every 15 seconds for faster verification)
+VERIFICATION_INTERVAL = 15
 
 def get_bot():
     """Import and return bot instance"""
@@ -45,15 +45,45 @@ def verify_payment(tx_ref):
             "Content-Type": "application/json"
         }
 
-        response = requests.get(url, headers=headers)
+        # Make the API request to Chapa with a timeout
+        response = requests.get(url, headers=headers, timeout=30)
         response_data = response.json()
 
+        # Log the full response for debugging
         logger.info(f"Payment verification response for {tx_ref}: {response_data}")
 
-        if response_data.get('status') == 'success' and response_data.get('data', {}).get('status') == 'success':
-            return response_data.get('data', {})
+        # First check the overall response status
+        if response_data.get('status') != 'success':
+            logger.warning(f"Payment verification failed with status: {response_data.get('status')}")
+            return False
+            
+        # Then check the data status 
+        data = response_data.get('data', {})
+        if not data:
+            logger.warning(f"Payment verification response missing data field")
+            return False
+            
+        # Check if payment is actually completed
+        # The payment was found but status must be 'success' to indicate actual payment
+        payment_status = data.get('status')
+        if payment_status != 'success':
+            logger.warning(f"Payment found but status is not success: {payment_status}")
+            return False
+            
+        # Check if verify_transaction status is also success
+        verify_status = data.get('verify_transaction', {}).get('status')
+        if verify_status and verify_status != 'success':
+            logger.warning(f"Transaction verification failed: {verify_status}")
+            return False
+            
+        # Check the transaction status 
+        if 'tx_ref' not in data:
+            logger.warning(f"Transaction reference not found in response")
+            return False
+            
+        logger.info(f"✅ Payment {tx_ref} successfully verified with Chapa")
+        return data
 
-        return False
     except Exception as e:
         logger.error(f"Error verifying payment {tx_ref}: {e}")
         logger.error(traceback.format_exc())
@@ -274,24 +304,77 @@ def verify_payment_task():
     while True:
         try:
             logger.info("Running payment verification check")
+            
+            # Make sure we have the Chapa API key
+            if not os.environ.get('CHAPA_SECRET_KEY'):
+                logger.error("❌ CHAPA_SECRET_KEY not found in environment - payment verification disabled")
+                logger.error("Please set the CHAPA_SECRET_KEY to enable payment verification")
+                time.sleep(60)  # Wait longer before retrying if no API key
+                continue
+                
+            # Check registrations
             check_pending_registrations()
             
             # Check pending deposits as well
-            session = get_session()
+            session = None
             try:
+                session = get_session()
                 # Get all users with pending deposits
                 pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+                
+                if pending_deposits:
+                    logger.info(f"Found {len(pending_deposits)} pending deposits to verify")
+                    
                 for deposit in pending_deposits:
                     try:
                         user = session.query(User).filter_by(id=deposit.user_id).first()
-                        if user and deposit.tx_ref:
-                            # Verify payment with Chapa before approving
-                            payment_status = verify_payment(deposit.tx_ref)
-                            if payment_status:
-                                logger.info(f"Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
-                                process_verified_deposit(user.telegram_id, deposit.amount, payment_status)
-                            else:
-                                logger.warning(f"Payment not verified for deposit {deposit.tx_ref}, user {user.telegram_id}, skipping")
+                        if not user:
+                            logger.warning(f"User not found for deposit ID {deposit.id}")
+                            continue
+                            
+                        # Skip deposits without a transaction reference
+                        if not deposit.tx_ref:
+                            logger.warning(f"Missing tx_ref for deposit ID {deposit.id}, user {user.telegram_id}")
+                            continue
+                            
+                        # Verify payment with Chapa before approving
+                        logger.info(f"Verifying payment for deposit {deposit.tx_ref}, user {user.telegram_id}...")
+                        payment_data = verify_payment(deposit.tx_ref)
+                        
+                        if payment_data:
+                            # Payment verified successfully
+                            logger.info(f"✅ Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
+                            process_verified_deposit(user.telegram_id, deposit.amount, payment_data)
+                        else:
+                            # Payment verification failed
+                            logger.warning(f"❌ Payment not verified for deposit {deposit.tx_ref}, user {user.telegram_id}")
+                            
+                            # Check if deposit has been in 'Processing' for too long (over 24 hours)
+                            if deposit.created_at and (datetime.utcnow() - deposit.created_at).total_seconds() > 86400:
+                                logger.warning(f"Deposit {deposit.id} has been processing for over 24 hours, marking as 'Failed'")
+                                deposit.status = 'Failed'
+                                session.commit()
+                                
+                                # Notify user
+                                bot, _ = get_bot()
+                                if bot:
+                                    try:
+                                        bot.send_message(
+                                            user.telegram_id,
+                                            """
+❌ <b>Payment Verification Failed</b>
+
+We couldn't verify your payment with Chapa after 24 hours. This could be due to:
+• Payment was not completed
+• Transaction was canceled
+• Network or processing issues
+
+Please try again with a new deposit or contact support if you believe this is an error.
+""",
+                                            parse_mode='HTML'
+                                        )
+                                    except Exception as e:
+                                        logger.error(f"Error sending payment failure notification: {e}")
                     except Exception as e:
                         logger.error(f"Error processing pending deposit: {e}")
                         logger.error(traceback.format_exc())
@@ -306,9 +389,9 @@ def verify_payment_task():
             logger.error(f"Error in payment verification task: {e}")
             logger.error(traceback.format_exc())
 
-        # Sleep until next check - run more frequently 
-        # (every 30 seconds instead of 5 minutes)
-        time.sleep(30)
+        # Sleep until next check - run frequently for responsive verifications
+        # Check every 15 seconds to ensure prompt payment processing
+        time.sleep(15)
 
 def start_verification_service():
     """Start the verification service in a background thread"""
