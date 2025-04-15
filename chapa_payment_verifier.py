@@ -250,45 +250,97 @@ def check_pending_registrations():
     try:
         session = get_session()
         pending_approvals = session.query(PendingApproval).all()
-
+        
+        if pending_approvals:
+            logger.info(f"Found {len(pending_approvals)} pending registrations to verify")
+        
         for pending in pending_approvals:
             try:
-                # Generate the expected tx_ref (same logic as in chapa_payment.py)
-                import secrets
-                from datetime import datetime
-
-                def generate_tx_ref(prefix="TX"):
-                    """Generate a unique transaction reference"""
-                    random_hex = secrets.token_hex(8)
-                    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                    return f"{prefix}-{timestamp}-{random_hex}"
-
-                # We won't know the exact tx_ref, but we try to verify by user ID
-                # This is a custom implementation to check by phone or name
-                logger.info(f"Attempting to verify registration for user {pending.telegram_id}")
-
-                # Check recent successful payments
-                recent_date = datetime.utcnow() - timedelta(days=1)
-
-                # Create a user data dict with the same format used in registration
-                user_data = {
-                    'telegram_id': pending.telegram_id,
-                    'name': pending.name,
-                    'phone': pending.phone,
-                    'address': pending.address
-                }
-
-                # Verify payment before approving registration
-                if pending.tx_ref:
-                    payment_status = verify_payment(pending.tx_ref)
-                    if payment_status:
-                        logger.info(f"Payment verified for user {pending.telegram_id}")
-                        # Only process registration if payment is verified
-                        process_verified_registration(pending.telegram_id, payment_status)
-                    else:
-                        logger.warning(f"Payment not verified for user {pending.telegram_id}, skipping approval")
-                else:
+                # Skip registrations without tx_ref
+                if not pending.tx_ref:
                     logger.warning(f"No tx_ref found for pending approval {pending.telegram_id}, skipping")
+                    continue
+                    
+                # Check if user already exists to avoid duplicate registrations
+                existing_user = session.query(User).filter_by(telegram_id=pending.telegram_id).first()
+                if existing_user:
+                    logger.info(f"User {pending.telegram_id} already registered, deleting pending approval")
+                    session.delete(pending)
+                    session.commit()
+                    continue
+                
+                # Verify payment with Chapa API - this is the only 100% reliable method
+                logger.info(f"Verifying payment for registration tx_ref: {pending.tx_ref}")
+                payment_status = verify_payment(pending.tx_ref)
+                
+                # If payment is successful, automatically approve the registration
+                if payment_status:
+                    logger.info(f"✅ Payment successfully verified for user {pending.telegram_id}")
+                    
+                    # Process the verified registration (creates user account)
+                    success = process_verified_registration(pending.telegram_id, payment_status)
+                    if success:
+                        logger.info(f"✅ Registration for user {pending.telegram_id} automatically approved after payment verification")
+                        
+                        # Admin notification (optional)
+                        bot, _ = get_bot()
+                        if bot and os.environ.get('ADMIN_ID'):
+                            try:
+                                admin_id = int(os.environ.get('ADMIN_ID'))
+                                bot.send_message(
+                                    admin_id,
+                                    f"""
+✅ <b>PAYMENT VERIFIED - USER REGISTERED</b>
+
+User ID: <code>{pending.telegram_id}</code>
+Name: <b>{pending.name}</b>
+Phone: <code>{pending.phone}</code>
+
+The payment has been automatically verified through Chapa API
+and the user has been registered successfully.
+
+Transaction Reference: <code>{pending.tx_ref}</code>
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+""",
+                                    parse_mode='HTML'
+                                )
+                            except Exception as admin_error:
+                                logger.error(f"Error notifying admin about verified registration: {admin_error}")
+                    else:
+                        logger.error(f"Failed to process verified registration for {pending.telegram_id}")
+                else:
+                    # Payment verification failed - this is normal during pending payments
+                    # We'll keep trying until payment is completed or timeout
+                    logger.info(f"Payment not yet verified for user {pending.telegram_id}, will retry later")
+                    
+                    # Check if registration is older than 24 hours - clean up old pending registrations
+                    if pending.created_at and (datetime.utcnow() - pending.created_at).total_seconds() > 86400:
+                        logger.warning(f"Registration for {pending.telegram_id} pending for >24 hours, marking as expired")
+                        pending.status = "Payment Expired"
+                        session.commit()
+                        
+                        # Notify user about expired registration
+                        bot, create_main_menu = get_bot()
+                        if bot:
+                            try:
+                                bot.send_message(
+                                    pending.telegram_id,
+                                    """
+⏰ <b>REGISTRATION PAYMENT EXPIRED</b>
+
+Your registration payment was not confirmed within 24 hours.
+This could be due to:
+• Payment was not completed
+• Transaction was canceled
+• Network or processing issues
+
+Please start a new registration with /start if you would like to try again.
+""",
+                                    parse_mode='HTML',
+                                    reply_markup=create_main_menu(is_registered=False) if create_main_menu else None
+                                )
+                            except Exception as msg_error:
+                                logger.error(f"Error sending expiration message: {msg_error}")
 
             except Exception as e:
                 logger.error(f"Error checking registration for {pending.telegram_id}: {e}")
