@@ -55,7 +55,7 @@ class DigitalCompanion:
                 self.logger.info(f"Creating new companion profile for user {user.telegram_id}")
                 profile = CompanionProfile(
                     user_id=user.id,
-                    companion_name="Selam",
+                    companion_name="AI Assistant",
                     relationship_level=1,
                     preferred_language="amharic",
                     interaction_style="friendly"
@@ -72,7 +72,7 @@ class DigitalCompanion:
                 "preferred_language": profile.preferred_language,
                 "interaction_style": profile.interaction_style,
                 "config": self.companion_profiles.get(profile.companion_name.lower(), 
-                                                   self.companion_profiles["selam"])
+                                                   self.companion_profiles["ai assistant"])
             }
     
     def send_greeting(self, chat_id, user_data=None):
@@ -130,11 +130,11 @@ class DigitalCompanion:
         # More personalized greeting for established relationships
         hour = datetime.now().hour
         if 5 <= hour < 12:
-            time_greeting = "ጥሩ ጠዋት! (Good morning!)"
+            time_greeting = "Good morning!"
         elif 12 <= hour < 18:
-            time_greeting = "ጥሩ ከሰዓት በኋላ! (Good afternoon!)"
+            time_greeting = "Good afternoon!"
         else:
-            time_greeting = "ጥሩ ምሽት! (Good evening!)"
+            time_greeting = "Good evening!"
             
         # Add more personalization for higher relationship levels
         if relationship_level >= 5:
@@ -145,8 +145,8 @@ class DigitalCompanion:
                     .order_by(CompanionInteraction.created_at.desc())\
                     .first()
                     
-                if recent and ("product" in recent.message_text.lower() or "ምርት" in recent.message_text):
-                    return f"{time_greeting} {user_data['user_name']}, እንደገና ስመለሰዎ ደስ ብሎኛል። እየፈለጉት ያለውን ምርት አግኝተዋል? ({time_greeting} {user_data['user_name']}, so nice to see you again! Did you find the product you were looking for?)"
+                if recent and "product" in recent.message_text.lower():
+                    return f"{time_greeting} {user_data['user_name']}, so nice to see you again! Did you find the product you were looking for?"
         
         # Standard greeting with time of day
         return f"{time_greeting} {user_data['user_name']}, {config['greeting_phrases'][2]}"
@@ -155,12 +155,12 @@ class DigitalCompanion:
         """Create inline keyboard for companion interactions"""
         markup = InlineKeyboardMarkup()
         markup.row(
-            InlineKeyboardButton("🛍️ ግዢ እርዳታ (Shopping Help)", callback_data="companion_shopping"),
-            InlineKeyboardButton("❓ ጥያቄዎች (Questions)", callback_data="companion_questions")
+            InlineKeyboardButton("🛍️ Shopping Help", callback_data="companion_shopping"),
+            InlineKeyboardButton("❓ Questions", callback_data="companion_questions")
         )
         markup.row(
-            InlineKeyboardButton("💫 ምክሮች (Recommendations)", callback_data="companion_recommendations"),
-            InlineKeyboardButton("💬 መልስ (Just Chat)", callback_data="companion_chat")
+            InlineKeyboardButton("💫 Recommendations", callback_data="companion_recommendations"),
+            InlineKeyboardButton("💬 Just Chat", callback_data="companion_chat")
         )
         return markup
     
@@ -419,12 +419,12 @@ class DigitalCompanion:
         """Create shopping help keyboard"""
         markup = InlineKeyboardMarkup()
         markup.row(
-            InlineKeyboardButton("🔍 ምርት ፈልግ (Find Products)", callback_data="companion_find_products"),
-            InlineKeyboardButton("📦 ትዕዛዝ አስገባ (Place Order)", callback_data="companion_place_order")
+            InlineKeyboardButton("🔍 Find Products", callback_data="companion_find_products"),
+            InlineKeyboardButton("📦 Place Order", callback_data="companion_place_order")
         )
         markup.row(
-            InlineKeyboardButton("🔄 ትዕዛዝ ክትትል (Track Order)", callback_data="companion_track_order"),
-            InlineKeyboardButton("⬅️ ተመለስ (Back)", callback_data="companion_back")
+            InlineKeyboardButton("🔄 Track Order", callback_data="companion_track_order"),
+            InlineKeyboardButton("⬅️ Back", callback_data="companion_back")
         )
         return markup
     
@@ -432,12 +432,12 @@ class DigitalCompanion:
         """Create questions keyboard"""
         markup = InlineKeyboardMarkup()
         markup.row(
-            InlineKeyboardButton("💳 ስለ ክፍያ (About Payment)", callback_data="companion_about_payment"),
-            InlineKeyboardButton("🛒 ስለ ትዕዛዝ (About Orders)", callback_data="companion_about_orders")
+            InlineKeyboardButton("💳 About Payment", callback_data="companion_about_payment"),
+            InlineKeyboardButton("🛒 About Orders", callback_data="companion_about_orders")
         )
         markup.row(
-            InlineKeyboardButton("⏱️ ስለ ማድረሻ ጊዜ (Delivery Time)", callback_data="companion_delivery_time"),
-            InlineKeyboardButton("⬅️ ተመለስ (Back)", callback_data="companion_back")
+            InlineKeyboardButton("⏱️ Delivery Time", callback_data="companion_delivery_time"),
+            InlineKeyboardButton("⬅️ Back", callback_data="companion_back")
         )
         return markup
     
@@ -445,25 +445,32 @@ class DigitalCompanion:
         """Create recommendations categories keyboard"""
         markup = InlineKeyboardMarkup()
         
-        # Get categories from config
-        categories = self.companion_profiles["selam"]["shopping_categories"]
+        # Categories in English only
+        english_categories = [
+            "📱 Electronics",
+            "👕 Fashion",
+            "🏠 Home & Garden",
+            "🎮 Gaming",
+            "💄 Beauty",
+            "🎁 Gifts"
+        ]
         
         # Create pairs of buttons
-        for i in range(0, len(categories), 2):
+        for i in range(0, len(english_categories), 2):
             row = []
             # Add first button
-            cat = categories[i].split(' (')[0]  # Get only the Amharic part
-            row.append(InlineKeyboardButton(categories[i], callback_data=f"companion_category_{cat}"))
+            cat = english_categories[i].split(' ')[1]  # Get category name without emoji
+            row.append(InlineKeyboardButton(english_categories[i], callback_data=f"companion_category_{cat}"))
             
             # Add second button if available
-            if i+1 < len(categories):
-                cat = categories[i+1].split(' (')[0]  # Get only the Amharic part
-                row.append(InlineKeyboardButton(categories[i+1], callback_data=f"companion_category_{cat}"))
+            if i+1 < len(english_categories):
+                cat = english_categories[i+1].split(' ')[1]  # Get category name without emoji
+                row.append(InlineKeyboardButton(english_categories[i+1], callback_data=f"companion_category_{cat}"))
             
             markup.row(*row)
         
         # Add back button
-        markup.row(InlineKeyboardButton("⬅️ ተመለስ (Back)", callback_data="companion_back"))
+        markup.row(InlineKeyboardButton("⬅️ Back", callback_data="companion_back"))
         return markup
     
     def send_voice_message(self, chat_id, text, user_data=None):
