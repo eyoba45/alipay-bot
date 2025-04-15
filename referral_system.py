@@ -28,13 +28,53 @@ logger = logging.getLogger(__name__)
 # Constants for reward points
 REWARD_POINTS = {
     'registration': 50,  # Points for referring someone who registers
-    'first_deposit': 25,  # Points for when referred user makes first deposit
-    'subscription': 30,  # Points for when referred user subscribes
-    'first_order': 40,  # Points for referred user's first order
+    # No longer giving points for these actions
+    'first_deposit': 0,  # No points for deposits
+    'subscription': 0,  # No points for subscription
+    'first_order': 0,  # No points for orders
 }
 
-# Points to ETB conversion rate (100 points = 10 ETB)
-POINTS_TO_ETB_RATE = 0.1
+# Points to ETB conversion rate (1 point = 1 ETB)
+POINTS_TO_ETB_RATE = 1.0
+
+# Referral achievement badges with hover effects
+REFERRAL_BADGES = [
+    {
+        'name': 'Beginner Referrer',
+        'icon': '🥉',
+        'referrals_required': 1,
+        'hover_text': 'You invited your first friend! Keep going!',
+        'color': '#CD7F32'  # Bronze color
+    },
+    {
+        'name': 'Rising Referrer',
+        'icon': '🥈',
+        'referrals_required': 3,
+        'hover_text': 'You\'ve invited 3 friends! Great progress!',
+        'color': '#C0C0C0'  # Silver color
+    },
+    {
+        'name': 'Champion Referrer',
+        'icon': '🥇',
+        'referrals_required': 5,
+        'hover_text': 'Amazing! You\'ve invited 5 friends!',
+        'color': '#FFD700'  # Gold color
+    },
+    {
+        'name': 'Elite Referrer',
+        'icon': '💎',
+        'referrals_required': 10,
+        'hover_text': 'Incredible! You\'re among our top referrers with 10+ invites!',
+        'color': '#00BFFF'  # Diamond blue color
+    },
+    {
+        'name': 'Legendary Referrer',
+        'icon': '👑',
+        'referrals_required': 20,
+        'hover_text': 'Legendary status achieved with 20+ invites! You\'re amazing!',
+        'color': '#FFD700'  # Crown gold color
+    }
+]
 
 def assign_referral_code(user_id, length=8):
     """
@@ -354,6 +394,168 @@ def check_user_points_balance(user_id):
         return {'points': 0, 'etb_value': 0.0}
     finally:
         safe_close_session(session)
+
+def process_referral_code(user_id, referral_code):
+    """
+    Process a referral code when a new user registers
+    
+    Args:
+        user_id: The new user's telegram_id
+        referral_code: The referral code used
+        
+    Returns:
+        tuple: (success, result_obj)
+    """
+    session = None
+    try:
+        session = get_session()
+        
+        # Get the user database record
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            logger.error(f"User with telegram_id {user_id} not found")
+            return False, None
+            
+        # Process the referral
+        success = check_and_process_registration_referral(user.id, referral_code)
+        
+        if success:
+            # Find the referrer by code
+            referrer = session.query(User).filter_by(referral_code=referral_code).first()
+            if referrer:
+                logger.info(f"Successfully processed referral: {referrer.id} -> {user.id}")
+                return True, referrer
+                
+        return False, None
+        
+    except Exception as e:
+        logger.error(f"Error processing referral code: {e}")
+        return False, None
+    finally:
+        safe_close_session(session)
+        
+def complete_referral(referrer_id):
+    """
+    Complete a referral by awarding registration points
+    
+    Args:
+        referrer_id: The ID of the user who made the referral
+        
+    Returns:
+        tuple: (success, points_awarded)
+    """
+    # Only award points for successful registration - no points for other actions
+    # This matches the updated reward structure where only registration rewards points
+    return True, REWARD_POINTS['registration']
+
+def get_user_badge(user_id):
+    """
+    Get a user's current referral badge based on number of successful referrals
+    
+    Args:
+        user_id: The user's ID
+        
+    Returns:
+        dict: Badge details including name, icon, hover text and color
+    """
+    session = None
+    try:
+        session = get_session()
+        
+        # Count successful referrals
+        query = """
+        SELECT COUNT(*) as referral_count
+        FROM referrals
+        WHERE referrer_id = :user_id
+        AND status = 'completed'
+        """
+        
+        result = session.execute(query, {'user_id': user_id}).fetchone()
+        referral_count = result.referral_count if result else 0
+        
+        # Find the highest badge earned
+        earned_badge = None
+        for badge in reversed(REFERRAL_BADGES):
+            if referral_count >= badge['referrals_required']:
+                earned_badge = badge
+                break
+                
+        # If no badge earned yet, return the first one as "locked"
+        if not earned_badge:
+            first_badge = REFERRAL_BADGES[0].copy()
+            first_badge['locked'] = True
+            first_badge['hover_text'] = f"Invite 1 friend to earn this badge!"
+            return first_badge
+            
+        # Return badge with additional referral count info
+        badge_with_count = earned_badge.copy()
+        badge_with_count['referral_count'] = referral_count
+        
+        # Calculate progress to next badge
+        current_index = REFERRAL_BADGES.index(earned_badge)
+        if current_index < len(REFERRAL_BADGES) - 1:
+            next_badge = REFERRAL_BADGES[current_index + 1]
+            needed = next_badge['referrals_required'] - referral_count
+            badge_with_count['next_badge'] = next_badge['name']
+            badge_with_count['needed_for_next'] = needed
+            
+        return badge_with_count
+        
+    except Exception as e:
+        logger.error(f"Error getting user badge: {e}")
+        return REFERRAL_BADGES[0]
+    finally:
+        safe_close_session(session)
+        
+def generate_badge_html(user_id):
+    """
+    Generate HTML for user's badge with hover effect
+    
+    Args:
+        user_id: The user's ID
+        
+    Returns:
+        str: HTML string with badge and hover effect
+    """
+    badge = get_user_badge(user_id)
+    
+    if badge.get('locked'):
+        # Locked badge (gray with lock emoji)
+        html = f"""
+<span style="position:relative; display:inline-block; cursor:pointer;" 
+      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
+      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
+    <span style="font-size:22px; opacity:0.5;">{badge['icon']} 🔒</span>
+    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
+           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
+           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
+           font-size:14px; width:200px; text-align:center;">
+        <b>{badge['name']}</b><br>{badge['hover_text']}
+    </span>
+</span>
+"""
+    else:
+        # Earned badge with color and hover effect
+        next_badge_text = ""
+        if badge.get('next_badge'):
+            next_badge_text = f"<br>🔼 {badge['needed_for_next']} more to reach {badge['next_badge']}!"
+        
+        hover_info = f"{badge['hover_text']}<br>🌟 You've referred {badge['referral_count']} friends!{next_badge_text}"
+        
+        html = f"""
+<span style="position:relative; display:inline-block; cursor:pointer;" 
+      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
+      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
+    <span style="font-size:22px; color:{badge['color']};">{badge['icon']}</span>
+    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
+           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
+           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
+           font-size:14px; width:200px; text-align:center;">
+        <b>{badge['name']}</b><br>{hover_info}
+    </span>
+</span>
+"""
+    return html
 
 def redeem_points(user_id, points_to_redeem):
     """
