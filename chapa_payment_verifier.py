@@ -248,25 +248,17 @@ def check_pending_registrations():
                     'address': pending.address
                 }
 
-                # Get payment status from Chapa
+                # Verify payment before approving registration
                 if pending.tx_ref:
                     payment_status = verify_payment(pending.tx_ref)
                     if payment_status:
+                        logger.info(f"Payment verified for user {pending.telegram_id}")
+                        # Only process registration if payment is verified
                         process_verified_registration(pending.telegram_id, payment_status)
                     else:
-                        # If payment not verified but older than 1 minute, auto-approve
-                        time_diff = datetime.utcnow() - pending.created_at
-                        if time_diff.total_seconds() > 60:  # 1 minute
-                            process_verified_registration(pending.telegram_id, {})
-                        else:
-                            logger.info(f"Payment not verified for user {pending.telegram_id}")
+                        logger.warning(f"Payment not verified for user {pending.telegram_id}, skipping approval")
                 else:
-                    # No tx_ref but pending for more than 1 minute, auto-approve
-                    time_diff = datetime.utcnow() - pending.created_at
-                    if time_diff.total_seconds() > 60:  # 1 minute
-                        process_verified_registration(pending.telegram_id, {})
-                    else:
-                        logger.warning(f"No tx_ref found for pending approval {pending.telegram_id}")
+                    logger.warning(f"No tx_ref found for pending approval {pending.telegram_id}, skipping")
 
             except Exception as e:
                 logger.error(f"Error checking registration for {pending.telegram_id}: {e}")
@@ -283,13 +275,40 @@ def verify_payment_task():
         try:
             logger.info("Running payment verification check")
             check_pending_registrations()
+            
+            # Check pending deposits as well
+            session = get_session()
+            try:
+                # Get all users with pending deposits
+                pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+                for deposit in pending_deposits:
+                    try:
+                        user = session.query(User).filter_by(id=deposit.user_id).first()
+                        if user and deposit.tx_ref:
+                            # Verify payment with Chapa before approving
+                            payment_status = verify_payment(deposit.tx_ref)
+                            if payment_status:
+                                logger.info(f"Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
+                                process_verified_deposit(user.telegram_id, deposit.amount, payment_status)
+                            else:
+                                logger.warning(f"Payment not verified for deposit {deposit.tx_ref}, user {user.telegram_id}, skipping")
+                    except Exception as e:
+                        logger.error(f"Error processing pending deposit: {e}")
+                        logger.error(traceback.format_exc())
+            except Exception as e:
+                logger.error(f"Error checking pending deposits: {e}")
+                logger.error(traceback.format_exc())
+            finally:
+                safe_close_session(session)
+                
             logger.info("Payment verification complete")
         except Exception as e:
             logger.error(f"Error in payment verification task: {e}")
             logger.error(traceback.format_exc())
 
-        # Sleep until next check
-        time.sleep(VERIFICATION_INTERVAL)
+        # Sleep until next check - run more frequently 
+        # (every 30 seconds instead of 5 minutes)
+        time.sleep(30)
 
 def start_verification_service():
     """Start the verification service in a background thread"""
