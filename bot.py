@@ -129,9 +129,10 @@ def create_main_menu(is_registered=False, chat_id=None):
         )
         menu.add(
             KeyboardButton('🏆 Referral Badges'),
-            KeyboardButton('👥 Join Community')
+            KeyboardButton('🔗 My Referral Link')
         )
         menu.add(
+            KeyboardButton('👥 Join Community'),
             KeyboardButton('❓ Help Center')
         )
 
@@ -1756,6 +1757,118 @@ Click 🔑 Register to create your account.
             
     except Exception as e:
         logger.error(f"Error in referral badges: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link')
+def my_referral_link(message):
+    """Handle My Referral Link button to display and share referral link"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id, 
+                """
+⚠️ <b>Registration Required</b>
+
+You need to register first to get your referral link.
+Click 🔑 Register to create your account.
+""", 
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=False)
+            )
+            return
+            
+        # Get or generate referral code
+        referral_code = user.referral_code
+        if not referral_code:
+            try:
+                from referral_system import assign_referral_code
+                referral_code = assign_referral_code(user.id)
+                logger.info(f"Generated new referral code {referral_code} for user {chat_id}")
+                # Refresh user to get updated code
+                session.refresh(user)
+                referral_code = user.referral_code
+            except Exception as ref_err:
+                logger.error(f"Error generating referral code: {ref_err}")
+                
+        if not referral_code:
+            bot.send_message(
+                chat_id,
+                "Sorry, there was an error generating your referral code. Please try again later.",
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            return
+            
+        # Get referral URL
+        from referral_system import get_referral_url
+        referral_url = get_referral_url(referral_code)
+        
+        # Count user's successful referrals
+        query = """
+        SELECT COUNT(*) as count
+        FROM referrals
+        WHERE referrer_id = :user_id
+        """
+        result = session.execute(query, {'user_id': user.id}).fetchone()
+        referral_count = result.count if result else 0
+        
+        # Get user's current points
+        points = user.referral_points or 0
+        
+        # Create inline keyboard for sharing
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        markup = InlineKeyboardMarkup()
+        
+        # Direct share buttons for common platforms
+        markup.row(
+            InlineKeyboardButton("📱 Share via Telegram", url=f"https://t.me/share/url?url={referral_url}&text=Join%20AliPay%20ETH%20shopping%20service%20and%20we%20both%20get%20rewards!%20Use%20my%20referral%20link:")
+        )
+        
+        markup.row(
+            InlineKeyboardButton("📊 View My Referrals", callback_data="view_referrals"),
+            InlineKeyboardButton("🏆 View Badges", callback_data="view_badges")
+        )
+        
+        # Send message with QR code and referral details
+        bot.send_message(
+            chat_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔗 <b>YOUR REFERRAL LINK</b> 🔗  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Share your link and earn rewards!</b>
+
+<b>🔢 Your Referral Code:</b> 
+<code>{referral_code}</code>
+
+<b>🔗 Your Referral Link:</b>
+<code>{referral_url}</code>
+
+<b>📊 Stats:</b>
+• <code>{referral_count}</code> successful referrals
+• <code>{points}</code> points earned (worth {points} birr)
+
+<b>💰 How it works:</b>
+• Share your link with friends
+• When they register, you earn 50 points
+• Redeem points for account balance (1 point = 1 birr)
+
+<i>Copy the link above and share it with friends!</i>
+""",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in my_referral_link: {e}")
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
@@ -4673,15 +4786,20 @@ def handle_companion_callback(call):
     if not COMPANION_ENABLED:
         return
 
-    # Initialize the companion if needed
-    global digital_companion
-    if not digital_companion:
-        digital_companion = DigitalCompanion(bot)
+    try:
+        # Initialize the companion if needed
+        global digital_companion
+        if not digital_companion:
+            digital_companion = DigitalCompanion(bot)
 
-    # Handle the callback
-    digital_companion.handle_callback(call)
+        # Handle the callback
+        digital_companion.handle_callback(call)
+    except Exception as e:
+        logger.error(f"Error in companion callback: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing request")
 
-@bot.callback_query_handler(func=lambda call: call.data in ['view_referrals', 'redeem_points', 'referral_help'])
+@bot.callback_query_handler(func=lambda call: call.data in ['view_referrals', 'redeem_points', 'referral_help', 'view_badges', 'back_to_reflink'])
 def handle_referral_badges_buttons(call):
     """Handle callback actions for referral badges screen"""
     chat_id = call.message.chat.id
@@ -4826,6 +4944,171 @@ Enter how many points you want to redeem:
 """,
                 parse_mode='HTML'
             )
+            
+        elif call.data == 'view_badges':
+            bot.answer_callback_query(call.id)
+            
+            # Redirect to the referral badges function directly
+            try:
+                # Count user's successful referrals
+                query = """
+                SELECT COUNT(*) as count
+                FROM referrals
+                WHERE referrer_id = :user_id
+                """
+                result = session.execute(query, {'user_id': user.id}).fetchone()
+                referral_count = result.count if result else 0
+                
+                # Import referral_system to access badge functions
+                from referral_system import get_badge_data
+                badge_data = get_badge_data(referral_count)
+                
+                # Get user's current points
+                points = user.referral_points or 0
+                
+                # Create inline keyboard for actions
+                from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                markup = InlineKeyboardMarkup()
+                
+                # Add buttons for different actions
+                markup.row(
+                    InlineKeyboardButton("💰 Redeem Points", callback_data="redeem_points"),
+                    InlineKeyboardButton("📊 View Referrals", callback_data="view_referrals")
+                )
+                markup.row(
+                    InlineKeyboardButton("❓ How It Works", callback_data="referral_help"),
+                    InlineKeyboardButton("🔗 My Referral Link", callback_data="back_to_reflink")
+                )
+                
+                # Get badge details with hover effects
+                badge_list = ""
+                for badge in badge_data['badges']:
+                    unlocked = "✓" if badge['unlocked'] else "  "
+                    style = "color: gold; font-weight: bold;" if badge['unlocked'] else "color: gray;"
+                    hover_details = f"""
+• {badge['description']}
+• Required: {badge['required']} referrals
+• Your progress: {referral_count}/{badge['required']} ({int(min(referral_count/max(1, badge['required']), 1)*100)}%)
+"""
+                    badge_list += f"{unlocked} {badge['emoji']} <b>{badge['name']}</b>\n{hover_details if badge['unlocked'] else ''}\n"
+                
+                # Send badge showcase message
+                bot.send_message(
+                    chat_id,
+                    f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🏆 <b>YOUR REFERRAL BADGES</b> 🏆  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>🌟 Your Achievement Summary:</b>
+• Current level: <b>{badge_data['current_badge']['name']}</b> {badge_data['current_badge']['emoji']}
+• Total referrals: <code>{referral_count}</code>
+• Points earned: <code>{points}</code> (worth {points} birr)
+• Next badge in: <code>{max(0, badge_data['next_badge']['required'] - referral_count)}</code> more referrals
+
+<b>✨ Your Badge Collection:</b>
+{badge_list}
+
+<i>Keep inviting friends to unlock all badges and earn rewards!</i>
+""",
+                    parse_mode='HTML',
+                    reply_markup=markup
+                )
+            except Exception as badge_err:
+                logger.error(f"Error displaying badges: {badge_err}")
+                logger.error(traceback.format_exc())
+                bot.send_message(chat_id, "Error displaying badges. Please try again later.")
+                
+        elif call.data == 'back_to_reflink':
+            bot.answer_callback_query(call.id)
+            
+            # Return to the referral link view
+            try:
+                # Get or generate referral code
+                referral_code = user.referral_code
+                if not referral_code:
+                    try:
+                        from referral_system import assign_referral_code
+                        referral_code = assign_referral_code(user.id)
+                        logger.info(f"Generated new referral code {referral_code} for user {chat_id}")
+                        # Refresh user to get updated code
+                        session.refresh(user)
+                        referral_code = user.referral_code
+                    except Exception as ref_err:
+                        logger.error(f"Error generating referral code: {ref_err}")
+                        
+                if not referral_code:
+                    bot.send_message(
+                        chat_id,
+                        "Sorry, there was an error generating your referral code. Please try again later.",
+                        reply_markup=create_main_menu(is_registered=True)
+                    )
+                    return
+                    
+                # Get referral URL
+                from referral_system import get_referral_url
+                referral_url = get_referral_url(referral_code)
+                
+                # Count user's successful referrals
+                query = """
+                SELECT COUNT(*) as count
+                FROM referrals
+                WHERE referrer_id = :user_id
+                """
+                result = session.execute(query, {'user_id': user.id}).fetchone()
+                referral_count = result.count if result else 0
+                
+                # Get user's current points
+                points = user.referral_points or 0
+                
+                # Create inline keyboard for sharing
+                from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                markup = InlineKeyboardMarkup()
+                
+                # Direct share buttons for common platforms
+                markup.row(
+                    InlineKeyboardButton("📱 Share via Telegram", url=f"https://t.me/share/url?url={referral_url}&text=Join%20AliPay%20ETH%20shopping%20service%20and%20we%20both%20get%20rewards!%20Use%20my%20referral%20link:")
+                )
+                
+                markup.row(
+                    InlineKeyboardButton("📊 View My Referrals", callback_data="view_referrals"),
+                    InlineKeyboardButton("🏆 View Badges", callback_data="view_badges")
+                )
+                
+                # Send message with QR code and referral details
+                bot.send_message(
+                    chat_id,
+                    f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔗 <b>YOUR REFERRAL LINK</b> 🔗  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Share your link and earn rewards!</b>
+
+<b>🔢 Your Referral Code:</b> 
+<code>{referral_code}</code>
+
+<b>🔗 Your Referral Link:</b>
+<code>{referral_url}</code>
+
+<b>📊 Stats:</b>
+• <code>{referral_count}</code> successful referrals
+• <code>{points}</code> points earned (worth {points} birr)
+
+<b>💰 How it works:</b>
+• Share your link with friends
+• When they register, you earn 50 points
+• Redeem points for account balance (1 point = 1 birr)
+
+<i>Copy the link above and share it with friends!</i>
+""",
+                    parse_mode='HTML',
+                    reply_markup=markup
+                )
+            except Exception as ref_err:
+                logger.error(f"Error displaying referral link: {ref_err}")
+                logger.error(traceback.format_exc())
+                bot.send_message(chat_id, "Error displaying referral link. Please try again later.")
             
     except Exception as e:
         logger.error(f"Error handling referral button: {e}")
