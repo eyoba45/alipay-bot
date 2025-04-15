@@ -137,7 +137,7 @@ def create_main_menu(is_registered=False, chat_id=None):
 
         # Add Digital Shopping Companion button if enabled
         if COMPANION_ENABLED:
-            menu.add(KeyboardButton('👧 ሰላም Shopping Assistant'))
+            menu.add(KeyboardButton('🤖 AI Assistant'))
 
         # Add admin buttons for admin users
         if is_admin_user:
@@ -151,7 +151,7 @@ def create_main_menu(is_registered=False, chat_id=None):
 
         # Add Digital Shopping Companion button for unregistered users too
         if COMPANION_ENABLED:
-            menu.add(KeyboardButton('👧 ሰላም Shopping Assistant'))
+            menu.add(KeyboardButton('🤖 AI Assistant'))
 
         # Add admin buttons for admin users, even if not registered
         if is_admin_user:
@@ -4647,10 +4647,10 @@ def handle_companion_message(message):
     # Process the message
     digital_companion.process_message(message)
 
-# Also keep this handler for messages that start with Selam/ሰላም for users not in active conversation
-@bot.message_handler(func=lambda msg: (msg.text and (msg.text.startswith('ሰላም') or msg.text.startswith('Selam'))) and msg.chat.id not in companion_conversations)
-def handle_selam_greeting(message):
-    """Handle greeting messages to Selam when not in active conversation"""
+# Also keep this handler for messages that start with AI or Assistant for users not in active conversation
+@bot.message_handler(func=lambda msg: (msg.text and (msg.text.startswith('AI') or msg.text.startswith('Assistant'))) and msg.chat.id not in companion_conversations)
+def handle_ai_assistant_greeting(message):
+    """Handle greeting messages to AI Assistant when not in active conversation"""
     if not COMPANION_ENABLED:
         return
 
