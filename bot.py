@@ -547,7 +547,7 @@ Click the button below to pay securely with:
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_payment')
 def handle_payment_registration(message):
-    """Process registration payment with Chapa integration"""
+    """Process registration payment with Chapa integration and enhanced security"""
     chat_id = message.chat.id
     session = None
 
@@ -557,11 +557,67 @@ def handle_payment_registration(message):
             bot.send_message(chat_id, "Registration data missing. Please restart registration with /start.")
             return
 
+        # Check if user is already registered
+        session = get_session()
+        existing_user = session.query(User).filter_by(telegram_id=chat_id).first()
+        if existing_user:
+            logger.warning(f"User {chat_id} attempted re-registration but is already registered")
+            bot.send_message(
+                chat_id,
+                "✅ You're already registered! No need to register again.",
+                reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
+            )
+            return
+
+        # Verify Chapa API key is available before attempting payment
+        if not os.environ.get('CHAPA_SECRET_KEY'):
+            logger.error("CHAPA_SECRET_KEY not found in environment - payment system unavailable")
+            bot.send_message(
+                chat_id,
+                "❌ Our payment system is currently unavailable. Please try again later or contact support.",
+                parse_mode='HTML'
+            )
+            return
+
         # Import the Chapa payment module
         from chapa_payment import generate_registration_payment
 
-        # Generate payment link
-        payment_link = generate_registration_payment(registration_data[chat_id])
+        # Store registration information securely in database
+        try:
+            # First check if there's an existing pending registration
+            pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
+            
+            # Create or update pending approval record with registration data
+            if pending:
+                logger.info(f"Updating existing pending registration for user {chat_id}")
+                pending.name = registration_data[chat_id]['name']
+                pending.phone = registration_data[chat_id]['phone']
+                pending.address = registration_data[chat_id]['address']
+                pending.status = 'Pending Payment'
+                pending.created_at = datetime.utcnow()
+            else:
+                logger.info(f"Creating new pending registration for user {chat_id}")
+                pending = PendingApproval(
+                    telegram_id=chat_id,
+                    name=registration_data[chat_id]['name'],
+                    phone=registration_data[chat_id]['phone'],
+                    address=registration_data[chat_id]['address'],
+                    status='Pending Payment',
+                    created_at=datetime.utcnow()
+                )
+                session.add(pending)
+                
+            session.commit()
+            logger.info(f"Successfully stored registration data for user {chat_id}")
+        except Exception as e:
+            logger.error(f"Error storing registration data: {e}")
+            session.rollback()
+            # Continue anyway to avoid blocking registration process
+
+        # Generate payment link with proper security
+        user_data = registration_data[chat_id].copy()
+        user_data['telegram_id'] = chat_id  # Ensure telegram_id is included
+        payment_link = generate_registration_payment(user_data)
 
         if not payment_link or 'checkout_url' not in payment_link:
             # Fall back to error message
@@ -571,6 +627,19 @@ def handle_payment_registration(message):
                 parse_mode='HTML'
             )
             return
+            
+        # Save the tx_ref to pending approval record for later verification
+        try:
+            pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
+            if pending:
+                pending.tx_ref = payment_link['tx_ref']
+                pending.payment_status = 'Pending'
+                session.commit()
+                logger.info(f"Updated pending registration with tx_ref: {payment_link['tx_ref']} for user {chat_id}")
+        except Exception as e:
+            logger.error(f"Error updating pending approval tx_ref: {e}")
+            session.rollback()
+            # Continue anyway
 
         # Send payment link with inline button
         markup = InlineKeyboardMarkup()
@@ -595,7 +664,9 @@ Click the button below to securely pay the registration fee:
 • Amole
 • Credit/Debit Cards
 
-<i>Your account will be automatically activated after successful payment!</i>
+<i>Your account will be automatically activated after successful payment verification!</i>
+
+<b>Transaction Reference:</b> <code>{payment_link['tx_ref']}</code>
 """
         bot.send_message(
             chat_id,
@@ -609,6 +680,23 @@ Click the button below to securely pay the registration fee:
             'state': 'waiting_for_chapa_payment',
             'tx_ref': payment_link['tx_ref']
         }
+        
+        # Send follow-up information message
+        time.sleep(1)
+        bot.send_message(
+            chat_id,
+            """
+<b>⚠️ IMPORTANT PAYMENT INFORMATION:</b>
+
+After completing your payment:
+• Wait for automatic verification (1-2 minutes)
+• Do NOT close the payment page until you see "Payment Successful"
+• Your account will be activated once payment is verified
+
+If you don't receive confirmation within 5 minutes, please contact support.
+""",
+            parse_mode='HTML'
+        )
 
     except Exception as e:
         logger.error(f"Error in payment registration: {e}")
@@ -685,8 +773,10 @@ Your account is active and ready to use.
                     raise
                 time.sleep(0.5 * (db_attempt + 1))  # Progressive delay
 
-        # AUTO-APPROVE: Instead of adding to pending, create user directly
+        # SECURE PAYMENT VERIFICATION: Always verify payment before approving
         max_retries = 5
+        registration_complete = False  # Track completion status
+        
         for retry_count in range(max_retries):
             try:
                 # Always get a fresh session for each retry
@@ -694,66 +784,127 @@ Your account is active and ready to use.
                     safe_close_session(session)
                 session = get_session()
 
-                # Check if there's an existing pending approval
+                # First, check if there's an existing pending approval
                 existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
-
-                # If not, create a new user directly (auto-approve)
+                
                 if not existing_pending:
-                    # Create new user
-                    new_user = User(
+                    # Create or update pending approval
+                    new_pending = PendingApproval(
                         telegram_id=chat_id,
-                        name=registration_data[chat_id]['name'],
-                        phone=registration_data[chat_id]['phone'],
-                        address=registration_data[chat_id]['address'],
-                        balance=0.0,
-                        subscription_date=datetime.utcnow()
+                        name=registration_data[chat_id].get('name', ''),
+                        phone=registration_data[chat_id].get('phone', ''),
+                        address=registration_data[chat_id].get('address', ''),
+                        status='Manual Verification',
+                        created_at=datetime.utcnow()
                     )
-                    session.add(new_user)
+                    session.add(new_pending)
                     session.commit()
-                    logger.info(f"Auto-approved and registered user {chat_id}")
-                else:
-                    # Convert pending approval to full user
-                    new_user = User(
-                        telegram_id=chat_id,
-                        name=existing_pending.name,
-                        phone=existing_pending.phone,
-                        address=existing_pending.address,
-                        balance=0.0,
-                        subscription_date=datetime.utcnow()
-                    )
-                    session.add(new_user)
-                    session.delete(existing_pending)
-                    session.commit()
-                    logger.info(f"Converted pending approval to full user for {chat_id}")
-
-                # Send notification to admin
-                if ADMIN_ID:
-                    admin_msg = f"""
-✅ <b>AUTO-APPROVED REGISTRATION</b>
+                    logger.info(f"Created pending approval for user {chat_id}")
+                    
+                    # Send manual verification notice to admin
+                    if ADMIN_ID:
+                        admin_msg = f"""
+⏳ <b>REGISTRATION NEEDS VERIFICATION</b>
 
 User Information:
-Name: <b>{registration_data[chat_id]['name']}</b>
-Address: {registration_data[chat_id]['address']}
-Phone: <code>{registration_data[chat_id]['phone']}</code>
+Name: <b>{registration_data[chat_id].get('name', '')}</b>
+Address: {registration_data[chat_id].get('address', '')}
+Phone: <code>{registration_data[chat_id].get('phone', '')}</code>
 ID: <code>{chat_id}</code>
 
 Registration Fee: 350 ETB (200 ETB one-time + 150 ETB first month)
 Payment screenshot attached below
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-User has been automatically registered.
+⚠️ Automatic payment verification is enabled, but user submitted screenshot.
+This payment requires MANUAL VERIFICATION in the Admin Dashboard.
 """
-                    try:
-                        bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
-                        bot.send_photo(ADMIN_ID, file_id, caption="📸 Auto-approved Registration Payment")
-                    except Exception as admin_error:
-                        logger.error(f"Error notifying admin about auto-approval: {admin_error}")
+                        try:
+                            admin_sent = bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
+                            bot.send_photo(ADMIN_ID, file_id, caption="📸 Registration Payment Screenshot")
+                            
+                            # Send inline buttons for admin to approve/reject
+                            approve_markup = InlineKeyboardMarkup()
+                            approve_markup.row(
+                                InlineKeyboardButton("✅ Approve", callback_data=f"approve_user_{chat_id}"),
+                                InlineKeyboardButton("❌ Reject", callback_data=f"reject_user_{chat_id}")
+                            )
+                            
+                            bot.send_message(
+                                ADMIN_ID,
+                                f"Admin action needed for user {chat_id}:",
+                                reply_markup=approve_markup
+                            )
+                        except Exception as admin_error:
+                            logger.error(f"Error notifying admin about registration: {admin_error}")
+                else:
+                    # Update existing pending approval with screenshot information
+                    existing_pending.status = 'Manual Verification'
+                    existing_pending.updated_at = datetime.utcnow()
+                    session.commit()
+                    logger.info(f"Updated pending approval for user {chat_id}")
+                    
+                    # Send admin notification
+                    if ADMIN_ID:
+                        admin_msg = f"""
+⏳ <b>REGISTRATION UPDATE (PENDING)</b>
 
-                break
+User Information:
+Name: <b>{existing_pending.name}</b>
+Address: {existing_pending.address}
+Phone: <code>{existing_pending.phone}</code>
+ID: <code>{chat_id}</code>
+
+The user has submitted a payment screenshot.
+Transaction Reference: <code>{existing_pending.tx_ref or 'None'}</code>
+Status: Manual Verification Needed
+
+⚠️ Please verify if the payment has been completed.
+"""
+                        try:
+                            bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
+                            bot.send_photo(ADMIN_ID, file_id, caption="📸 Registration Payment Screenshot (Update)")
+                            
+                            # Send inline buttons for admin to approve/reject
+                            approve_markup = InlineKeyboardMarkup()
+                            approve_markup.row(
+                                InlineKeyboardButton("✅ Approve", callback_data=f"approve_user_{chat_id}"),
+                                InlineKeyboardButton("❌ Reject", callback_data=f"reject_user_{chat_id}")
+                            )
+                            
+                            bot.send_message(
+                                ADMIN_ID,
+                                f"Admin action needed for user {chat_id}:",
+                                reply_markup=approve_markup
+                            )
+                        except Exception as admin_error:
+                            logger.error(f"Error notifying admin about registration update: {admin_error}")
+                
+                # Tell the user that their registration is pending verification
+                bot.send_message(
+                    chat_id,
+                    """
+⏳ <b>REGISTRATION BEING VERIFIED</b>
+
+Thank you for submitting your payment information!
+
+Your registration is now pending verification. This typically takes 5-15 minutes.
+You'll receive a notification once your account is activated.
+
+For faster verification:
+• Make sure you've completed the payment
+• Keep your Telegram app open
+• Contact support if not approved within 30 minutes
+""",
+                    parse_mode='HTML'
+                )
+                
+                break  # Exit retry loop on success
             except Exception as db_error:
                 logger.error(f"Database error (attempt {retry_count+1}/{max_retries}): {db_error}")
                 logger.error(traceback.format_exc())
-                session.rollback()
+                if session:
+                    session.rollback()
                 if retry_count >= max_retries - 1:
                     raise
                 time.sleep(0.5 * (retry_count + 1))  # Progressive delay
@@ -962,6 +1113,230 @@ Click on "📅 Subscription" and use the renewal button.
         logger.error(f"Error handling info buttons: {e}")
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing your request")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+def handle_deposit_approval_callback(call):
+    """Handle deposit approval or rejection callback from inline buttons"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.answer_callback_query(call.id, "⛔ You don't have permission to manage deposits")
+        return
+
+    try:
+        # Parse the callback data
+        action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
+        deposit_id = int(call.data.split('_')[-1])
+        
+        session = get_session()
+        
+        # Get deposit and user information
+        deposit_info = session.query(PendingDeposit, User).join(User).filter(
+            PendingDeposit.id == deposit_id
+        ).first()
+        
+        if not deposit_info:
+            bot.answer_callback_query(call.id, "⚠️ Deposit not found or already processed")
+            try:
+                bot.edit_message_text(
+                    "This deposit has already been processed or was not found.",
+                    chat_id=chat_id,
+                    message_id=message_id
+                )
+            except Exception as edit_error:
+                logger.error(f"Error editing message: {edit_error}")
+            return
+            
+        deposit, user = deposit_info
+        
+        # Check if deposit is already processed
+        if deposit.status in ['Approved', 'Rejected']:
+            bot.answer_callback_query(call.id, f"⚠️ This deposit was already {deposit.status.lower()}")
+            try:
+                bot.edit_message_text(
+                    f"This deposit has already been {deposit.status.lower()}.",
+                    chat_id=chat_id,
+                    message_id=message_id
+                )
+            except Exception as edit_error:
+                logger.error(f"Error editing message: {edit_error}")
+            return
+            
+        # Process approval
+        if action == 'approve':
+            # Check if this is for subscription renewal
+            now = datetime.utcnow()
+            subscription_updated = False
+            subscription_renewal_msg = ""
+            is_for_subscription = False
+            
+            # Get user_states to check if deposit was for subscription
+            user_telegram_id = user.telegram_id
+            if user_telegram_id in user_states and isinstance(user_states[user_telegram_id], dict):
+                is_for_subscription = user_states[user_telegram_id].get('for_subscription', False)
+            
+            # Check if user has subscription date and if it needs renewal
+            if is_for_subscription or (hasattr(user, 'subscription_date') and user.subscription_date and (now - user.subscription_date).days >= 30):
+                # Determine if we should deduct subscription fee
+                if deposit.amount >= 1.0:  # Only if deposit is at least $1
+                    user.balance += (deposit.amount - 1.0)  # Add amount after subscription fee
+                    user.subscription_date = now  # Reset subscription date
+                    subscription_updated = True
+
+                    if user.subscription_date:
+                        subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                    else:
+                        subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+
+                    logger.info(f"Subscription {'renewed' if user.subscription_date else 'activated'} for user {user_telegram_id}")
+                else:
+                    # Deposit too small for subscription, just add to balance
+                    user.balance += deposit.amount
+                    logger.info(f"Deposit amount ${deposit.amount} too small for subscription renewal")
+            else:
+                # Regular deposit, just add to balance
+                user.balance += deposit.amount
+                
+            # Update deposit status
+            deposit.status = 'Approved'
+            deposit.updated_at = now
+            
+            session.commit()
+            logger.info(f"Deposit #{deposit_id} of ${deposit.amount:.2f} approved for user {user_telegram_id}")
+            
+            # Calculate the birr amount using the current rate
+            birr_amount = int(deposit.amount * 160)  # Using 160 ETB = 1 USD
+            
+            # Send enhanced fancy confirmation to user
+            deposit_msg = f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>💰 DEPOSIT DETAILS:</b>
+• Amount: <code>{birr_amount:,}</code> birr
+• USD Value: ${deposit.amount:.2f}
+{f"• Amount after subscription fee: ${deposit.amount - 1.0:.2f}" if subscription_updated else ""}
+{subscription_renewal_msg}
+
+<b>💳 ACCOUNT UPDATED:</b>
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
+
+✨ <b>You're ready to start shopping!</b> ✨
+
+<i>Browse AliExpress and submit your orders now!</i>
+"""
+
+            try:
+                bot.send_message(
+                    user_telegram_id,
+                    deposit_msg,
+                    parse_mode='HTML'
+                )
+            except Exception as send_error:
+                logger.error(f"Error sending approval message to user: {send_error}")
+                
+            # Update admin message
+            try:
+                bot.edit_message_text(
+                    f"""
+<b>Deposit #{deposit.id}</b> - ✅ APPROVED
+
+👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+💰 <b>Amount:</b> ${deposit.amount:.2f} ({birr_amount:,} birr)
+💳 <b>New Balance:</b> ${user.balance:.2f} ({int(user.balance * 160):,} birr)
+{f"📅 <b>Subscription:</b> Renewed until {(now + timedelta(days=30)).strftime('%Y-%m-%d')}" if subscription_updated else ""}
+⏰ <b>Approved at:</b> {now.strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified of the approval.</i>
+""",
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    parse_mode='HTML'
+                )
+            except Exception as edit_error:
+                logger.error(f"Error updating admin message: {edit_error}")
+                
+            bot.answer_callback_query(call.id, f"✅ Deposit of ${deposit.amount:.2f} approved")
+            
+            # Clear user state if necessary
+            if user_telegram_id in user_states and isinstance(user_states[user_telegram_id], dict):
+                if 'deposit_pending_id' in user_states[user_telegram_id]:
+                    del user_states[user_telegram_id]['deposit_pending_id']
+                if 'for_subscription' in user_states[user_telegram_id]:
+                    del user_states[user_telegram_id]['for_subscription']
+                
+        else:  # Reject deposit
+            # Update deposit status
+            deposit.status = 'Rejected'
+            deposit.updated_at = datetime.utcnow()
+            session.commit()
+            
+            logger.info(f"Deposit #{deposit_id} of ${deposit.amount:.2f} rejected for user {user.telegram_id}")
+            
+            # Send rejection notification to user
+            try:
+                bot.send_message(
+                    user.telegram_id,
+                    f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>DEPOSIT REJECTED</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> has been rejected.
+
+<b>Possible reasons:</b>
+• Payment screenshot not clear
+• Payment amount doesn't match
+• Payment not found in our records
+• Incorrect payment method used
+
+Please try again with a valid payment or contact support if you believe this is an error.
+
+<i>For help, use the "❓ Help Center" option in the main menu</i>
+""",
+                    parse_mode='HTML'
+                )
+            except Exception as send_error:
+                logger.error(f"Error sending rejection message to user: {send_error}")
+                
+            # Update admin message
+            try:
+                bot.edit_message_text(
+                    f"""
+<b>Deposit #{deposit.id}</b> - ❌ REJECTED
+
+👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+💰 <b>Amount:</b> ${deposit.amount:.2f} ({int(deposit.amount * 160):,} birr)
+⏰ <b>Rejected at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified of the rejection.</i>
+""",
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    parse_mode='HTML'
+                )
+            except Exception as edit_error:
+                logger.error(f"Error updating admin message: {edit_error}")
+                
+            bot.answer_callback_query(call.id, f"❌ Deposit of ${deposit.amount:.2f} rejected")
+            
+            # Clear user state if necessary
+            if user.telegram_id in user_states and isinstance(user_states[user.telegram_id], dict):
+                if 'deposit_pending_id' in user_states[user.telegram_id]:
+                    del user_states[user.telegram_id]['deposit_pending_id']
+                if 'for_subscription' in user_states[user.telegram_id]:
+                    del user_states[user.telegram_id]['for_subscription']
+                    
+    except Exception as e:
+        logger.error(f"Error handling deposit approval callback: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "⚠️ Error processing deposit")
+    finally:
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_', 'reject_')) and not call.data.startswith(('approve_deposit_', 'reject_deposit_', 'approve_order_', 'reject_order_')))
 def handle_admin_decision(call):
@@ -1425,14 +1800,22 @@ Example: <code>2000</code> for 2,000 birr
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_deposit_screenshot', content_types=['photo'])
 def handle_deposit_screenshot(message):
-    """Process deposit screenshot with auto-approval"""
+    """Process deposit screenshot with secure verification"""
     chat_id = message.chat.id
     session = None
     try:
         file_id = message.photo[-1].file_id
+        
+        # Make sure we have valid deposit data in user state
+        if chat_id not in user_states or not isinstance(user_states[chat_id], dict) or 'deposit_amount' not in user_states[chat_id]:
+            logger.error(f"Missing deposit data for user {chat_id}")
+            bot.send_message(chat_id, "Missing deposit information. Please start your deposit again.")
+            return
+            
         deposit_amount = user_states[chat_id].get('deposit_amount', 0)
-        birr_amount = int(deposit_amount * 160)
+        birr_amount = int(deposit_amount * 160)  # Updated ETB conversion rate
 
+        # Verify user exists in database
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
@@ -1445,46 +1828,32 @@ def handle_deposit_screenshot(message):
         if isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
             is_for_subscription = True
 
-        # Check if user has a subscription date and if it needs renewal
-        now = datetime.utcnow()
-        subscription_updated = False
-        subscription_renewal_msg = ""
+        # First acknowledge receipt of screenshot
+        immediate_ack = bot.send_message(
+            chat_id,
+            "📸 Screenshot received! Processing your deposit...",
+            parse_mode='HTML'
+        )
 
-        if is_for_subscription or (user.subscription_date and (now - user.subscription_date).days >= 30):
-            # Determine if we should deduct subscription fee
-            if deposit_amount >= 1.0:  # Only if deposit is at least $1
-                user.balance += (deposit_amount - 1.0)  # Add amount after subscription fee
-                user.subscription_date = now  # Reset subscription date
-                subscription_updated = True
-
-                if user.subscription_date:
-                    subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
-                else:
-                    subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
-
-                logger.info(f"Subscription {'renewed' if user.subscription_date else 'activated'} for user {chat_id}")
-            else:
-                # Deposit too small for subscription, just add to balance
-                user.balance += deposit_amount
-                logger.info(f"Deposit amount ${deposit_amount} too small for subscription renewal")
-        else:
-            # Regular deposit, just add to balance
-            user.balance += deposit_amount
-
-        # Create approved deposit record
+        # Create pending deposit record for manual verification
         pending_deposit = PendingDeposit(
             user_id=user.id,
             amount=deposit_amount,
-            status='Approved'  # Set as approved immediately
+            status='Pending Manual Verification',
+            created_at=datetime.utcnow()
         )
         session.add(pending_deposit)
         session.commit()
+        
+        # Get the ID of the newly created pending deposit
+        session.refresh(pending_deposit)
+        deposit_id = pending_deposit.id
 
-        logger.info(f"Auto-approved deposit of ${deposit_amount} for user {chat_id}")
+        logger.info(f"Created pending deposit #{deposit_id} of ${deposit_amount} for user {chat_id}")
 
-        # Notify admin about auto-approved deposit
+        # Notify admin about deposit that needs approval
         admin_msg = f"""
-✅ <b>AUTO-APPROVED DEPOSIT</b>
+⏳ <b>DEPOSIT NEEDS VERIFICATION</b>
 
 User Details:
 Name: <b>{user.name}</b>
@@ -1495,7 +1864,9 @@ Amount:
 USD: <code>${deposit_amount:,.2f}</code>
 ETB: <code>{birr_amount:,}</code>
 
-New Balance: <code>${user.balance:.2f}</code>
+Current Balance: <code>${user.balance:.2f}</code>
+{f"Subscription Status: {'Active' if user.subscription_date and (datetime.utcnow() - user.subscription_date).days < 30 else 'Expired or Not Active'}" if hasattr(user, 'subscription_date') else ""}
+{f"For Subscription Renewal: Yes" if is_for_subscription else ""}
 
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Screenshot attached below
@@ -1503,43 +1874,80 @@ Screenshot attached below
         if ADMIN_ID:
             try:
                 bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
-                bot.send_photo(ADMIN_ID, file_id, caption="📸 Auto-approved Deposit Screenshot")
+                bot.send_photo(ADMIN_ID, file_id, caption="📸 Deposit Screenshot For Verification")
+                
+                # Send approval buttons to admin
+                approve_markup = InlineKeyboardMarkup()
+                approve_markup.row(
+                    InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{deposit_id}"),
+                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{deposit_id}")
+                )
+                
+                bot.send_message(
+                    ADMIN_ID,
+                    f"Admin action needed for deposit #{deposit_id}:",
+                    reply_markup=approve_markup
+                )
             except Exception as admin_error:
-                logger.error(f"Error notifying admin about auto-approval: {admin_error}")
+                logger.error(f"Error notifying admin about deposit: {admin_error}")
 
-        # Send enhanced fancy confirmation to user
-        # Check if we need to add subscription information to the message
-        deposit_msg = f"""
+        # Send pending verification message to user
+        # Edit the immediate acknowledgment for a faster response
+        try:
+            bot.edit_message_text(
+                f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT APPROVED</b> ✅  
+   ⏳ <b>DEPOSIT PENDING</b> ⏳  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>💰 DEPOSIT DETAILS:</b>
 • Amount: <code>{birr_amount:,}</code> birr
 • USD Value: ${deposit_amount:.2f}
-{f"• Amount after subscription fee: ${deposit_amount - 1.0:.2f}" if subscription_updated else ""}
-{subscription_renewal_msg}
+{f"• This will also renew your subscription" if is_for_subscription else ""}
 
-<b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 166.67):,}</code> birr
+<b>📋 VERIFICATION STATUS:</b>
+• Your deposit is currently pending verification
+• Typically verified within 10-15 minutes
+• You'll receive notification once approved
 
-✨ <b>You're ready to start shopping!</b> ✨
+<b>📞 NEED ASSISTANCE?</b>
+• Contact our support team if not verified within 30 minutes
 
-<i>Browse AliExpress and submit your orders now!</i>
-"""
+<i>Thank you for your patience!</i>
+""",
+                chat_id=chat_id,
+                message_id=immediate_ack.message_id,
+                parse_mode='HTML'
+            )
+        except Exception as edit_error:
+            # If editing fails, send a new message
+            logger.error(f"Error editing confirmation message: {edit_error}")
+            bot.send_message(
+                chat_id,
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ⏳ <b>DEPOSIT PENDING</b> ⏳  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-        bot.send_message(
-            chat_id,
-            deposit_msg,
-            parse_mode='HTML'
-        )
+<b>💰 DEPOSIT DETAILS:</b>
+• Your deposit is being processed
+• Typically verified within 10-15 minutes
+• You'll receive a notification once approved
 
-        del user_states[chat_id]
+<i>Thank you for your patience!</i>
+""",
+                parse_mode='HTML'
+            )
+
+        # Store deposit information for verification
+        if chat_id not in user_states:
+            user_states[chat_id] = {}
+        user_states[chat_id]['deposit_pending_id'] = deposit_id
 
     except Exception as e:
         logger.error(f"Error processing deposit: {e}")
         logger.error(traceback.format_exc())
-        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        bot.send_message(chat_id, "Sorry, there was an error processing your deposit. Please try again.")
     finally:
         safe_close_session(session)
 
