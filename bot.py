@@ -763,7 +763,7 @@ Your account is active and ready to use.
                 # Check for existing pending approval
                 existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
                 if existing_pending:
-                    logger.info(f"User {chat_id} already has a pending approval - auto-approving")
+                    logger.info(f"User {chat_id} already has a pending approval - asking to complete payment")
                     break
                 break
             except Exception as db_error:
@@ -962,7 +962,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                 reply_markup=create_main_menu(is_registered=True)
             )
 
-        logger.info(f"Auto-approval confirmation sent to user {chat_id}")
+        logger.info(f"Registration confirmation sent to user {chat_id}")
         registration_complete = True
 
         # Clean up registration data only after successful processing
