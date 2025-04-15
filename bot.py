@@ -81,10 +81,10 @@ try:
         admin_id = admin_id.strip()
         if admin_id:
             ADMIN_IDS.append(int(admin_id))
-    
+
     # Keep ADMIN_ID for backward compatibility
     ADMIN_ID = ADMIN_IDS[0] if ADMIN_IDS else None
-    
+
     if ADMIN_IDS:
         logger.info(f"✅ Configured {len(ADMIN_IDS)} admin IDs")
     else:
@@ -128,14 +128,17 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('📅 Subscription')
         )
         menu.add(
-            KeyboardButton('👥 Join Community'),
+            KeyboardButton('🏆 Referral Badges'),
+            KeyboardButton('👥 Join Community')
+        )
+        menu.add(
             KeyboardButton('❓ Help Center')
         )
-        
+
         # Add Digital Shopping Companion button if enabled
         if COMPANION_ENABLED:
             menu.add(KeyboardButton('👧 ሰላም Shopping Assistant'))
-        
+
         # Add admin buttons for admin users
         if is_admin_user:
             menu.add(KeyboardButton('🔐 Admin Dashboard'))
@@ -145,22 +148,22 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('👥 Join Community'),
             KeyboardButton('❓ Help Center')
         )
-        
+
         # Add Digital Shopping Companion button for unregistered users too
         if COMPANION_ENABLED:
             menu.add(KeyboardButton('👧 ሰላም Shopping Assistant'))
-        
+
         # Add admin buttons for admin users, even if not registered
         if is_admin_user:
             menu.add(KeyboardButton('🔐 Admin Dashboard'))
-            
+
     return menu
 
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
     """Direct access to admin dashboard via command"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         bot.send_message(
@@ -169,7 +172,7 @@ def admin_command(message):
             reply_markup=create_main_menu(False, chat_id)
         )
         return
-    
+
     # If admin, redirect to admin dashboard
     admin_dashboard(message)
 
@@ -180,7 +183,7 @@ def start_message(message):
     session = None
     try:
         logger.info(f"Received /start from user {chat_id}")
-        
+
         # Check for referral code in the start command
         referral_code = None
         if message.text and len(message.text.split()) > 1:
@@ -191,7 +194,7 @@ def start_message(message):
             if chat_id not in registration_data:
                 registration_data[chat_id] = {}
             registration_data[chat_id]['referral_code'] = referral_code
-        
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         is_registered = user is not None
@@ -199,16 +202,16 @@ def start_message(message):
         # Reset user state if any
         if chat_id in user_states:
             del user_states[chat_id]
-        
+
         # Keep referral code if present
         if referral_code and referral_code not in registration_data.get(chat_id, {}):
             if chat_id not in registration_data:
                 registration_data[chat_id] = {}
             registration_data[chat_id]['referral_code'] = referral_code
-        
+
         # Check if user is admin
         is_admin_user = is_admin(chat_id)
-        
+
         # Define welcome animation function directly in the file
         def send_personalized_welcome(bot, chat_id, user_data=None):
             """Send a personalized welcome message with captivating animation sequence"""
@@ -217,13 +220,13 @@ def start_message(message):
                 name = "there"
                 if user_data and 'name' in user_data and user_data['name']:
                     name = user_data['name']
-                
+
                 # ANIMATION SEQUENCE STARTS
-                
+
                 # First send a typing indicator to create anticipation
                 bot.send_chat_action(chat_id, 'typing')
                 time.sleep(1)  # Pause for effect
-                
+
                 # First animation frame - loading
                 loading_msg = bot.send_message(
                     chat_id, 
@@ -231,7 +234,7 @@ def start_message(message):
                     parse_mode='HTML'
                 )
                 time.sleep(1.5)  # Pause for effect
-                
+
                 # Second animation frame
                 bot.edit_message_text(
                     chat_id=chat_id,
@@ -239,11 +242,11 @@ def start_message(message):
                     text="🔍 <b>Searching for user profile...</b>",
                     parse_mode='HTML'
                 )
-                
+
                 # Show typing indicator again
                 bot.send_chat_action(chat_id, 'typing')
                 time.sleep(1.2)  # Slightly different pause for natural feel
-                
+
                 # Third animation frame
                 bot.edit_message_text(
                     chat_id=chat_id,
@@ -252,7 +255,7 @@ def start_message(message):
                     parse_mode='HTML'
                 )
                 time.sleep(1.2)
-                
+
                 # Final animation frame before welcome message
                 bot.edit_message_text(
                     chat_id=chat_id,
@@ -261,9 +264,9 @@ def start_message(message):
                     parse_mode='HTML'
                 )
                 time.sleep(1)
-                
+
                 # MAIN WELCOME MESSAGE
-                
+
                 # Create an eye-catching welcome message with custom formatting
                 welcome_message = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -286,19 +289,19 @@ We're thrilled to have you join our community of savvy Ethiopian shoppers!
 
 <i>Your seamless shopping experience begins now!</i>
                 """
-                
+
                 # Delete the animation message
                 bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
-                
+
                 # Send the final welcome message
                 final_msg = bot.send_message(
                     chat_id,
                     welcome_message,
                     parse_mode='HTML'
                 )
-                
+
                 return final_msg
-                
+
             except Exception as e:
                 logger.error(f"Error in personalized welcome: {e}")
                 # Return simple message on error
@@ -307,14 +310,14 @@ We're thrilled to have you join our community of savvy Ethiopian shoppers!
                     f"<b>Hello!</b>\n\n✨ Welcome to AliPay_ETH! ✨",
                     parse_mode='HTML'
                 )
-        
+
         # Get user's name if registered
         user_name = user.name if user else message.from_user.first_name if message.from_user else None
-        
+
         # Send animated welcome message
         logger.info(f"Sending personalized welcome to user {chat_id}")
         send_personalized_welcome(bot, chat_id, {'name': user_name})
-        
+
         # Different welcome message for admins
         if is_admin_user:
             welcome_msg = """
@@ -352,7 +355,7 @@ Your trusted Ethiopian payment solution for AliExpress shopping!
 """
         # Slight delay to allow animation to complete
         time.sleep(1.5)
-        
+
         # Send detailed welcome information
         bot.send_message(
             chat_id,
@@ -578,7 +581,9 @@ def handle_payment_registration(message):
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 Click the button below to securely pay the registration fee:
-• Amount: <code>150</code> birr
+• One-time fee: <code>200</code> birr
+• First month subscription: <code>150</code> birr
+• Total payment: <code>350</code> birr
 • Secure payment via Chapa
 • Instant activation after payment
 
@@ -731,7 +736,7 @@ Address: {registration_data[chat_id]['address']}
 Phone: <code>{registration_data[chat_id]['phone']}</code>
 ID: <code>{chat_id}</code>
 
-Registration Fee: 150 ETB
+Registration Fee: 350 ETB (200 ETB one-time + 150 ETB first month)
 Payment screenshot attached below
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -861,7 +866,7 @@ def handle_info_buttons(call):
 <b>🔹 STEP 1: REGISTER</b>
 • Click 🔑 Register
 • Follow the prompts to create your account
-• Pay the 150 birr registration fee
+• Pay the 350 birr registration fee (200 birr one-time + 150 birr first month)
 
 <b>🔹 STEP 2: DEPOSIT FUNDS</b>
 • Click 💰 Deposit
@@ -942,7 +947,7 @@ Click on "📅 Subscription" and use the renewal button.
   Premium customer service access
 
 • 🎁 <b>Referral Bonuses</b>
-  Earn rewards for inviting friends
+  Earn 50 points (50 birr) for each registration referral
 
 <i>All this for just $1/month!</i>
 """
@@ -987,16 +992,16 @@ def handle_admin_decision(call):
             session.add(new_user)
             session.delete(pending)
             session.commit()
-            
+
             # Get the ID of the newly created user
             session.refresh(new_user)
-            
+
             # Process referral if one exists in the registration data
             referral_code = None
             if user_id in registration_data and 'referral_code' in registration_data[user_id]:
                 referral_code = registration_data[user_id]['referral_code']
                 logger.info(f"Found referral code {referral_code} for user {user_id}")
-                
+
             # Handle referral code processing
             if referral_code:
                 try:
@@ -1011,7 +1016,7 @@ def handle_admin_decision(call):
                             logger.warning(f"Failed to complete referral: {reward}")
                 except Exception as ref_err:
                     logger.error(f"Error processing referral: {ref_err}")
-            
+
             # Generate a referral code for the new user
             try:
                 from referral_system import assign_referral_code
@@ -1019,7 +1024,7 @@ def handle_admin_decision(call):
                 logger.info(f"Generated referral code {user_referral_code} for user {user_id}")
             except Exception as ref_err:
                 logger.error(f"Error generating referral code: {ref_err}")
-            
+
             logger.info(f"User {user_id} approved and added to database")
 
             # Send confirmation to user with enhanced welcome message
@@ -1053,8 +1058,8 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
 • Your referral code: <code>{referral_code}</code>
 • Your referral link: <code>{referral_url}</code>
 
-Share your code or link with friends and earn points!
-Each successful referral earns you points that can be converted to account balance.
+Share your code or link with friends and earn 50 points for each successful registration!
+Each successful referral earns you 50 points that can be converted to account balance (1 point = 1 birr).
 """
             except Exception as ref_err:
                 logger.error(f"Error getting referral URL: {ref_err}")
@@ -1207,7 +1212,7 @@ Examples:
         for_subscription = False
         if chat_id in user_states and isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
             for_subscription = True
-            
+
         payment_details(message, amount, for_subscription)  # Call with subscription flag
 
 def send_payment_details(message, amount, for_subscription=False):
@@ -1241,7 +1246,7 @@ def payment_details(message, amount, for_subscription=False):
             'name': user.name,
             'phone': user.phone
         }
-        
+
         # Add subscription flag if this is a subscription renewal
         if for_subscription:
             user_data['for_subscription'] = True
@@ -1320,10 +1325,13 @@ def payment_details(message, amount, for_subscription=False):
             pending_deposit = PendingDeposit(
                 user_id=user.id,
                 amount=amount,
-                status='Processing'
+                status='Processing',
+                tx_ref=payment_link['tx_ref']  # Save the transaction reference for verification
             )
             session.add(pending_deposit)
             session.commit()
+            
+            logger.info(f"Created pending deposit with tx_ref: {payment_link['tx_ref']} for user {chat_id}")
 
             # Update user state
             user_states[chat_id] = {
@@ -1355,11 +1363,11 @@ def process_custom_amount(message):
         if is_usd:
             # User entered USD, store as USD
             usd_amount = float(clean_amount)
-            birr_amount = int(usd_amount * 166.67)
+            birr_amount = int(usd_amount * 160.0)
         else:
             # User entered birr, convert to USD
             birr_amount = int(float(clean_amount))
-            usd_amount = birr_amount / 166.67
+            usd_amount = birr_amount / 160.0
 
         # Check if amount is reasonable
         if birr_amount < 100:
@@ -1392,7 +1400,7 @@ For larger deposits, please contact support.
         for_subscription = False
         if chat_id in user_states and isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
             for_subscription = True
-        
+
         send_payment_details(message, usd_amount, for_subscription)
 
     except ValueError:
@@ -1435,24 +1443,24 @@ def handle_deposit_screenshot(message):
         is_for_subscription = False
         if isinstance(user_states[chat_id], dict) and user_states[chat_id].get('for_subscription'):
             is_for_subscription = True
-            
+
         # Check if user has a subscription date and if it needs renewal
         now = datetime.utcnow()
         subscription_updated = False
         subscription_renewal_msg = ""
-        
+
         if is_for_subscription or (user.subscription_date and (now - user.subscription_date).days >= 30):
             # Determine if we should deduct subscription fee
             if deposit_amount >= 1.0:  # Only if deposit is at least $1
                 user.balance += (deposit_amount - 1.0)  # Add amount after subscription fee
                 user.subscription_date = now  # Reset subscription date
                 subscription_updated = True
-                
+
                 if user.subscription_date:
                     subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
                 else:
                     subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
-                
+
                 logger.info(f"Subscription {'renewed' if user.subscription_date else 'activated'} for user {chat_id}")
             else:
                 # Deposit too small for subscription, just add to balance
@@ -1518,7 +1526,7 @@ Screenshot attached below
 
 <i>Browse AliExpress and submit your orders now!</i>
 """
-        
+
         bot.send_message(
             chat_id,
             deposit_msg,
@@ -1536,7 +1544,7 @@ Screenshot attached below
 
 @bot.message_handler(func=lambda msg: msg.text == '💳 Balance')
 def check_balance(message):
-    """Check user balance"""
+    """Check user balance with referral badges and hover effects"""
     chat_id = message.chat.id
     session = None
     try:
@@ -1546,23 +1554,209 @@ def check_balance(message):
         if user:
             # Default to 0 if balance is None
             balance = user.balance if user.balance is not None else 0
-            birr_balance = int(balance * 166.67)  # Use correct ETB/USD rate (1 USD = 166.67 ETB)
+            birr_balance = int(balance * 160.0)  # Use correct ETB/USD rate (1 USD = 160 ETB)
+            
+            # Get referral points
+            points_balance = user.referral_points or 0
+            
+            # Get user badge with hover effect
+            try:
+                from referral_system import generate_badge_html
+                badge_html = generate_badge_html(user.id)
+            except Exception as badge_err:
+                logger.error(f"Error generating badge: {badge_err}")
+                badge_html = ""
+                
+            # Get referral count
+            referral_count = 0
+            try:
+                query = """
+                SELECT COUNT(*) as count
+                FROM referrals
+                WHERE referrer_id = :user_id
+                """
+                result = session.execute(query, {'user_id': user.id}).fetchone()
+                referral_count = result.count if result else 0
+            except Exception as ref_err:
+                logger.error(f"Error counting referrals: {ref_err}")
+                
+            # Enhanced balance display with badge
             bot.send_message(
                 chat_id,
                 f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>YOUR BALANCE</b> 💰  
+   💰 <b>YOUR ACCOUNT</b> 💰  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>Available:</b> <code>{birr_balance:,}</code> birr
+<b>Available Balance:</b> <code>{birr_balance:,}</code> birr
 ≈ $<code>{balance:,.2f}</code> USD
 
-<i>Need more? Click 💰 Deposit</i>
+<b>🎁 Referral Points:</b> <code>{points_balance}</code> points
+• Worth <code>{points_balance}</code> birr
+• <code>{referral_count}</code> successful referrals
+
+<b>🏆 Your Referral Badge:</b> {badge_html}
+
+<i>Need more balance? Click 💰 Deposit</i>
+<i>Want more points? Invite friends with your referral code!</i>
 """,
                 parse_mode='HTML'
             )
     except Exception as e:
         logger.error(f"Error checking balance:{e}")
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges')
+def referral_badges(message):
+    """Display referral badges with hover effects and statistics"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id, 
+                """
+⚠️ <b>Registration Required</b>
+
+You need to register first to view referral badges.
+Click 🔑 Register to create your account.
+""", 
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=False)
+            )
+            return
+        
+        # Get all badge HTML with hover effects
+        badge_html = ""
+        try:
+            from referral_system import REFERRAL_BADGES, get_user_badge, generate_badge_html
+            
+            # Get user's top badge
+            user_badge = get_user_badge(user.id)
+            
+            # Count user's referrals
+            query = """
+            SELECT COUNT(*) as count
+            FROM referrals
+            WHERE referrer_id = :user_id
+            """
+            result = session.execute(query, {'user_id': user.id}).fetchone()
+            referral_count = result.count if result else 0
+            
+            # Generate current badge HTML
+            current_badge_html = generate_badge_html(user.id)
+            
+            # Generate all badges HTML
+            all_badges_html = ""
+            for badge in REFERRAL_BADGES:
+                # Determine if badge is earned, locked, or next target
+                if referral_count >= badge['referrals_required']:
+                    # Earned badge
+                    badge_html = f"""
+<span style="position:relative; display:inline-block; cursor:pointer; margin:5px;" 
+      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
+      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
+    <span style="font-size:24px; color:{badge['color']};">{badge['icon']}</span>
+    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
+           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
+           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
+           font-size:14px; width:200px; text-align:center;">
+        <b>{badge['name']}</b><br>{badge['hover_text']}<br>✅ Achieved!
+    </span>
+</span>"""
+                elif referral_count + 1 == badge['referrals_required']:
+                    # Next target badge
+                    badge_html = f"""
+<span style="position:relative; display:inline-block; cursor:pointer; margin:5px;" 
+      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
+      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
+    <span style="font-size:24px; opacity:0.5;">{badge['icon']} 🔜</span>
+    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
+           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
+           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
+           font-size:14px; width:200px; text-align:center;">
+        <b>{badge['name']}</b><br>Just 1 more referral to earn this!<br>🔜 Almost there!
+    </span>
+</span>"""
+                else:
+                    # Locked badge
+                    badge_html = f"""
+<span style="position:relative; display:inline-block; cursor:pointer; margin:5px;" 
+      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
+      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
+    <span style="font-size:24px; opacity:0.3;">{badge['icon']} 🔒</span>
+    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
+           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
+           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
+           font-size:14px; width:200px; text-align:center;">
+        <b>{badge['name']}</b><br>Needs {badge['referrals_required']} referrals<br>🔒 {badge['referrals_required'] - referral_count} more to unlock!
+    </span>
+</span>"""
+                
+                all_badges_html += badge_html
+                
+            # Get user's referral points
+            points = user.referral_points or 0
+            
+            # Create inline keyboard for referral actions
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("📊 View My Referrals", callback_data=f"view_referrals"))
+            markup.add(InlineKeyboardButton("💰 Redeem Points", callback_data=f"redeem_points"))
+            markup.add(InlineKeyboardButton("ℹ️ How Referrals Work", callback_data=f"referral_help"))
+            
+            from referral_system import get_referral_url
+            
+            # Get the user's referral code and URL
+            referral_code = user.referral_code or ""
+            if referral_code:
+                referral_url = get_referral_url(referral_code)
+            else:
+                referral_url = "Referral code not set"
+            
+            # Send beautiful message with all badges and hover effects
+            bot.send_message(
+                chat_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🏆 <b>YOUR REFERRAL BADGES</b> 🏆  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Current Achievement:</b> {current_badge_html}
+
+<b>🌟 All Badges:</b>
+{all_badges_html}
+
+<b>📊 Your Referral Stats:</b>
+• <code>{referral_count}</code> successful referrals
+• <code>{points}</code> points earned (worth {points} birr)
+
+<b>🔗 Your Referral Info:</b>
+• Code: <code>{referral_code}</code>
+• Link: <code>{referral_url}</code>
+
+<i>Invite friends and earn 50 points for each successful registration!</i>
+<i>Points can be redeemed for account balance (1 point = 1 birr)</i>
+""",
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+        
+        except Exception as badge_err:
+            logger.error(f"Error generating badges: {badge_err}")
+            bot.send_message(
+                chat_id,
+                "Sorry, there was an error displaying your referral badges. Please try again.",
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in referral badges: {e}")
+        logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
         safe_close_session(session)
@@ -1573,7 +1767,7 @@ def join_community(message):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("📢 Our Channel", url="https://t.me/alipay_eth"))
     markup.add(InlineKeyboardButton("👥 Our Group", url="https://t.me/aliexpresstax"))
-    
+
     bot.send_message(
         message.chat.id,
         """
@@ -1798,7 +1992,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 
         # Calculate remaining balance
         remaining_balance = user.balance
-        birr_balance = int(remaining_balance * 166.67)  # Convert to birr (1 USD = 166.67 ETB)
+        birr_balance = int(remaining_balance * 160.0)  # Convert to birr (1 USD = 160 ETB)
 
         # Notify user about order submission with enhanced beautiful design
         bot.edit_message_text(
@@ -1911,7 +2105,7 @@ def handle_deposit_admin_decision(call):
             now = datetime.utcnow()
             subscription_deducted = False
             subscription_renewal_msg = ""
-            
+
             if user.subscription_date:
                 days_passed = (now - user.subscription_date).days
                 # If subscription has expired, deduct $1 for renewal
@@ -1940,7 +2134,7 @@ def handle_deposit_admin_decision(call):
                 else:
                     # If deposit is less than $1, just add to balance without subscription
                     user.balance += amount
-            
+
             pending_deposit.status = 'Approved'
             session.commit()
 
@@ -1951,7 +2145,7 @@ def handle_deposit_admin_decision(call):
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{int(amount * 166.67):,}</code> birr
+• Amount: <code>{int(amount * 160.0):,}</code> birr
 • USD Value: ${amount:.2f}
 {f"• Amount after subscription fee: ${amount - 1.0:.2f}" if subscription_deducted else ""}
 {subscription_renewal_msg}
@@ -1963,7 +2157,7 @@ def handle_deposit_admin_decision(call):
 
 <i>Browse AliExpress and submit your orders now!</i>
 """
-            
+
             bot.send_message(
                 chat_id,
                 message_text,
@@ -2029,7 +2223,7 @@ def track_order(message):
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.send_message(
                 chat_id, 
@@ -2043,7 +2237,7 @@ You can register by clicking 🔑 Register on the main menu.
                 reply_markup=create_main_menu()
             )
             return
-            
+
         # Ask for order number
         msg = """
 📦 <b>TRACK YOUR ORDER</b>
@@ -2078,10 +2272,10 @@ def process_order_number(message):
     session = None
     try:
         order_number = message.text.strip()
-        
+
         # Reset state
         user_states[chat_id] = None
-        
+
         # Check if order number is valid
         if not order_number.isdigit():
             bot.send_message(
@@ -2095,11 +2289,11 @@ Please enter a valid order number (digits only).
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
-            
+
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         order = session.query(Order).filter_by(user_id=user.id, order_number=int(order_number)).first()
-        
+
         if not order:
             bot.send_message(
                 chat_id,
@@ -2113,7 +2307,7 @@ Please check the order number and try again.
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
-            
+
         # Format status with emoji
         status_emoji = "⏳"
         status_color = "🟡"
@@ -2129,7 +2323,7 @@ Please check the order number and try again.
         elif order.status == "Shipped":
             status_emoji = "🚚"
             status_color = "🟢"
-        
+
         # Create tracking link if tracking number exists
         tracking_info = ""
         if order.tracking_number:
@@ -2140,7 +2334,7 @@ Please check the order number and try again.
 • <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
 • <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
 """
-            
+
         # Create order message with enhanced design
         order_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -2153,17 +2347,17 @@ Please check the order number and try again.
 • Amount: <b>${order.amount:.2f}</b>
 • Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
 """
-        
+
         if order.order_id:
             order_msg += f"""
 <b>🔖 ALIEXPRESS DETAILS:</b>
 • Order ID: <code>{order.order_id}</code>
 """
-            
+
         # Add tracking info if available
         if tracking_info:
             order_msg += f"\n{tracking_info}"
-            
+
         if order.product_link:
             order_msg += f"""
 <b>🔗 PRODUCT INFORMATION:</b>
@@ -2174,7 +2368,7 @@ Please check the order number and try again.
         order_msg += """
 <i>💫 Having issues with your order? Contact our support at @alipay_help_center for assistance 💫</i>
 """
-            
+
         bot.send_message(
             chat_id,
             order_msg,
@@ -2219,10 +2413,10 @@ You can register by clicking 🔑 Register on the main menu.
                 reply_markup=create_main_menu()
             )
             return
-            
+
         # Get user orders
         orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.created_at.desc()).all()
-        
+
         if not orders:
             bot.send_message(
                 chat_id,
@@ -2236,7 +2430,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
-            
+
         # Show all orders with beautiful formatting
         orders_text = """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -2248,7 +2442,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
         for order in orders:
             status_emoji = "⏳"
             status_color = "🟡"  # Default yellow for pending
-            
+
             if order.status == "Completed":
                 status_emoji = "✅"
                 status_color = "🟢"
@@ -2261,14 +2455,14 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
             elif order.status == "Shipped":
                 status_emoji = "🚚"
                 status_color = "🟢"
-                
+
             # Format tracking info if available
             tracking_info = ""
             if order.tracking_number:
                 parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
                 tracking_info = f"""• Tracking: <code>{order.tracking_number}</code>
 • <a href="{parcels_app_link}">📲 Track on ParcelsApp</a>"""
-                
+
             # Format order details with emojis and nice formatting
             order_details = f"""
 ╭─────────────────────╮
@@ -2281,7 +2475,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
 ╰─────────────────────╯
 """                
             orders_text += order_details
-            
+
         orders_text += """
 <b>🔹 TRACK YOUR ORDERS:</b>
 • Use 🔍 <b>Track Order</b> button for detailed tracking
@@ -2290,7 +2484,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
 
 <i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
 """
-        
+
         bot.send_message(
             chat_id,
             orders_text,
@@ -2367,7 +2561,7 @@ def check_subscription(message):
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
+
         if not user:
             bot.send_message(
                 chat_id, 
@@ -2381,18 +2575,18 @@ You can register by clicking 🔑 Register on the main menu.
                 reply_markup=create_main_menu()
             )
             return
-            
+
         now = datetime.utcnow()
         subscription_active = False
         days_remaining = 0
         subscription_msg = ""
         markup = create_main_menu(is_registered=True)
-        
+
         # Check subscription status
         if user.subscription_date:
             days_passed = (now - user.subscription_date).days
             days_remaining = 30 - days_passed
-            
+
             if days_remaining > 0:
                 subscription_active = True
                 subscription_msg = f"""
@@ -2419,7 +2613,7 @@ You can register by clicking 🔑 Register on the main menu.
                     renewal_markup = InlineKeyboardMarkup()
                     renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
                     renewal_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
-                    
+
                     bot.send_message(
                         chat_id,
                         subscription_msg,
@@ -2431,7 +2625,7 @@ You can register by clicking 🔑 Register on the main menu.
                 # Subscription expired
                 days_expired = abs(days_remaining)
                 expired_text = "today" if days_expired == 0 else f"{days_expired} days ago"
-                
+
                 subscription_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    🚫 <b>SUBSCRIPTION EXPIRED</b> 🚫  
@@ -2453,7 +2647,7 @@ You can register by clicking 🔑 Register on the main menu.
                 renewal_markup = InlineKeyboardMarkup()
                 renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
                 renewal_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
-                
+
                 bot.send_message(
                     chat_id,
                     subscription_msg,
@@ -2487,7 +2681,7 @@ Make a deposit of at least $1 to automatically activate your subscription.
             subscription_markup = InlineKeyboardMarkup()
             subscription_markup.add(InlineKeyboardButton("💰 Subscribe Now", callback_data="deposit_renew"))
             subscription_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
-            
+
             bot.send_message(
                 chat_id,
                 subscription_msg,
@@ -2495,10 +2689,10 @@ Make a deposit of at least $1 to automatically activate your subscription.
                 reply_markup=subscription_markup
             )
             return
-        
+
         # Send the message with markup only if we didn't return earlier
         bot.send_message(chat_id, subscription_msg, parse_mode='HTML', reply_markup=markup)
-        
+
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
         logger.error(traceback.format_exc())  # Add traceback for better debugging
@@ -2552,7 +2746,7 @@ def process_order_details(message, order_id, user_telegram_id):
         if order.status == "Shipped":
             status_emoji = "🚚"
             status_color = "🟢"
-            
+
         tracking_info = ""
         if tracking:
             parcels_app_link = f"https://parcelsapp.com/en/tracking/{tracking}"
@@ -2615,20 +2809,20 @@ def check_subscription_status():
         users = session.query(User).all()
         now = datetime.utcnow()
         logger.info(f"Checking subscription status for {len(users)} users")
-        
+
         for user in users:
             try:
                 # Skip users without subscription date (never subscribed)
                 if not user.subscription_date:
                     continue
-                
+
                 # Calculate days remaining in subscription
                 days_passed = (now - user.subscription_date).days
                 days_remaining = 30 - days_passed
-                
+
                 # Determine if we should send a reminder
                 should_remind = False
-                
+
                 # Check when the last reminder was sent
                 if user.last_subscription_reminder:
                     days_since_last_reminder = (now - user.last_subscription_reminder).days
@@ -2636,14 +2830,14 @@ def check_subscription_status():
                         should_remind = True
                 else:
                     should_remind = True
-                
+
                 if should_remind:
                     # Case 1: Subscription is about to expire (5 days or less remaining)
                     if 0 < days_remaining <= 5:
                         renewal_markup = InlineKeyboardMarkup()
                         renewal_markup.add(InlineKeyboardButton("💰 Deposit to Renew", callback_data="deposit_renew"))
                         renewal_markup.add(InlineKeyboardButton("📋 Subscription Benefits", callback_data="sub_benefits"))
-                        
+
                         bot.send_message(
                             user.telegram_id,
                             f"""
@@ -2661,12 +2855,12 @@ To maintain uninterrupted access to our services, please make a deposit of at le
                             reply_markup=renewal_markup
                         )
                         logger.info(f"Sent subscription expiry reminder to user {user.telegram_id}, {days_remaining} days remaining")
-                    
+
                     # Case 2: Subscription has expired
                     elif days_remaining <= 0:
                         renewal_markup = InlineKeyboardMarkup()
                         renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
-                        
+
                         bot.send_message(
                             user.telegram_id,
                             f"""
@@ -2684,15 +2878,15 @@ To continue using our services, please make a deposit of at least $1 (150 birr) 
                             reply_markup=renewal_markup
                         )
                         logger.info(f"Sent subscription expired notification to user {user.telegram_id}, expired {abs(days_remaining)} days ago")
-                
+
                     # Update last reminder time
                     user.last_subscription_reminder = now
                     session.commit()
-            
+
             except Exception as e:
                 logger.error(f"Error notifying user {user.telegram_id}: {e}")
                 continue
-                
+
     except Exception as e:
         logger.error(f"Error checking subscriptions: {e}")
     finally:
@@ -2707,13 +2901,13 @@ def run_subscription_checker():
             logger.error(f"Error in subscription checker: {e}")
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
-        
+
 # Admin Dashboard Function Handlers
 @bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')
 def admin_dashboard(message):
     """Show admin dashboard with all admin features"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         bot.send_message(
@@ -2722,7 +2916,7 @@ def admin_dashboard(message):
             reply_markup=create_main_menu(True, chat_id)
         )
         return
-    
+
     # Create admin menu
     admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     admin_menu.add(
@@ -2740,7 +2934,7 @@ def admin_dashboard(message):
     admin_menu.add(
         KeyboardButton('🔙 Back to Main Menu')
     )
-    
+
     bot.send_message(
         chat_id,
         """
@@ -2769,12 +2963,12 @@ def back_to_main_menu(message):
     """Return to main menu from admin dashboard"""
     chat_id = message.chat.id
     session = None
-    
+
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         is_registered = user is not None
-        
+
         bot.send_message(
             chat_id,
             "🏠 Returning to main menu...",
@@ -2794,11 +2988,11 @@ def back_to_main_menu(message):
 def user_management(message):
     """Show user management options"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     # Create user management menu
     user_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     user_mgmt_menu.add(
@@ -2813,7 +3007,7 @@ def user_management(message):
         KeyboardButton('✅ Pending Approvals'),
         KeyboardButton('🔙 Back to Admin')
     )
-    
+
     bot.send_message(
         chat_id,
         """
@@ -2840,11 +3034,11 @@ Manage all user accounts from this panel.
 def back_to_admin(message):
     """Return to admin dashboard"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     admin_dashboard(message)
 
 @bot.message_handler(func=lambda msg: msg.text == '📋 List All Users')
@@ -2852,16 +3046,16 @@ def list_all_users(message):
     """List all registered users with pagination"""
     chat_id = message.chat.id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         session = get_session()
         # Get total users count for pagination
         total_users = session.query(User).count()
-        
+
         if total_users == 0:
             bot.send_message(
                 chat_id,
@@ -2869,15 +3063,15 @@ def list_all_users(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Set up pagination (first page)
         page = 1
         per_page = 10
         offset = (page - 1) * per_page
-        
+
         # Get users for the current page
         users = session.query(User).order_by(User.created_at.desc()).limit(per_page).offset(offset).all()
-        
+
         # Format user list with emojis and nice formatting
         users_text = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -2887,7 +3081,7 @@ def list_all_users(message):
 <b>Total Registered Users:</b> {total_users}
 
 """
-        
+
         for i, user in enumerate(users, 1):
             # Format subscription status
             subscription_status = "❌ Inactive"
@@ -2895,13 +3089,13 @@ def list_all_users(message):
                 days_passed = (datetime.utcnow() - user.subscription_date).days
                 if days_passed < 30:
                     subscription_status = f"✅ Active ({30 - days_passed} days left)"
-            
+
             # Format balance
             balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
-            
+
             # Format date
             join_date = user.created_at.strftime("%Y-%m-%d")
-            
+
             users_text += f"""
 <b>{offset + i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
 📱 Phone: <code>{user.phone}</code>
@@ -2909,11 +3103,11 @@ def list_all_users(message):
 📅 Subscription: {subscription_status}
 🗓️ Joined: {join_date}
 """
-        
+
         # Add pagination controls if needed
         if total_users > per_page:
             markup = InlineKeyboardMarkup()
-            
+
             # Only add Next button on first page
             if page == 1:
                 markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"users_page_{page+1}"))
@@ -2926,9 +3120,9 @@ def list_all_users(message):
             # Only add Previous button on last page
             else:
                 markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"users_page_{page-1}"))
-            
+
             users_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
-            
+
             bot.send_message(
                 chat_id,
                 users_text,
@@ -2941,7 +3135,7 @@ def list_all_users(message):
                 users_text,
                 parse_mode='HTML'
             )
-        
+
     except Exception as e:
         logger.error(f"Error listing users: {e}")
         logger.error(traceback.format_exc())
@@ -2959,24 +3153,24 @@ def handle_users_pagination(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         bot.answer_callback_query(call.id, "You don't have permission to view this data")
         return
-    
+
     try:
         # Extract page number from callback data
         page = int(call.data.split('_')[-1])
         per_page = 10
         offset = (page - 1) * per_page
-        
+
         session = get_session()
         total_users = session.query(User).count()
-        
+
         # Get users for the requested page
         users = session.query(User).order_by(User.created_at.desc()).limit(per_page).offset(offset).all()
-        
+
         # Format user list with emojis and nice formatting
         users_text = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -2986,7 +3180,7 @@ def handle_users_pagination(call):
 <b>Total Registered Users:</b> {total_users}
 
 """
-        
+
         for i, user in enumerate(users, 1):
             # Format subscription status
             subscription_status = "❌ Inactive"
@@ -2994,13 +3188,13 @@ def handle_users_pagination(call):
                 days_passed = (datetime.utcnow() - user.subscription_date).days
                 if days_passed < 30:
                     subscription_status = f"✅ Active ({30 - days_passed} days left)"
-            
+
             # Format balance
             balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
-            
+
             # Format date
             join_date = user.created_at.strftime("%Y-%m-%d")
-            
+
             users_text += f"""
 <b>{offset + i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
 📱 Phone: <code>{user.phone}</code>
@@ -3008,10 +3202,10 @@ def handle_users_pagination(call):
 📅 Subscription: {subscription_status}
 🗓️ Joined: {join_date}
 """
-        
+
         # Create pagination markup
         markup = InlineKeyboardMarkup()
-        
+
         # First page - only Next button
         if page == 1 and total_users > per_page:
             markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"users_page_{page+1}"))
@@ -3024,9 +3218,9 @@ def handle_users_pagination(call):
                 InlineKeyboardButton("⬅️ Previous", callback_data=f"users_page_{page-1}"),
                 InlineKeyboardButton("➡️ Next", callback_data=f"users_page_{page+1}")
             )
-        
+
         users_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
-        
+
         # Update the message with the new page
         bot.edit_message_text(
             users_text,
@@ -3035,10 +3229,10 @@ def handle_users_pagination(call):
             parse_mode='HTML',
             reply_markup=markup
         )
-        
+
         # Acknowledge the callback
         bot.answer_callback_query(call.id, f"Showing page {page}")
-        
+
     except Exception as e:
         logger.error(f"Error in users pagination: {e}")
         logger.error(traceback.format_exc())
@@ -3050,18 +3244,18 @@ def handle_users_pagination(call):
 def find_user_prompt(message):
     """Prompt admin to search for a user"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     # Update user state to wait for search query
     user_states[chat_id] = 'waiting_for_user_search'
-    
+
     # Create a cancel button
     cancel_markup = ReplyKeyboardMarkup(resize_keyboard=True)
     cancel_markup.add(KeyboardButton('🔙 Back to Admin'))
-    
+
     bot.send_message(
         chat_id,
         """
@@ -3084,21 +3278,21 @@ def search_user(message):
     chat_id = message.chat.id
     search_query = message.text.strip()
     session = None
-    
+
     # Check if user canceled the search
     if search_query == '🔙 Back to Admin':
         del user_states[chat_id]
         back_to_admin(message)
         return
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         session = get_session()
         users = []
-        
+
         # Try to parse as Telegram ID (int)
         try:
             telegram_id = int(search_query)
@@ -3111,11 +3305,11 @@ def search_user(message):
                 (User.name.ilike(f'%{search_query}%')) |
                 (User.phone.ilike(f'%{search_query}%'))
             ).all()
-        
+
         # Clear the user state
         if chat_id in user_states:
             del user_states[chat_id]
-        
+
         if not users:
             bot.send_message(
                 chat_id,
@@ -3123,7 +3317,7 @@ def search_user(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Display the search results
         results_text = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -3133,7 +3327,7 @@ def search_user(message):
 Found <b>{len(users)}</b> user(s) matching '{search_query}':
 
 """
-        
+
         for i, user in enumerate(users, 1):
             # Format subscription status
             subscription_status = "❌ Inactive"
@@ -3141,17 +3335,17 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
                 days_passed = (datetime.utcnow() - user.subscription_date).days
                 if days_passed < 30:
                     subscription_status = f"✅ Active ({30 - days_passed} days left)"
-            
+
             # Format balance
             balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
-            
+
             # Format date
             join_date = user.created_at.strftime("%Y-%m-%d")
-            
+
             # Add inline keyboard for each user for detailed actions
             user_markup = InlineKeyboardMarkup()
             user_markup.add(InlineKeyboardButton(f"👤 Manage User #{i}", callback_data=f"manage_user_{user.telegram_id}"))
-            
+
             user_text = f"""
 <b>{i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
 📱 Phone: <code>{user.phone}</code>
@@ -3160,7 +3354,7 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
 📅 Subscription: {subscription_status}
 🗓️ Joined: {join_date}
 """
-            
+
             # For first result, append to results text. For subsequent results, send as separate messages
             if i == 1:
                 results_text += user_text
@@ -3177,7 +3371,7 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
                     parse_mode='HTML',
                     reply_markup=user_markup
                 )
-        
+
     except Exception as e:
         logger.error(f"Error searching users: {e}")
         logger.error(traceback.format_exc())
@@ -3195,20 +3389,20 @@ def handle_manage_user(call):
     chat_id = call.message.chat.id
     user_id = int(call.data.split('_')[-1])
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         bot.answer_callback_query(call.id, "You don't have permission to manage users")
         return
-    
+
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=user_id).first()
-        
+
         if not user:
             bot.answer_callback_query(call.id, "User not found")
             return
-        
+
         # Create user management markup
         user_markup = InlineKeyboardMarkup(row_width=2)
         user_markup.add(
@@ -3222,18 +3416,18 @@ def handle_manage_user(call):
         user_markup.add(
             InlineKeyboardButton("🚫 Block User", callback_data=f"block_user_{user.telegram_id}")
         )
-        
+
         # Format subscription status
         subscription_status = "❌ Inactive"
         if user.subscription_date:
             days_passed = (datetime.utcnow() - user.subscription_date).days
             if days_passed < 30:
                 subscription_status = f"✅ Active ({30 - days_passed} days left)"
-        
+
         # Get user stats
         order_count = session.query(Order).filter_by(user_id=user.id).count()
         pending_deposits = session.query(PendingDeposit).filter_by(user_id=user.id, status='Processing').count()
-        
+
         # Send user details message
         bot.send_message(
             chat_id,
@@ -3265,10 +3459,10 @@ def handle_manage_user(call):
             parse_mode='HTML',
             reply_markup=user_markup
         )
-        
+
         # Acknowledge the callback
         bot.answer_callback_query(call.id, f"Managing {user.name}")
-        
+
     except Exception as e:
         logger.error(f"Error managing user: {e}")
         logger.error(traceback.format_exc())
@@ -3280,11 +3474,11 @@ def handle_manage_user(call):
 def order_management(message):
     """Show order management options"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     # Create order management menu
     order_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     order_mgmt_menu.add(
@@ -3299,7 +3493,7 @@ def order_management(message):
         KeyboardButton('✅ Completed Orders'),
         KeyboardButton('🔙 Back to Admin')
     )
-    
+
     bot.send_message(
         chat_id,
         """
@@ -3327,16 +3521,16 @@ def list_all_orders(message):
     """List all orders with pagination"""
     chat_id = message.chat.id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         session = get_session()
         # Get total orders count for pagination
         total_orders = session.query(Order).count()
-        
+
         if total_orders == 0:
             bot.send_message(
                 chat_id,
@@ -3344,15 +3538,15 @@ def list_all_orders(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Set up pagination (first page)
         page = 1
         per_page = 5
         offset = (page - 1) * per_page
-        
+
         # Get orders for the current page with user info
         orders = session.query(Order, User).join(User).order_by(Order.created_at.desc()).limit(per_page).offset(offset).all()
-        
+
         # Format order list with emojis and nice formatting
         orders_text = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -3362,7 +3556,7 @@ def list_all_orders(message):
 <b>Total Orders:</b> {total_orders}
 
 """
-        
+
         for i, (order, user) in enumerate(orders, 1):
             # Format status with emoji
             status_emoji = "⏳"
@@ -3370,15 +3564,15 @@ def list_all_orders(message):
                 status_emoji = "🚚"
             elif order.status == "Completed":
                 status_emoji = "✅"
-            
+
             # Format date
             order_date = order.created_at.strftime("%Y-%m-%d")
-            
+
             # Truncate product link to avoid message too long
             product_link = order.product_link
             if len(product_link) > 30:
                 product_link = product_link[:27] + "..."
-            
+
             orders_text += f"""
 <b>{offset + i}. Order #{order.order_number}</b> - {status_emoji} {order.status}
 👤 Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
@@ -3390,11 +3584,11 @@ def list_all_orders(message):
                 orders_text += f"🆔 AliExpress ID: <code>{order.order_id}</code>\n"
             if order.tracking_number:
                 orders_text += f"📦 Tracking: <code>{order.tracking_number}</code>\n"
-        
+
         # Add pagination controls if needed
         if total_orders > per_page:
             markup = InlineKeyboardMarkup()
-            
+
             # Only add Next button on first page
             if page == 1:
                 markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"orders_page_{page+1}"))
@@ -3407,9 +3601,9 @@ def list_all_orders(message):
             # Only add Previous button on last page
             else:
                 markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"orders_page_{page-1}"))
-            
+
             orders_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
-            
+
             bot.send_message(
                 chat_id,
                 orders_text,
@@ -3422,7 +3616,7 @@ def list_all_orders(message):
                 orders_text,
                 parse_mode='HTML'
             )
-        
+
     except Exception as e:
         logger.error(f"Error listing orders: {e}")
         logger.error(traceback.format_exc())
@@ -3440,24 +3634,24 @@ def handle_orders_pagination(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         bot.answer_callback_query(call.id, "You don't have permission to view this data")
         return
-    
+
     try:
         # Extract page number from callback data
         page = int(call.data.split('_')[-1])
         per_page = 5
         offset = (page - 1) * per_page
-        
+
         session = get_session()
         total_orders = session.query(Order).count()
-        
+
         # Get orders for the requested page
         orders = session.query(Order, User).join(User).order_by(Order.created_at.desc()).limit(per_page).offset(offset).all()
-        
+
         # Format order list with emojis and nice formatting
         orders_text = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -3467,7 +3661,7 @@ def handle_orders_pagination(call):
 <b>Total Orders:</b> {total_orders}
 
 """
-        
+
         for i, (order, user) in enumerate(orders, 1):
             # Format status with emoji
             status_emoji = "⏳"
@@ -3475,15 +3669,15 @@ def handle_orders_pagination(call):
                 status_emoji = "🚚"
             elif order.status == "Completed":
                 status_emoji = "✅"
-            
+
             # Format date
             order_date = order.created_at.strftime("%Y-%m-%d")
-            
+
             # Truncate product link to avoid message too long
             product_link = order.product_link
             if len(product_link) > 30:
                 product_link = product_link[:27] + "..."
-            
+
             orders_text += f"""
 <b>{offset + i}. Order #{order.order_number}</b> - {status_emoji} {order.status}
 👤 Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
@@ -3495,10 +3689,10 @@ def handle_orders_pagination(call):
                 orders_text += f"🆔 AliExpress ID: <code>{order.order_id}</code>\n"
             if order.tracking_number:
                 orders_text += f"📦 Tracking: <code>{order.tracking_number}</code>\n"
-        
+
         # Create pagination markup
         markup = InlineKeyboardMarkup()
-        
+
         # First page - only Next button
         if page == 1 and total_orders > per_page:
             markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"orders_page_{page+1}"))
@@ -3511,9 +3705,9 @@ def handle_orders_pagination(call):
                 InlineKeyboardButton("⬅️ Previous", callback_data=f"orders_page_{page-1}"),
                 InlineKeyboardButton("➡️ Next", callback_data=f"orders_page_{page+1}")
             )
-        
+
         orders_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
-        
+
         # Update the message with the new page
         bot.edit_message_text(
             orders_text,
@@ -3522,10 +3716,10 @@ def handle_orders_pagination(call):
             parse_mode='HTML',
             reply_markup=markup
         )
-        
+
         # Acknowledge the callback
         bot.answer_callback_query(call.id, f"Showing page {page}")
-        
+
     except Exception as e:
         logger.error(f"Error in orders pagination: {e}")
         logger.error(traceback.format_exc())
@@ -3537,11 +3731,11 @@ def handle_orders_pagination(call):
 def deposit_management(message):
     """Show deposit management options"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     # Create deposit management menu
     deposit_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     deposit_mgmt_menu.add(
@@ -3555,7 +3749,7 @@ def deposit_management(message):
     deposit_mgmt_menu.add(
         KeyboardButton('🔙 Back to Admin')
     )
-    
+
     bot.send_message(
         chat_id,
         """
@@ -3582,18 +3776,18 @@ def list_pending_deposits(message):
     """List pending deposits for approval"""
     chat_id = message.chat.id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         session = get_session()
         # Get all pending deposits with user info
         pending_deposits = session.query(PendingDeposit, User).join(User).filter(
             PendingDeposit.status == 'Processing'
         ).order_by(PendingDeposit.created_at.desc()).all()
-        
+
         if not pending_deposits:
             bot.send_message(
                 chat_id,
@@ -3610,7 +3804,7 @@ All deposits have been processed. There are no deposits waiting for approval.
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Send introduction message
         bot.send_message(
             chat_id,
@@ -3625,7 +3819,7 @@ Found <b>{len(pending_deposits)}</b> deposits pending approval.
 """,
             parse_mode='HTML'
         )
-        
+
         # Send each pending deposit as a separate message with approve/reject buttons
         for deposit, user in pending_deposits:
             # Create inline keyboard for approval
@@ -3634,10 +3828,10 @@ Found <b>{len(pending_deposits)}</b> deposits pending approval.
                 InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{deposit.id}"),
                 InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{deposit.id}")
             )
-            
+
             # Format deposit message
             deposit_date = deposit.created_at.strftime("%Y-%m-%d %H:%M")
-            
+
             deposit_msg = f"""
 <b>Deposit #{deposit.id}</b>
 
@@ -3647,14 +3841,14 @@ Found <b>{len(pending_deposits)}</b> deposits pending approval.
 
 <i>Use the buttons below to approve or reject this deposit.</i>
 """
-            
+
             bot.send_message(
                 chat_id,
                 deposit_msg,
                 parse_mode='HTML',
                 reply_markup=markup
             )
-        
+
     except Exception as e:
         logger.error(f"Error listing pending deposits: {e}")
         logger.error(traceback.format_exc())
@@ -3672,23 +3866,23 @@ def handle_deposit_approval(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         bot.answer_callback_query(call.id, "You don't have permission to manage deposits")
         return
-    
+
     try:
         action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
         deposit_id = int(call.data.split('_')[-1])
-        
+
         session = get_session()
-        
+
         # Get deposit and user
         deposit_info = session.query(PendingDeposit, User).join(User).filter(
             PendingDeposit.id == deposit_id
         ).first()
-        
+
         if not deposit_info:
             bot.answer_callback_query(call.id, "Deposit not found or already processed")
             bot.edit_message_text(
@@ -3697,18 +3891,18 @@ def handle_deposit_approval(call):
                 message_id=message_id
             )
             return
-        
+
         deposit, user = deposit_info
-        
+
         if action == 'approve':
             # Update user balance
             user.balance += deposit.amount
-            
+
             # Update deposit status
             deposit.status = 'Approved'
-            
+
             session.commit()
-            
+
             # Send notification to user
             bot.send_message(
                 user.telegram_id,
@@ -3725,7 +3919,7 @@ Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
 """,
                 parse_mode='HTML'
             )
-            
+
             # Update admin message
             bot.edit_message_text(
                 f"""
@@ -3742,14 +3936,14 @@ Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
                 message_id=message_id,
                 parse_mode='HTML'
             )
-            
+
             bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} approved")
-        
+
         else:  # Reject
             # Update deposit status
             deposit.status = 'Rejected'
             session.commit()
-            
+
             # Send notification to user
             bot.send_message(
                 user.telegram_id,
@@ -3768,7 +3962,7 @@ Please contact customer support for assistance or try again with a clearer payme
 """,
                 parse_mode='HTML'
             )
-            
+
             # Update admin message
             bot.edit_message_text(
                 f"""
@@ -3784,9 +3978,9 @@ Please contact customer support for assistance or try again with a clearer payme
                 message_id=message_id,
                 parse_mode='HTML'
             )
-            
+
             bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} rejected")
-        
+
     except Exception as e:
         logger.error(f"Error handling deposit approval: {e}")
         logger.error(traceback.format_exc())
@@ -3798,18 +3992,18 @@ Please contact customer support for assistance or try again with a clearer payme
 def add_balance_prompt(message):
     """Prompt admin to add balance to a user"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     # Update user state to wait for user ID
     user_states[chat_id] = 'waiting_for_balance_user_id'
-    
+
     # Create a cancel button
     cancel_markup = ReplyKeyboardMarkup(resize_keyboard=True)
     cancel_markup.add(KeyboardButton('🔙 Back to Admin'))
-    
+
     bot.send_message(
         chat_id,
         """
@@ -3831,18 +4025,18 @@ def process_balance_user_id(message):
     chat_id = message.chat.id
     user_input = message.text.strip()
     session = None
-    
+
     # Check if user canceled
     if user_input == '🔙 Back to Admin':
         if chat_id in user_states:
             del user_states[chat_id]
         back_to_admin(message)
         return
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         # Try to parse as Telegram ID (int)
         try:
@@ -3854,11 +4048,11 @@ def process_balance_user_id(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Check if user exists
         session = get_session()
         user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
-        
+
         if not user:
             bot.send_message(
                 chat_id,
@@ -3866,7 +4060,7 @@ def process_balance_user_id(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Store user info and update state to wait for amount
         user_states[chat_id] = {
             'state': 'waiting_for_balance_amount',
@@ -3874,7 +4068,7 @@ def process_balance_user_id(message):
             'user_name': user.name,
             'current_balance': user.balance
         }
-        
+
         # Send user info and prompt for amount
         bot.send_message(
             chat_id,
@@ -3895,7 +4089,7 @@ Please enter the amount in USD to add to the user's balance.
             parse_mode='HTML',
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
-        
+
     except Exception as e:
         logger.error(f"Error processing user ID for balance: {e}")
         logger.error(traceback.format_exc())
@@ -3913,25 +4107,25 @@ def process_balance_amount(message):
     chat_id = message.chat.id
     amount_input = message.text.strip()
     session = None
-    
+
     # Check if user canceled
     if amount_input == '🔙 Back to Admin':
         if chat_id in user_states:
             del user_states[chat_id]
         back_to_admin(message)
         return
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         # Get user info from state
         user_info = user_states[chat_id]
         user_telegram_id = user_info['user_telegram_id']
         user_name = user_info['user_name']
         current_balance = user_info['current_balance']
-        
+
         # Try to parse as float
         try:
             amount = float(amount_input)
@@ -3944,11 +4138,11 @@ def process_balance_amount(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Update user balance
         session = get_session()
         user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
-        
+
         if not user:
             bot.send_message(
                 chat_id,
@@ -3956,16 +4150,16 @@ def process_balance_amount(message):
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
-        
+
         # Add balance
         new_balance = user.balance + amount
         user.balance = new_balance
         session.commit()
-        
+
         # Clear user state
         if chat_id in user_states:
             del user_states[chat_id]
-        
+
         # Notify admin of success
         bot.send_message(
             chat_id,
@@ -3985,7 +4179,7 @@ def process_balance_amount(message):
             parse_mode='HTML',
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
-        
+
         # Notify user of balance update
         bot.send_message(
             user_telegram_id,
@@ -4003,7 +4197,7 @@ Your account balance has been updated by the administrator.
 """,
             parse_mode='HTML'
         )
-        
+
     except Exception as e:
         logger.error(f"Error adding balance: {e}")
         logger.error(traceback.format_exc())
@@ -4014,16 +4208,16 @@ Your account balance has been updated by the administrator.
         )
     finally:
         safe_close_session(session)
-        
+
 @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription Management')
 def subscription_management(message):
     """Show subscription management options"""
     chat_id = message.chat.id
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     # Create subscription management menu
     subscription_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     subscription_mgmt_menu.add(
@@ -4037,7 +4231,7 @@ def subscription_management(message):
     subscription_mgmt_menu.add(
         KeyboardButton('🔙 Back to Admin')
     )
-    
+
     bot.send_message(
         chat_id,
         """
@@ -4064,40 +4258,40 @@ def system_stats(message):
     """Show system statistics"""
     chat_id = message.chat.id
     session = None
-    
+
     # Check if user is admin
     if not is_admin(chat_id):
         return
-    
+
     try:
         session = get_session()
-        
+
         # Gather statistics
         total_users = session.query(User).count()
-        
+
         # Active subscriptions (less than 30 days since subscription date)
         active_subs_query = session.query(User).filter(
             User.subscription_date.isnot(None),
             (datetime.utcnow() - User.subscription_date) < timedelta(days=30)
         )
         active_subscriptions = active_subs_query.count()
-        
+
         # Orders statistics
         total_orders = session.query(Order).count()
         processing_orders = session.query(Order).filter_by(status='Processing').count()
         completed_orders = session.query(Order).filter_by(status='Completed').count()
         shipped_orders = session.query(Order).filter_by(status='Shipped').count()
-        
+
         # Deposit statistics
         pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').count()
-        
+
         # Financial statistics
         total_balance = session.query(func.sum(User.balance)).scalar() or 0
-        
+
         # Recent activity
         recent_users = session.query(User).order_by(User.created_at.desc()).limit(5).all()
         recent_orders = session.query(Order).order_by(Order.created_at.desc()).limit(5).all()
-        
+
         # Format the stats message
         stats_message = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -4123,23 +4317,23 @@ def system_stats(message):
 
 <b>🔄 RECENT ACTIVITY:</b>
 """
-        
+
         # Add recent users
         stats_message += "\n<b>New Users:</b>"
         for user in recent_users:
             stats_message += f"\n• {user.name} ({user.created_at.strftime('%Y-%m-%d')})"
-        
+
         # Add recent orders
         stats_message += "\n\n<b>Recent Orders:</b>"
         for order in recent_orders:
             stats_message += f"\n• Order #{order.order_number} - {order.status} ({order.created_at.strftime('%Y-%m-%d')})"
-        
+
         bot.send_message(
             chat_id,
             stats_message,
             parse_mode='HTML'
         )
-        
+
     except Exception as e:
         logger.error(f"Error generating system stats: {e}")
         logger.error(traceback.format_exc())
@@ -4155,7 +4349,7 @@ def system_stats(message):
 def help_center(message):
     """Handle Help Center button with all necessary information"""
     chat_id = message.chat.id
-    
+
     # Create help center inline buttons
     help_markup = InlineKeyboardMarkup(row_width=1)
     help_markup.add(
@@ -4165,7 +4359,7 @@ def help_center(message):
         InlineKeyboardButton("🔍 How to Track Orders", callback_data="help_track"),
         InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center")
     )
-    
+
     bot.send_message(
         chat_id,
         """
@@ -4197,12 +4391,12 @@ def handle_help_buttons(call):
     """Handle help center button callbacks"""
     chat_id = call.message.chat.id
     help_topic = call.data.split('_')[1]
-    
+
     # Back button for all help responses
     back_markup = InlineKeyboardMarkup()
     back_markup.add(InlineKeyboardButton("◀️ Back to Help Center", callback_data="help_main"))
     back_markup.add(InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center"))
-    
+
     if help_topic == "register":
         bot.send_message(
             chat_id,
@@ -4217,7 +4411,7 @@ def handle_help_buttons(call):
 2️⃣ Enter your full name when prompted
 3️⃣ Provide your complete delivery address
 4️⃣ Enter your phone number (format: 09xxxxxxxx)
-5️⃣ Pay the one-time registration fee of 100 birr
+5️⃣ Pay the registration fee of 350 birr (200 birr one-time + 150 birr first month)
 
 <b>After Registration:</b>
 • Your account will be activated immediately
@@ -4229,7 +4423,7 @@ def handle_help_buttons(call):
             parse_mode='HTML',
             reply_markup=back_markup
         )
-    
+
     elif help_topic == "deposit":
         bot.send_message(
             chat_id,
@@ -4260,7 +4454,7 @@ def handle_help_buttons(call):
             parse_mode='HTML',
             reply_markup=back_markup
         )
-    
+
     elif help_topic == "order":
         bot.send_message(
             chat_id,
@@ -4288,7 +4482,7 @@ def handle_help_buttons(call):
             parse_mode='HTML',
             reply_markup=back_markup
         )
-    
+
     elif help_topic == "track":
         bot.send_message(
             chat_id,
@@ -4319,7 +4513,7 @@ def handle_help_buttons(call):
             parse_mode='HTML',
             reply_markup=back_markup
         )
-    
+
     elif help_topic == "main":
         # Return to the main help center menu
         help_markup = InlineKeyboardMarkup(row_width=1)
@@ -4330,7 +4524,7 @@ def handle_help_buttons(call):
             InlineKeyboardButton("🔍 How to Track Orders", callback_data="help_track"),
             InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center")
         )
-        
+
         bot.edit_message_text(
             """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
@@ -4357,7 +4551,7 @@ How can we assist you today? Select a topic below to get detailed information an
             parse_mode='HTML',
             reply_markup=help_markup
         )
-    
+
     # Acknowledge the callback
     bot.answer_callback_query(call.id)
 
@@ -4366,22 +4560,22 @@ How can we assist you today? Select a topic below to get detailed information an
 def start_companion(message):
     """Start interaction with digital shopping companion"""
     chat_id = message.chat.id
-    
+
     if not COMPANION_ENABLED:
         bot.send_message(chat_id, "Digital Shopping Companion is not available.")
         return
-    
+
     # Set user in companion conversation mode
     companion_conversations[chat_id] = True
-    
+
     # Initialize the companion if needed
     global digital_companion
     if not digital_companion:
         digital_companion = DigitalCompanion(bot)
-    
+
     # Send greeting
     digital_companion.send_greeting(chat_id)
-    
+
     # Show helper info
     bot.send_message(
         chat_id,
@@ -4393,17 +4587,17 @@ def start_companion(message):
 def handle_companion_button(message):
     """Handle the companion button press"""
     chat_id = message.chat.id
-    
+
     # Add user to the companion conversation state
     companion_conversations[chat_id] = True
-    
+
     # Show a transitional message
     bot.send_message(
         chat_id,
         "🌟 <b>Connecting to Selam, your Ethiopian shopping assistant...</b> 🌟",
         parse_mode='HTML'
     )
-    
+
     # Start the companion interaction
     start_companion(message)
 
@@ -4413,20 +4607,20 @@ def handle_companion_message(message):
     """Handle any messages from users in an active companion conversation"""
     if not COMPANION_ENABLED:
         return
-    
+
     chat_id = message.chat.id
-    
+
     # Check for exit commands
     if message.text == '/exit' or message.text == 'exit' or message.text == 'back' or message.text == 'main menu':
         companion_conversations[chat_id] = False
-        
+
         # Send exit message
         bot.send_message(
             chat_id,
             "🌟 <b>Leaving conversation with Selam...</b>\nReturning to main menu!",
             parse_mode='HTML'
         )
-        
+
         # Return to main menu
         session = None
         try:
@@ -4444,12 +4638,12 @@ def handle_companion_message(message):
         finally:
             safe_close_session(session)
         return
-    
+
     # Initialize the companion if needed
     global digital_companion
     if not digital_companion:
         digital_companion = DigitalCompanion(bot)
-    
+
     # Process the message
     digital_companion.process_message(message)
 
@@ -4459,17 +4653,17 @@ def handle_selam_greeting(message):
     """Handle greeting messages to Selam when not in active conversation"""
     if not COMPANION_ENABLED:
         return
-    
+
     chat_id = message.chat.id
-    
+
     # Add user to companion conversations
     companion_conversations[chat_id] = True
-    
+
     # Initialize the companion if needed
     global digital_companion
     if not digital_companion:
         digital_companion = DigitalCompanion(bot)
-    
+
     # Process the message
     digital_companion.process_message(message)
 
@@ -4478,21 +4672,297 @@ def handle_companion_callback(call):
     """Handle companion button callbacks"""
     if not COMPANION_ENABLED:
         return
-    
+
     # Initialize the companion if needed
     global digital_companion
     if not digital_companion:
         digital_companion = DigitalCompanion(bot)
-    
+
     # Handle the callback
     digital_companion.handle_callback(call)
+
+@bot.callback_query_handler(func=lambda call: call.data in ['view_referrals', 'redeem_points', 'referral_help'])
+def handle_referral_badges_buttons(call):
+    """Handle callback actions for referral badges screen"""
+    chat_id = call.message.chat.id
+    session = None
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.answer_callback_query(call.id, "You need to register first")
+            return
+            
+        if call.data == 'view_referrals':
+            # Get user's referrals
+            from referral_system import get_user_referrals
+            referrals = get_user_referrals(user.id)
+            
+            if not referrals:
+                bot.answer_callback_query(call.id, "You haven't referred anyone yet")
+                bot.send_message(
+                    chat_id,
+                    """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>YOUR REFERRALS</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+You haven't referred anyone yet.
+
+<i>Share your referral code or link with friends to start earning points!</i>
+""",
+                    parse_mode='HTML'
+                )
+                return
+                
+            # Build referral list
+            referral_list = ""
+            for i, ref in enumerate(referrals, 1):
+                status_emoji = "✅" if ref['status'] == 'completed' else "⏳"
+                date = ref['referral_date'].strftime('%Y-%m-%d') if ref['referral_date'] else "Unknown"
+                referral_list += f"{i}. {status_emoji} <b>{ref['referred_name']}</b> • <i>{date}</i>\n"
+                
+            bot.send_message(
+                chat_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   📊 <b>YOUR REFERRALS</b> 📊  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>You've referred {len(referrals)} friends:</b>
+
+{referral_list}
+
+<i>Each successful referral earns you 50 points!</i>
+""",
+                parse_mode='HTML'
+            )
+            
+        elif call.data == 'redeem_points':
+            # Check referral points
+            points = user.referral_points or 0
+            
+            if points < 100:
+                bot.answer_callback_query(call.id, "You need at least 100 points to redeem")
+                bot.send_message(
+                    chat_id,
+                    f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>REDEEM POINTS</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Your current points:</b> <code>{points}</code>
+
+You need at least <b>100 points</b> to redeem them for account balance.
+
+<i>Invite more friends to earn points!</i>
+""",
+                    parse_mode='HTML'
+                )
+                return
+                
+            # Start redemption flow
+            user_states[chat_id] = 'waiting_for_redemption_amount'
+            
+            bot.send_message(
+                chat_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>REDEEM POINTS</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Your current points:</b> <code>{points}</code>
+<b>Worth:</b> <code>{points}</code> birr
+
+Enter how many points you want to redeem:
+• Minimum: <code>100</code> points
+• Maximum: <code>{points}</code> points
+
+<i>1 point = 1 birr in account balance</i>
+""",
+                parse_mode='HTML'
+            )
+            
+        elif call.data == 'referral_help':
+            bot.answer_callback_query(call.id)
+            
+            # Get user's referral code and URL
+            from referral_system import get_referral_url
+            referral_code = user.referral_code or ""
+            referral_url = get_referral_url(referral_code) if referral_code else "Referral code not set"
+            
+            # Send referral system explanation
+            bot.send_message(
+                chat_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ℹ️ <b>HOW REFERRALS WORK</b> ℹ️  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>🏆 Earn Badges and Points:</b>
+• Invite friends using your referral link or code
+• Earn <b>50 points</b> for each successful registration
+• Collect beautiful badges as you refer more friends
+• Redeem points for account balance (1 point = 1 birr)
+
+<b>🎯 How to Refer Friends:</b>
+1️⃣ Share your personal referral link:
+<code>{referral_url}</code>
+
+2️⃣ Or share your referral code:
+<code>{referral_code}</code>
+
+3️⃣ Ask them to enter your code during registration
+
+<b>💎 Badge Achievements:</b>
+• 🥉 <b>Beginner Referrer:</b> 1 referral
+• 🥈 <b>Rising Referrer:</b> 3 referrals
+• 🥇 <b>Champion Referrer:</b> 5 referrals
+• 💎 <b>Elite Referrer:</b> 10 referrals
+• 👑 <b>Legendary Referrer:</b> 20 referrals
+
+<i>Note: Points are awarded ONLY for successful registrations.</i>
+""",
+                parse_mode='HTML'
+            )
+            
+    except Exception as e:
+        logger.error(f"Error handling referral button: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing request")
+    finally:
+        safe_close_session(session)
+
+@bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_redemption_amount')
+def process_redemption_amount(message):
+    """Process user's points redemption amount"""
+    chat_id = message.chat.id
+    session = None
+    try:
+        # Get the amount to redeem
+        amount_text = message.text.strip()
+        
+        # Check if the input is a valid number
+        try:
+            points_to_redeem = int(amount_text)
+        except ValueError:
+            bot.send_message(
+                chat_id,
+                """
+❌ <b>Invalid Amount</b>
+
+Please enter a valid number of points to redeem.
+""",
+                parse_mode='HTML'
+            )
+            return
+            
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id,
+                "You need to register first.",
+                reply_markup=create_main_menu(is_registered=False)
+            )
+            del user_states[chat_id]
+            return
+            
+        # Get user's current points
+        points = user.referral_points or 0
+        
+        # Validate redemption amount
+        if points_to_redeem < 100:
+            bot.send_message(
+                chat_id,
+                """
+❌ <b>Amount Too Small</b>
+
+You need to redeem at least 100 points.
+Please enter a larger amount.
+""",
+                parse_mode='HTML'
+            )
+            return
+        
+        if points_to_redeem > points:
+            bot.send_message(
+                chat_id,
+                f"""
+❌ <b>Insufficient Points</b>
+
+You only have <code>{points}</code> points.
+Please enter a smaller amount.
+""",
+                parse_mode='HTML'
+            )
+            return
+            
+        # Process redemption
+        from referral_system import redeem_points
+        success, result = redeem_points(user.id, points_to_redeem)
+        
+        if success and result:
+            remaining_points = result['remaining_points']
+            etb_value = result['etb_value']
+            new_balance = result['new_balance']
+            
+            # Show success message
+            bot.send_message(
+                chat_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>POINTS REDEEMED!</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>🎉 Redemption Successful! 🎉</b>
+
+<b>Points redeemed:</b> <code>{points_to_redeem}</code> points
+<b>Value added:</b> <code>{etb_value:.2f}</code> birr
+
+<b>Updated Information:</b>
+• Remaining points: <code>{remaining_points}</code>
+• New balance: $<code>{new_balance:.2f}</code>
+
+<i>Thank you for participating in our referral program!</i>
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
+            )
+        else:
+            # Show error message
+            bot.send_message(
+                chat_id,
+                """
+❌ <b>Redemption Failed</b>
+
+There was an error processing your points redemption.
+Please try again later or contact support.
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            
+        # Reset user state
+        del user_states[chat_id]
+            
+    except Exception as e:
+        logger.error(f"Error processing redemption: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
+        if chat_id in user_states:
+            del user_states[chat_id]
+    finally:
+        safe_close_session(session)
 
 def main():
     """Main function to start the bot with optimized performance"""
     global digital_companion
-    
+
     logger.info("🚀 Starting bot in polling mode...")
-    
+
     # Initialize Digital Shopping Companion if enabled
     if COMPANION_ENABLED:
         try:
@@ -4523,7 +4993,7 @@ def main():
         logger.info("Telebot connection optimizations applied")
     except Exception as optimization_error:
         logger.warning(f"Could not apply all performance optimizations: {optimization_error}")
-        
+
     # Start payment notification checker
     try:
         logger.info("Starting payment notification checker...")
