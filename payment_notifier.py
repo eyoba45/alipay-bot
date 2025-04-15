@@ -332,7 +332,7 @@ def check_pending_payments():
 def notification_checker():
     """Main notification checker function"""
     logger.info("Starting payment notification checker...")
-    logger.info("Running in standalone mode for monitoring only - NO auto-approvals")
+    logger.info("⚠️ USING LEGACY PAYMENT NOTIFIER - Use chapa_autopay.py for auto-approval")
     
     while True:
         try:
