@@ -281,92 +281,75 @@ def notify_pending_deposits():
         logger.error(f"Error in notify_pending_deposits: {e}")
         logger.error(traceback.format_exc())
 
-def auto_approve_payments():
-    """Automatically approve pending registrations and deposits"""
+def check_pending_payments():
+    """Check pending registrations and deposits WITHOUT auto-approving them"""
     try:
         from database import get_session, safe_close_session
         from models import PendingApproval, PendingDeposit, User
         
         session = get_session()
         try:
-            # Auto-approve all pending registrations
+            # Logging only, no auto-approval of registrations
             pending_approvals = session.query(PendingApproval).all()
             logger.info(f"Found {len(pending_approvals)} pending registrations")
-            
-            for pending in pending_approvals:
-                try:
-                    # Check if user already exists
-                    user = session.query(User).filter_by(telegram_id=pending.telegram_id).first()
+            if pending_approvals:
+                for pending in pending_approvals:
+                    logger.info(f"Registration for user {pending.telegram_id} is awaiting verification")
                     
-                    if not user:
-                        # Create new user
-                        logger.info(f"Auto-approving registration for user {pending.telegram_id}")
-                        new_user = User(
-                            telegram_id=pending.telegram_id,
-                            name=pending.name,
-                            phone=pending.phone,
-                            address=pending.address,
-                            balance=0.0,
-                            subscription_date=datetime.utcnow()
-                        )
-                        session.add(new_user)
-                        session.delete(pending)
-                        session.commit()
-                        logger.info(f"User {pending.telegram_id} auto-registered successfully")
-                    else:
-                        # User already exists
-                        logger.info(f"User {pending.telegram_id} already exists, removing pending approval")
-                        session.delete(pending)
-                        session.commit()
-                except Exception as e:
-                    logger.error(f"Error auto-approving registration for {pending.telegram_id}: {e}")
-                    logger.error(traceback.format_exc())
-                    session.rollback()
+                    # If pending for too long (3 days), mark as needing admin attention
+                    if pending.created_at and (datetime.utcnow() - pending.created_at).total_seconds() > 259200:  # 3 days
+                        if pending.status != 'Needs Admin Attention':
+                            pending.status = 'Needs Admin Attention'
+                            session.commit()
+                            logger.warning(f"Registration for user {pending.telegram_id} has been pending for over 3 days")
             
-            # Auto-approve all pending deposits
+            # Logging only, no auto-approval of deposits
             pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
             logger.info(f"Found {len(pending_deposits)} pending deposits")
-            
-            for deposit in pending_deposits:
-                try:
+            if pending_deposits:
+                for deposit in pending_deposits:
                     user = session.query(User).filter_by(id=deposit.user_id).first()
                     if user:
-                        logger.info(f"Auto-approving deposit for user {user.telegram_id}, amount: ${deposit.amount}")
-                        user.balance += deposit.amount
-                        deposit.status = 'Approved'
-                        session.commit()
-                        logger.info(f"Deposit for user {user.telegram_id} approved automatically")
-                except Exception as e:
-                    logger.error(f"Error auto-approving deposit for user_id {deposit.user_id}: {e}")
-                    logger.error(traceback.format_exc())
-                    session.rollback()
+                        logger.info(f"Deposit for user {user.telegram_id}, amount: ${deposit.amount} is awaiting verification")
+                        
+                        # If pending for too long (24 hours), mark as needing admin attention
+                        if deposit.created_at and (datetime.utcnow() - deposit.created_at).total_seconds() > 86400:  # 24 hours
+                            if deposit.status == 'Processing':
+                                deposit.status = 'Needs Admin Attention'
+                                session.commit()
+                                logger.warning(f"Deposit for user {user.telegram_id} has been processing for over 24 hours")
         except Exception as e:
-            logger.error(f"Error in auto_approve_payments: {e}")
+            logger.error(f"Error in check_pending_payments: {e}")
             logger.error(traceback.format_exc())
-            session.rollback()
+            if session:
+                session.rollback()
         finally:
             safe_close_session(session)
     except Exception as e:
-        logger.error(f"Fatal error in auto_approve_payments: {e}")
+        logger.error(f"Fatal error in check_pending_payments: {e}")
         logger.error(traceback.format_exc())
 
 def notification_checker():
     """Main notification checker function"""
     logger.info("Starting payment notification checker...")
-    logger.info("Running in standalone mode: will auto-approve payments but not send notifications")
+    logger.info("Running in standalone mode for monitoring only - NO auto-approvals")
     
     while True:
         try:
-            # Skip notification attempts in standalone mode
-            # Just auto-approve all payments in database
-            auto_approve_payments()
+            # Only check and log pending payments, NO auto-approvals
+            # Admins must manually verify and approve all payments
+            check_pending_payments()
+            
+            # Also run notifications for transparency
+            notify_pending_registrations()
+            notify_pending_deposits()
             
         except Exception as e:
             logger.error(f"Error in notification checker: {e}")
             logger.error(traceback.format_exc())
         
-        # Sleep for 30 seconds between checks
-        time.sleep(30)
+        # Sleep for 15 seconds between checks for quicker responsiveness
+        time.sleep(15)
 
 def start_checker():
     """Start the notification checker in a background thread"""
