@@ -1,252 +1,283 @@
 #!/usr/bin/env python3
 """
-Clean startup script for Telegram bot runner with Chapa webhook server
+Clean startup script for the bot that ensures a clean environment.
 """
-import sys
 import os
-import logging
+import sys
 import time
+import logging
 import subprocess
 import signal
-import threading
-import traceback
-import fcntl
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='bot_starter.log',
-    filemode='a'
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-console.setFormatter(formatter)
-logging.getLogger('').addHandler(console)
-
 logger = logging.getLogger(__name__)
 
-# Global lock file handle
-lock_file = None
-
-def acquire_lock():
-    """Ensure only one instance runs"""
-    global lock_file
+def run_command(command, check=False):
+    """Run a shell command"""
     try:
-        lock_file = open("bot.lock", "w")
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=check)
+        if result.returncode != 0:
+            logger.warning(f"Command failed with code {result.returncode}: {command}")
+            if result.stderr:
+                logger.warning(f"Error output: {result.stderr}")
+        return result
+    except Exception as e:
+        logger.error(f"Error running command '{command}': {e}")
+        return None
+
+def cleanup_environment():
+    """Clean up any existing bot processes and lock files"""
+    logger.info("Cleaning up environment...")
+    
+    # Kill any running bot processes
+    run_command("pkill -f 'python.*bot.py' || true")
+    run_command("pkill -f 'telebot' || true")
+    run_command("pkill -f 'keep_alive.py' || true")
+    run_command("pkill -f 'monitor_bot.py' || true")
+    
+    # Remove lock files
+    run_command("rm -f *.lock || true")
+    run_command("rm -f *.pid || true")
+    
+    # Give processes time to terminate
+    time.sleep(2)
+    
+    return True
+
+def start_keep_alive():
+    """Start the keep-alive server"""
+    logger.info("Starting keep-alive server...")
+    
+    # Check if keep_alive.py exists
+    if not os.path.exists("keep_alive.py"):
+        logger.error("keep_alive.py not found!")
+        return False
+        
+    # Start keep-alive in background
+    process = subprocess.Popen(
+        [sys.executable, "keep_alive.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True
+    )
+    
+    logger.info(f"Keep-alive server started with PID: {process.pid}")
+    
+    # Wait for server to start
+    time.sleep(5)
+    
+    # Check if server is responding
+    try:
+        result = run_command("curl -s http://localhost:5000/ping")
+        if result and "pong" in result.stdout:
+            logger.info("Keep-alive server is responding")
+            return True
+        else:
+            logger.warning("Keep-alive server not responding properly")
+            return False
+    except Exception as e:
+        logger.error(f"Error checking keep-alive server: {e}")
+        return False
+
+def start_bot_monitor():
+    """Start the bot monitor"""
+    logger.info("Starting bot monitor...")
+    
+    # Check if monitor_bot.py exists
+    if not os.path.exists("monitor_bot.py"):
+        logger.error("monitor_bot.py not found!")
+        return False
+        
+    # Create a monitor startup script for better reliability
+    with open("start_monitor.py", "w") as f:
+        f.write("""#!/usr/bin/env python3
+import os
+import sys
+import time
+import logging
+import subprocess
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("monitor_starter.log")
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("Starting bot monitor wrapper...")
+
+try:
+    # Verify monitor_bot.py exists
+    if not os.path.exists("monitor_bot.py"):
+        logger.error("monitor_bot.py not found!")
+        sys.exit(1)
+        
+    # Set environment variables
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    env['PYTHONUNBUFFERED'] = '1'
+    
+    # Start monitor process
+    process = subprocess.Popen(
+        [sys.executable, "monitor_bot.py"],
+        env=env,
+        start_new_session=True
+    )
+    
+    logger.info(f"Bot monitor started with PID: {process.pid}")
+    
+    # Keep this process running to ensure the monitor stays active
+    while True:
+        time.sleep(60)
+        # Check if process is still running
+        if process.poll() is not None:
+            logger.error("Bot monitor terminated, restarting...")
+            process = subprocess.Popen(
+                [sys.executable, "monitor_bot.py"],
+                env=env,
+                start_new_session=True
+            )
+            logger.info(f"Bot monitor restarted with PID: {process.pid}")
+            
+except Exception as e:
+    logger.error(f"Error in monitor wrapper: {e}")
+    import traceback
+    logger.error(traceback.format_exc())
+    sys.exit(1)
+""")
+        
+    # Set executable permission
+    try:
+        os.chmod("start_monitor.py", 0o755)
+    except Exception as e:
+        logger.warning(f"Could not set executable permission: {e}")
+    
+    # Redirect output to log files
+    stdout_log = open("monitor_stdout.log", "a")
+    stderr_log = open("monitor_stderr.log", "a")
+    
+    # Start monitor process with the wrapper
+    process = subprocess.Popen(
+        [sys.executable, "start_monitor.py"],
+        stdout=stdout_log,
+        stderr=stderr_log,
+        start_new_session=True
+    )
+    
+    logger.info(f"Bot monitor started with PID: {process.pid}")
+    time.sleep(2)
+    
+    # Check if process is still running
+    if process.poll() is not None:
+        logger.error("Bot monitor process terminated unexpectedly")
+        # Check for error output
+        with open("monitor_stderr.log", "r") as f:
+            errors = f.read().strip()
+            if errors:
+                logger.error(f"Monitor errors: {errors}")
+        return False
+        
+    logger.info("Bot monitor running successfully")
+    return True
+
+def start_payment_notifier():
+    """Start the payment notification service"""
+    logger.info("Starting payment notification service...")
+    
+    # Check if chapa_autopay.py exists - this is our enhanced auto-approval script
+    if os.path.exists("chapa_autopay.py"):
+        logger.info("Using enhanced auto-approval payment verification service")
+        script_name = "chapa_autopay.py"
+    elif os.path.exists("payment_notifier.py"):
+        logger.info("Using standard payment notification service")
+        script_name = "payment_notifier.py"
+    else:
+        logger.error("Payment notification service scripts not found!")
+        return False
+    
+    try:    
+        # Start payment notifier in background with proper output redirection
+        log_file = open("payment_notifier_stdout.log", "a")
+        err_file = open("payment_notifier_stderr.log", "a")
+        
+        process = subprocess.Popen(
+            [sys.executable, script_name],
+            stdout=log_file,
+            stderr=err_file,
+            start_new_session=True
+        )
+        
+        logger.info(f"Payment notification service started with PID: {process.pid}")
+        time.sleep(2)
+        
+        # Check if process is still running
+        if process.poll() is not None:
+            logger.error("Payment notification process terminated unexpectedly")
+            # Check for error output
+            with open("payment_notifier_stderr.log", "r") as f:
+                errors = f.read().strip()
+                if errors:
+                    logger.error(f"Payment notifier errors: {errors}")
+            return False
+            
+        logger.info("Payment notification service running successfully")
+        if script_name == "chapa_autopay.py":
+            logger.info("✅ Auto-approval for payments is now enabled via Chapa verification")
         return True
-    except IOError:
-        logger.error("Another bot instance is already running")
+    except Exception as e:
+        logger.error(f"Failed to start payment notification service: {e}")
         return False
-    except Exception as e:
-        logger.error(f"Error acquiring lock: {e}")
-        return False
-
-def release_lock():
-    """Release the lock file"""
-    global lock_file
-    if lock_file:
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
-            lock_file.close()
-            os.remove("bot.lock")
-        except Exception as e:
-            logger.error(f"Error releasing lock: {e}")
-
-def run_bot():
-    """Run the main bot process"""
-    try:
-        logger.info("Starting main bot process...")
-        env = os.environ.copy()
-
-        # Run the bot with subprocess for better control
-        bot_process = subprocess.Popen(
-            ["python", "bot.py"],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1
-        )
-
-        # Process and log the bot output
-        def log_output():
-            for line in bot_process.stdout:
-                logger.info(f"Bot output: {line.strip()}")
-
-        log_thread = threading.Thread(target=log_output, daemon=True)
-        log_thread.start()
-
-        return bot_process
-    except Exception as e:
-        logger.error(f"Error running bot: {e}")
-        return None
-
-def run_webhook_server():
-    """Run the Chapa webhook server if Chapa integration is enabled"""
-    if not os.environ.get('CHAPA_SECRET_KEY'):
-        logger.info("Chapa integration not configured, skipping webhook server")
-        return None
-
-    try:
-        logger.info("Starting Chapa webhook server...")
-        env = os.environ.copy()
-
-        webhook_process = subprocess.Popen(
-            ["python", "chapa_webhook.py"],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1
-        )
-
-        def log_output():
-            for line in webhook_process.stdout:
-                logger.info(f"Webhook server output: {line.strip()}")
-
-        log_thread = threading.Thread(target=log_output, daemon=True)
-        log_thread.start()
-
-        return webhook_process
-    except Exception as e:
-        logger.error(f"Error running webhook server: {e}")
-        return None
-
-def run_payment_verifier():
-    """Run the Chapa payment verifier if Chapa integration is enabled"""
-    # Check if Chapa secret key is set
-    if not os.environ.get('CHAPA_SECRET_KEY'):
-        logger.info("Chapa integration not configured, skipping payment verifier")
-        return None
-
-    try:
-        logger.info("Starting Chapa payment verifier...")
-        env = os.environ.copy()
-
-        # Run the payment verifier
-        verifier_process = subprocess.Popen(
-            ["python", "chapa_payment_verifier.py"],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1
-        )
-
-        # Process and log the verifier output in a separate thread
-        def log_output():
-            for line in verifier_process.stdout:
-                logger.info(f"Payment verifier output: {line.strip()}")
-
-        log_thread = threading.Thread(target=log_output, daemon=True)
-        log_thread.start()
-
-        return verifier_process
-    except Exception as e:
-        logger.error(f"Error running payment verifier: {e}")
-        return None
 
 def main():
-    """Main function to start the bot with clean environment"""
-    if not acquire_lock():
-        logger.error("Another instance is running. Exiting.")
-        return 1
-
+    """Main function"""
     try:
-        logger.info("Starting bot with clean environment...")
-
-        # First, run the cleanup script
+        logger.info("Starting bot runner...")
+        
+        # Clean up environment
+        cleanup_environment()
+        
+        # Start keep-alive server
         try:
-            logger.info("Running cleanup script...")
-            subprocess.run(["python", "clean_locks.py"], check=True)
-            logger.info("Cleanup complete")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Cleanup failed with error code {e.returncode}")
-            return 1
+            keep_alive_ok = start_keep_alive()
+            if not keep_alive_ok:
+                logger.warning("Keep-alive module not found, continuing without it")
         except Exception as e:
-            logger.error(f"Error running cleanup: {e}")
-            return 1
-
-        # Start the bot and additional services
-        processes = []
-
-        # Run the main bot
-        bot_process = run_bot()
-        if bot_process:
-            processes.append(('bot', bot_process))
-        else:
-            logger.error("Failed to start bot process")
-            return 1
-
-        # Run webhook server
-        webhook_process = run_webhook_server()
-        if webhook_process:
-            processes.append(('webhook', webhook_process))
-
-        # Run the payment verifier if Chapa is configured
-        verifier_process = run_payment_verifier()
-        if verifier_process:
-            processes.append(('verifier', verifier_process))
-
-        # Set up signal handler for graceful shutdown
-        def signal_handler(sig, frame):
-            logger.info(f"Received signal {sig}, shutting down gracefully...")
-            for name, process in processes:
-                logger.info(f"Terminating {name} process...")
-                try:
-                    process.terminate()
-                    process.wait(timeout=5)
-                    logger.info(f"{name} process terminated")
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"{name} process did not terminate, killing...")
-                    process.kill()
-                except Exception as e:
-                    logger.error(f"Error terminating {name} process: {e}")
-            sys.exit(0)
-
-        signal.signal(signal.SIGTERM, signal_handler)
-        signal.signal(signal.SIGINT, signal_handler)
-
-        # Wait for bot process to exit
+            logger.warning(f"Error starting keep-alive: {e}")
+        
+        # Start payment notification service
         try:
-            while True:
-                # Check if bot process is still running
-                if bot_process.poll() is not None:
-                    return_code = bot_process.returncode
-                    logger.info(f"Bot process exited with code {return_code}")
-                    break
-
-                # Sleep to avoid CPU spinning
-                time.sleep(1)
-
-            # If we reach here, bot process has exited, terminate other processes
-            for name, process in processes:
-                if process.poll() is None:
-                    logger.info(f"Terminating {name} process...")
-                    try:
-                        process.terminate()
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                    except Exception as e:
-                        logger.error(f"Error terminating {name} process: {e}")
-
-            if return_code != 0:
-                logger.error("Bot process exited with error")
-                return 1
-
-            return 0
-        except KeyboardInterrupt:
-            # Handle Ctrl+C
-            logger.info("Received keyboard interrupt, shutting down...")
-            signal_handler(signal.SIGINT, None)
-            return 0
-
-    finally:
-        release_lock()
+            payment_notifier_ok = start_payment_notifier()
+            if not payment_notifier_ok:
+                logger.warning("Payment notification service failed to start, continuing without it")
+        except Exception as e:
+            logger.warning(f"Error starting payment notification service: {e}")
+        
+        # Start bot monitor
+        monitor_ok = start_bot_monitor()
+        if not monitor_ok:
+            logger.error("Failed to start bot monitor")
+            return 1
+            
+        logger.info("Bot startup complete")
+        return 0
+        
+    except KeyboardInterrupt:
+        logger.info("Startup interrupted by user")
+        return 0
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())
