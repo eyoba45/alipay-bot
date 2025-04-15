@@ -1,6 +1,6 @@
 """
-Digital Shopping Companion with Ethiopian Female Character
-A beautiful Ethiopian shopping assistant with AI-powered personality and Amharic voice capabilities
+AliPay ETH Bot AI Assistant
+A helpful AI assistant for the AliPay ETH Telegram bot with complete knowledge of all bot features
 """
 
 import os
@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 
 class DigitalCompanion:
-    """Digital Shopping Companion with Ethiopian female character and Amharic voice capabilities"""
+    """AI Assistant for the AliPay ETH Telegram bot with complete knowledge of all bot features"""
     
     def __init__(self, bot):
         """Initialize the digital companion"""
@@ -33,7 +33,7 @@ class DigitalCompanion:
         self.ai_client = GroqClient(api_key=os.environ.get("GROQ_API_KEY"))
         self.companion_profiles = COMPANION_PROFILES
         self.avatar_folder = "avatars"
-        self.model = "llama3-8b-8192"  # Default Llama model on Groq
+        self.model = "llama3-70b-8192"  # Default Llama model on Groq
         
         # Create avatars folder if it doesn't exist
         if not os.path.exists(self.avatar_folder):
@@ -57,7 +57,7 @@ class DigitalCompanion:
                     user_id=user.id,
                     companion_name="AI Assistant",
                     relationship_level=1,
-                    preferred_language="amharic",
+                    preferred_language="english",
                     interaction_style="friendly"
                 )
                 session.add(profile)
@@ -220,7 +220,7 @@ class DigitalCompanion:
             
         except Exception as e:
             self.logger.error(f"Groq API error: {e}")
-            return "ይቅርታ, አሁን መልስ ለመስጠት አልቻልኩም። እባክዎ ቆይተው ይሞክሩ። (Sorry, I couldn't respond right now. Please try again later.)"
+            return "Sorry, I couldn't respond right now. Please try again later."
     
     def _create_system_prompt(self, user_data):
         """Create system prompt for Anthropic based on companion personality and relationship level"""
@@ -306,7 +306,7 @@ class DigitalCompanion:
         # Shopping help button
         if callback_data == "companion_shopping":
             self.bot.answer_callback_query(call.id)
-            message = "በምን መንገድ ልርዳዎት? ምርት መፈለግ፣ ትዕዛዝ ማስቀመጥ፣ ወይም የእርስዎን ትዕዛዞች መከታተል? (How can I help you with shopping? Find a product, place an order, or track your orders?)"
+            message = "How can I help you with the bot features? Find a product, place an order, or track your orders?"
             self.bot.send_message(
                 call.message.chat.id,
                 message,
@@ -317,7 +317,7 @@ class DigitalCompanion:
         # Questions button
         elif callback_data == "companion_questions":
             self.bot.answer_callback_query(call.id)
-            message = "ስለ ትዕዛዝዎ፣ ስለ ክፍያ ወይም ስለ ተመላሽ ምን ጥያቄ አለዎት? (What questions do you have about orders, payment, or refunds?)"
+            message = "What questions do you have about orders, payment, or refunds?"
             self.bot.send_message(
                 call.message.chat.id,
                 message,
@@ -328,7 +328,7 @@ class DigitalCompanion:
         # Recommendations button
         elif callback_data == "companion_recommendations":
             self.bot.answer_callback_query(call.id)
-            message = "ዛሬ ምን ዓይነት ምርቶችን ማየት ይፈልጋሉ? የሚመርጡትን ልለይልዎ። (What kind of products would you like to see today? I can find recommendations for you.)"
+            message = "What kind of products would you like to see today? I can find recommendations for you."
             self.bot.send_message(
                 call.message.chat.id,
                 message,
@@ -339,7 +339,7 @@ class DigitalCompanion:
         # Chat button
         elif callback_data == "companion_chat":
             self.bot.answer_callback_query(call.id)
-            message = "እሺ፣ ስለ ምን መወያየት ይፈልጋሉ? እዚህ አለሁ፣ ማዳመጥ እወዳለሁ። (Sure, what would you like to chat about? I'm here and happy to listen.)"
+            message = "Sure, what would you like to chat about? I'm here and happy to listen."
             self.bot.send_message(
                 call.message.chat.id,
                 message
@@ -350,7 +350,7 @@ class DigitalCompanion:
         elif callback_data.startswith("companion_category_"):
             category = callback_data.replace("companion_category_", "")
             self.bot.answer_callback_query(call.id)
-            message = f"የ{category} ምርቶችን እመርጥልዎታለሁ። ዛሬ ምን እየፈለጉ ነው? (I'm selecting some {category} products for you. What specifically are you looking for today?)"
+            message = f"I'm selecting some {category} products for you. What specifically are you looking for today?"
             self.bot.send_message(
                 call.message.chat.id,
                 message
@@ -366,7 +366,7 @@ class DigitalCompanion:
         # Find products button
         elif callback_data == "companion_find_products":
             self.bot.answer_callback_query(call.id)
-            message = "ምን አይነት ምርት እየፈለጉ ነው? ተጨማሪ ዝርዝሮችን ይንገሩኝ። (What kind of product are you looking for? Please tell me more details.)"
+            message = "What kind of product are you looking for? Please tell me more details."
             self.bot.send_message(
                 call.message.chat.id,
                 message
@@ -376,7 +376,7 @@ class DigitalCompanion:
         # Place order button
         elif callback_data == "companion_place_order":
             self.bot.answer_callback_query(call.id)
-            message = "ትዕዛዝ ለማስገባት ዝግጁ ነዎት? የአሊፕይ ኢቲኤች የትዕዛዝ ማስገባት ሂደትን አመቻችቻለሁ። (Ready to place an order? I'll guide you through the AliPay ETH ordering process.)"
+            message = "Ready to place an order? I'll guide you through the AliPay ETH ordering process."
             self.bot.send_message(
                 call.message.chat.id,
                 message,
@@ -387,7 +387,7 @@ class DigitalCompanion:
         # Track order button
         elif callback_data == "companion_track_order":
             self.bot.answer_callback_query(call.id)
-            message = "ትዕዛዝዎን መከታተል ይፈልጋሉ? የትዕዛዝ ቁጥርዎን ይሰጡኝ እና አግኝቼ እረዳዎታለሁ። (Would you like to track your order? Please provide your order number and I'll help you find it.)"
+            message = "Would you like to track your order? Please provide your order number and I'll help you find it."
             self.bot.send_message(
                 call.message.chat.id,
                 message,
@@ -400,11 +400,11 @@ class DigitalCompanion:
             self.bot.answer_callback_query(call.id)
             
             if callback_data == "companion_about_payment":
-                message = "ክፍያ ለመፈጸም የተለያዩ አማራጮች አሉ፤ ቴሌብር፣ ሲቢኢ፣ ወይም ቻፓ። ልክ እንደተመዘገቡ የ100 ብር የምዝገባ ክፍያ እና ወርሃዊ 150 ብር ($1) የደንበኝነት ክፍያ ይኖራል። ምን ተጨማሪ ጥያቄ አለዎት? (There are various payment options available: TeleBirr, CBE, or Chapa. You'll need to pay a 100 ETB registration fee once, and a monthly subscription of 150 ETB ($1). What else would you like to know?)"
+                message = "There are various payment options available: TeleBirr, CBE, or Chapa. You'll need to pay a 200 ETB registration fee once, and a monthly subscription of 150 ETB ($1). What else would you like to know?"
             elif callback_data == "companion_about_orders":
-                message = "በአሊፕይ ኢቲኤች የሚደረግ ትዕዛዝ ሂደት ቀላል ነው። ከአሊኤክስፕረስ የሚፈልጉትን ምርት ይምረጡ፣ ሊንኩን ይላኩ፣ እና ለዚያ ትዕዛዝ ገንዘብ ያስቀምጡ። ትዕዛዝን እና ማድረስን እኛ እንከታተላለን። ሌላ ምን ማወቅ ይፈልጋሉ? (The ordering process with AliPay ETH is simple. Find your product on AliExpress, send us the link, and make a deposit for that order. We'll handle the ordering and delivery tracking. What else would you like to know?)"
+                message = "The ordering process with AliPay ETH is simple. Find your product on AliExpress, send us the link, and make a deposit for that order. We'll handle the ordering and delivery tracking. What else would you like to know?"
             else:  # delivery_time
-                message = "የማድረስ ጊዜ በተለያዩ ሁኔታዎች ላይ ይወሰናል። አብዛኛው የጭነት ዓይነት ከ2-4 ሳምንታት ይወስዳል። ፈጣን ማስረከብ ከፈለጉ ይህንን ሊጠይቁ ይችላሉ፣ ግን ተጨማሪ ክፍያ ሊኖረው ይችላል። ምን ተጨማሪ ዝርዝሮችን ማወቅ ይፈልጋሉ? (Delivery time depends on various factors. Most shipping methods take 2-4 weeks. You can request expedited delivery, but it may cost extra. What other details would you like to know?)"
+                message = "Delivery time depends on various factors. Most shipping methods take 2-4 weeks. You can request expedited delivery, but it may cost extra. What other details would you like to know?"
                 
             self.bot.send_message(
                 call.message.chat.id,
@@ -474,14 +474,14 @@ class DigitalCompanion:
         return markup
     
     def send_voice_message(self, chat_id, text, user_data=None):
-        """Send Amharic voice message"""
+        """Send voice message"""
         if not user_data:
             user_data = self.get_user_companion(chat_id)
             if not user_data:
                 return False
         
-        # Extract Amharic text (before parentheses with English)
-        amharic_text = text.split('(')[0].strip() if '(' in text else text
+        # Extract main text (before any parentheses)
+        main_text = text.split('(')[0].strip() if '(' in text else text
         
         # Show recording action
         self.bot.send_chat_action(chat_id, 'record_audio')
@@ -518,15 +518,15 @@ class DigitalCompanion:
         try:
             # Create system prompt for briefing
             system_prompt = f"""
-            You are {user_data['config']['name']}, a beautiful Ethiopian shopping assistant.
+            You are {user_data['config']['name']}, a knowledgeable AI Assistant for the bot.
             
             Generate a warm, friendly morning briefing for {user_data['user_name']} that includes:
             1. A personalized greeting
-            2. A brief update on new AliExpress deals that might interest them
-            3. A reminder about any subscription or balance information
+            2. A brief reminder about the bot's features they might find useful
+            3. A reminder about subscription or balance information if applicable
             
             Keep it concise (3-4 sentences) and engaging.
-            Always provide both Amharic and English translations, with Amharic first.
+            Use only English for all communications.
             """
             
             # Generate briefing with Groq Llama model
