@@ -213,110 +213,31 @@ def start_message(message):
         # Check if user is admin
         is_admin_user = is_admin(chat_id)
 
-        # Define welcome animation function directly in the file
-        def send_personalized_welcome(bot, chat_id, user_data=None):
-            """Send a personalized welcome message with captivating animation sequence"""
-            try:
-                # Get user's name if available
-                name = "there"
-                if user_data and 'name' in user_data and user_data['name']:
-                    name = user_data['name']
-
-                # ANIMATION SEQUENCE STARTS
-
-                # First send a typing indicator to create anticipation
-                bot.send_chat_action(chat_id, 'typing')
-                time.sleep(1)  # Pause for effect
-
-                # First animation frame - loading
-                loading_msg = bot.send_message(
-                    chat_id, 
-                    "⏳ <b>Initializing AliPay_ETH services...</b>",
-                    parse_mode='HTML'
-                )
-                time.sleep(1.5)  # Pause for effect
-
-                # Second animation frame
-                bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=loading_msg.message_id,
-                    text="🔍 <b>Searching for user profile...</b>",
-                    parse_mode='HTML'
-                )
-
-                # Show typing indicator again
-                bot.send_chat_action(chat_id, 'typing')
-                time.sleep(1.2)  # Slightly different pause for natural feel
-
-                # Third animation frame
-                bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=loading_msg.message_id,
-                    text=f"✅ <b>User found: {name}</b>\n🔄 Preparing customized interface...",
-                    parse_mode='HTML'
-                )
-                time.sleep(1.2)
-
-                # Final animation frame before welcome message
-                bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=loading_msg.message_id,
-                    text="🚀 <b>Launching personalized experience...</b>",
-                    parse_mode='HTML'
-                )
-                time.sleep(1)
-
-                # MAIN WELCOME MESSAGE
-
-                # Create an eye-catching welcome message with custom formatting
-                welcome_message = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮
-    ✨✨✨ <b>WELCOME TO ALIPAY_ETH</b> ✨✨✨
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
-
-🌟 <b>Hello, {name.upper()}!</b> 🌟
-
-We're thrilled to have you join our community of savvy Ethiopian shoppers!
-
-┏━━━━━━ <b>OUR SERVICES</b> ━━━━━━┓
-┃                                 ┃
-┃  🛍️ Shop AliExpress with ETB    ┃
-┃  💳 Easy local payments         ┃
-┃  🚚 Reliable delivery tracking  ┃
-┃  🔐 Secure transaction handling ┃
-┃  💬 24/7 customer support      ┃
-┃                                 ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-<i>Your seamless shopping experience begins now!</i>
-                """
-
-                # Delete the animation message
-                bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
-
-                # Send the final welcome message
-                final_msg = bot.send_message(
-                    chat_id,
-                    welcome_message,
-                    parse_mode='HTML'
-                )
-
-                return final_msg
-
-            except Exception as e:
-                logger.error(f"Error in personalized welcome: {e}")
-                # Return simple message on error
-                return bot.send_message(
-                    chat_id,
-                    f"<b>Hello!</b>\n\n✨ Welcome to AliPay_ETH! ✨",
-                    parse_mode='HTML'
-                )
-
         # Get user's name if registered
         user_name = user.name if user else message.from_user.first_name if message.from_user else None
 
-        # Send animated welcome message
-        logger.info(f"Sending personalized welcome to user {chat_id}")
+        # Import and use the enhanced welcome animation module
+        try:
+            from welcome_animation import send_personalized_welcome
+            logger.info(f"Using enhanced welcome animation with personality introduction for user {chat_id}")
+        except ImportError:
+            logger.warning("Enhanced welcome animation module not found, using fallback welcome")
+            
+            # Define fallback welcome animation function
+            def send_personalized_welcome(bot, chat_id, user_data=None):
+                """Fallback welcome message if module not available"""
+                name = "there"
+                if user_data and 'name' in user_data and user_data['name']:
+                    name = user_data['name']
+                    
+                return bot.send_message(
+                    chat_id,
+                    f"<b>Hello {name}!</b>\n\n✨ Welcome to AliPay_ETH! ✨\n\nYour Ethiopian gateway to AliExpress shopping.",
+                    parse_mode='HTML'
+                )
+
+        # Send animated welcome message with bot personality introduction
+        logger.info(f"Sending personalized welcome with bot personality to user {chat_id}")
         send_personalized_welcome(bot, chat_id, {'name': user_name})
 
         # Different welcome message for admins
@@ -1446,6 +1367,35 @@ Each successful referral earns you 50 points that can be converted to account ba
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
+            
+            # Send tutorial offer after a short delay
+            time.sleep(3)  # Give user time to read welcome message
+            try:
+                # Create tutorial offer with inline buttons
+                tutorial_markup = telebot.types.InlineKeyboardMarkup()
+                tutorial_markup.row(
+                    telebot.types.InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="help_tutorial"),
+                    telebot.types.InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
+                )
+                
+                bot.send_message(
+                    user_id,
+                    """
+<b>🎓 Would you like to take a quick tutorial?</b>
+
+Learn how to use all features of our service in just a few minutes!
+The interactive guide will show you how to:
+• Deposit funds
+• Submit and track orders
+• Use the referral system
+• And more!
+""",
+                    parse_mode='HTML',
+                    reply_markup=tutorial_markup
+                )
+                logger.info(f"Sent tutorial offer to newly registered user {user_id}")
+            except Exception as tutorial_err:
+                logger.error(f"Error sending tutorial offer: {tutorial_err}")
 
             # Update admin message
             bot.edit_message_text(
@@ -1979,11 +1929,12 @@ def check_balance(message):
             # Get referral count
             referral_count = 0
             try:
-                query = """
+                from sqlalchemy import text
+                query = text("""
                 SELECT COUNT(*) as count
                 FROM referrals
                 WHERE referrer_id = :user_id
-                """
+                """)
                 result = session.execute(query, {'user_id': user.id}).fetchone()
                 referral_count = result.count if result else 0
             except Exception as ref_err:
@@ -2049,11 +2000,12 @@ Click 🔑 Register to create your account.
             user_badge = get_user_badge(user.id)
             
             # Count user's referrals
-            query = """
+            from sqlalchemy import text
+            query = text("""
             SELECT COUNT(*) as count
             FROM referrals
             WHERE referrer_id = :user_id
-            """
+            """)
             result = session.execute(query, {'user_id': user.id}).fetchone()
             referral_count = result.count if result else 0
             
@@ -2219,11 +2171,12 @@ Click 🔑 Register to create your account.
         referral_url = get_referral_url(referral_code)
         
         # Count user's successful referrals
-        query = """
+        from sqlalchemy import text
+        query = text("""
         SELECT COUNT(*) as count
         FROM referrals
         WHERE referrer_id = :user_id
-        """
+        """)
         result = session.execute(query, {'user_id': user.id}).fetchone()
         referral_count = result.count if result else 0
         
@@ -4868,12 +4821,13 @@ def system_stats(message):
 
 @bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
 def help_center(message):
-    """Handle Help Center button with all necessary information"""
+    """Handle Help Center button with all necessary information and interactive tutorial access"""
     chat_id = message.chat.id
 
     # Create help center inline buttons
     help_markup = InlineKeyboardMarkup(row_width=1)
     help_markup.add(
+        InlineKeyboardButton("🎓 Interactive Tutorial", callback_data="help_tutorial"),
         InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
         InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
         InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
@@ -4890,9 +4844,12 @@ def help_center(message):
 
 <b>Welcome to AliPay_ETH Help Center!</b>
 
+<i>New to the bot? Try our 5-minute Interactive Tutorial!</i>
+
 How can we assist you today? Select a topic below to get detailed information and step-by-step guides.
 
 <b>📋 AVAILABLE HELP TOPICS:</b>
+• Interactive Tutorial - Guided walkthrough of all features
 • Registration Process
 • Deposit Methods
 • Ordering from AliExpress
@@ -4907,11 +4864,56 @@ How can we assist you today? Select a topic below to get detailed information an
         reply_markup=help_markup
     )
 
+@bot.callback_query_handler(func=lambda call: call.data == "skip_tutorial")
+def handle_skip_tutorial(call):
+    """Handle skip tutorial button"""
+    chat_id = call.message.chat.id
+    
+    try:
+        # Acknowledge the skip action
+        bot.answer_callback_query(call.id, "Tutorial skipped. You can always access it from the Help Center.")
+        
+        # Update the message to show it was skipped
+        bot.edit_message_text(
+            """
+<b>📝 Tutorial Skipped</b>
+
+You've chosen to explore the bot on your own. 
+Remember, you can always access the tutorial later by:
+• Going to the Help Center from the main menu
+• Using the /tutorial command
+
+Happy exploring! Feel free to ask if you need any help.
+""",
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            parse_mode='HTML'
+        )
+        
+        logger.info(f"User {chat_id} skipped the tutorial")
+    except Exception as e:
+        logger.error(f"Error handling skip tutorial: {e}")
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('help_'))
 def handle_help_buttons(call):
     """Handle help center button callbacks"""
     chat_id = call.message.chat.id
     help_topic = call.data.split('_')[1]
+
+    # Handle tutorial callback specifically
+    if help_topic == "tutorial":
+        # Import the tutorial module
+        try:
+            from bot_tutorial import start_tutorial, handle_tutorial_callback
+            # Start the tutorial and indicate it was launched from help center
+            start_tutorial(bot, call.message, from_help=True)
+            bot.answer_callback_query(call.id)
+            return
+        except Exception as e:
+            logger.error(f"Error starting tutorial: {e}")
+            logger.error(traceback.format_exc())
+            bot.answer_callback_query(call.id, "Tutorial currently unavailable")
+            return
 
     # Back button for all help responses
     back_markup = InlineKeyboardMarkup()
@@ -5039,6 +5041,7 @@ def handle_help_buttons(call):
         # Return to the main help center menu
         help_markup = InlineKeyboardMarkup(row_width=1)
         help_markup.add(
+            InlineKeyboardButton("🎓 Interactive Tutorial", callback_data="help_tutorial"),
             InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
             InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
             InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
@@ -5359,11 +5362,12 @@ Enter how many points you want to redeem:
             # Redirect to the referral badges function directly
             try:
                 # Count user's successful referrals
-                query = """
+                from sqlalchemy import text
+                query = text("""
                 SELECT COUNT(*) as count
                 FROM referrals
                 WHERE referrer_id = :user_id
-                """
+                """)
                 result = session.execute(query, {'user_id': user.id}).fetchone()
                 referral_count = result.count if result else 0
                 
@@ -5458,11 +5462,12 @@ Enter how many points you want to redeem:
                 referral_url = get_referral_url(referral_code)
                 
                 # Count user's successful referrals
-                query = """
+                from sqlalchemy import text
+                query = text("""
                 SELECT COUNT(*) as count
                 FROM referrals
                 WHERE referrer_id = :user_id
-                """
+                """)
                 result = session.execute(query, {'user_id': user.id}).fetchone()
                 referral_count = result.count if result else 0
                 
@@ -5662,6 +5667,21 @@ def main():
         except Exception as e:
             logger.error(f"Failed to initialize AI Assistant: {e}")
             digital_companion = None
+            
+    # Initialize tutorial handlers
+    try:
+        from bot_commands import add_tutorial_handlers, setup_help_center_tutorial
+        tutorial_success = add_tutorial_handlers(bot)
+        help_center_success = setup_help_center_tutorial(bot)
+        
+        if tutorial_success:
+            logger.info("✅ Interactive Tutorial enabled with /tutorial command")
+        
+        if help_center_success:
+            logger.info("✅ Help Center tutorial integration enabled")
+    except Exception as e:
+        logger.error(f"Failed to initialize Tutorial: {e}")
+        logger.error(traceback.format_exc())
 
     # Delete any existing webhook
     try:
