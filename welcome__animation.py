@@ -41,7 +41,7 @@ BOT_PERSONALITY = {
 }
 
 def send_personalized_welcome(bot, chat_id, user_data=None):
-    """Send a personalized welcome message with animated bot introduction
+    """Send a personalized welcome message with enhanced animated bot introduction
     
     Args:
         bot: Telegram bot instance
@@ -57,107 +57,181 @@ def send_personalized_welcome(bot, chat_id, user_data=None):
         if user_data and 'name' in user_data and user_data['name']:
             name = user_data['name']
         
-        # ANIMATION SEQUENCE - STAGE 1: Initial Connection
-        
         # First send a typing indicator to create anticipation
         bot.send_chat_action(chat_id, 'typing')
-        time.sleep(1)  # Pause for effect
+        time.sleep(0.8)
         
-        # First animation frame - connection established
+        # =============== STAGE 1: SYSTEM BOOT SEQUENCE ===============
+        # Create an animated loading sequence with progress indicators
+        loading_frames = ["⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛ 0%", "🟩⬛⬛⬛⬛⬛⬛⬛⬛⬛ 10%", 
+                         "🟩🟩⬛⬛⬛⬛⬛⬛⬛⬛ 20%", "🟩🟩🟩⬛⬛⬛⬛⬛⬛⬛ 30%", 
+                         "🟩🟩🟩🟩⬛⬛⬛⬛⬛⬛ 40%", "🟩🟩🟩🟩🟩⬛⬛⬛⬛⬛ 50%",
+                         "🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛ 60%", "🟩🟩🟩🟩🟩🟩🟩⬛⬛⬛ 70%",
+                         "🟩🟩🟩🟩🟩🟩🟩🟩⬛⬛ 80%", "🟩🟩🟩🟩🟩🟩🟩🟩🟩⬛ 90%",
+                         "🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 100%"]
+        
+        # Initial message with system boot animation
         loading_msg = bot.send_message(
             chat_id, 
-            "🔄 <b>Establishing secure connection...</b>",
-            parse_mode='HTML'
-        )
-        time.sleep(1.2)  # Pause for effect
-        
-        # ANIMATION SEQUENCE - STAGE 2: System Boot
-        
-        # Second animation frame - system initialization
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=loading_msg.message_id,
-            text="⚙️ <b>Initializing AliPay_ETH systems...</b>",
-            parse_mode='HTML'
-        )
-        time.sleep(1.5)  # Slightly longer pause for effect
-        
-        # Third animation frame - user detection
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=loading_msg.message_id,
-            text="🔍 <b>Detecting user profile...</b>",
+            f"🔄 <b>SYSTEM BOOT SEQUENCE INITIATED</b>\n\n"
+            f"🔐 Establishing secure connection...\n"
+            f"{loading_frames[0]}",
             parse_mode='HTML'
         )
         
-        # Show typing indicator again
+        # Animated loading bar
+        for i in range(1, len(loading_frames)):
+            time.sleep(0.4)  # Quick animation for the loading bar
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=loading_msg.message_id,
+                text=f"🔄 <b>SYSTEM BOOT SEQUENCE INITIATED</b>\n\n"
+                    f"🔐 Establishing secure connection...\n"
+                    f"{loading_frames[i]}",
+                parse_mode='HTML'
+            )
+        
+        # =============== STAGE 2: SYSTEM INITIALIZATION ===============
+        time.sleep(0.5)
+        
+        # System initialization animation with spinning effect
+        init_frames = ["⚙️ <b>Initializing AliPay_ETH systems</b> ⏳", 
+                       "⚙️ <b>Initializing AliPay_ETH systems.</b> ⏳",
+                       "⚙️ <b>Initializing AliPay_ETH systems..</b> ⏳", 
+                       "⚙️ <b>Initializing AliPay_ETH systems...</b> ⏳"]
+        
+        for frame in init_frames * 2:  # Repeat the animation twice
+            time.sleep(0.3)
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=loading_msg.message_id,
+                text=f"{frame}\n\n"
+                    f"✅ Secure connection established\n"
+                    f"⏳ Loading core modules...\n"
+                    f"{loading_frames[-1]}",
+                parse_mode='HTML'
+            )
+        
+        # =============== STAGE 3: USER DETECTION & VERIFICATION ===============
+        # Show typing indicator again for natural conversation flow
         bot.send_chat_action(chat_id, 'typing')
-        time.sleep(1.3)  # Slightly different pause for natural feel
+        time.sleep(0.8)
         
-        # ANIMATION SEQUENCE - STAGE 3: Personality Activation
+        # User detection animation
+        scan_frames = ["🔍 <b>Scanning for user profile</b> |", 
+                      "🔍 <b>Scanning for user profile</b> /", 
+                      "🔍 <b>Scanning for user profile</b> —", 
+                      "🔍 <b>Scanning for user profile</b> \\"]
         
-        # Fourth animation frame - user found
+        for frame in scan_frames * 2:  # Repeat the animation twice
+            time.sleep(0.3)
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=loading_msg.message_id,
+                text=f"{frame}\n\n"
+                    f"✅ Secure connection established\n"
+                    f"✅ Core modules loaded\n"
+                    f"⏳ Identifying user...",
+                parse_mode='HTML'
+            )
+        
+        # User identified with custom data
         bot.edit_message_text(
             chat_id=chat_id,
             message_id=loading_msg.message_id,
-            text=f"✅ <b>User identified: {name}</b>\n🔄 Activating personality matrix...",
+            text=f"✅ <b>USER PROFILE DETECTED</b>\n\n"
+                f"👤 <b>User:</b> {name}\n"
+                f"🆔 <b>ID:</b> {chat_id}\n"
+                f"🌐 <b>Platform:</b> Telegram\n"
+                f"🔄 Activating assistant protocols...",
             parse_mode='HTML'
         )
-        time.sleep(1.4)
+        time.sleep(1.2)
         
-        # Fifth animation frame - personality engaged
+        # =============== STAGE 4: PERSONALITY MATRIX ACTIVATION ===============
+        # Visual startup sequence for the AI assistant personality
         bot.edit_message_text(
             chat_id=chat_id,
             message_id=loading_msg.message_id,
-            text="🤖 <b>AI Assistant personality engaged!</b>\n🚀 Launching personalized interface...",
+            text=f"🤖 <b>AI ASSISTANT INITIALIZATION</b>\n\n"
+                f"<pre>Loading personality matrix...</pre>\n"
+                f"<pre>Calibrating response patterns...</pre>\n"
+                f"<pre>Syncing language modules...</pre>\n"
+                f"<pre>Optimizing user experience...</pre>",
             parse_mode='HTML'
         )
-        time.sleep(1)
+        time.sleep(1.2)
         
-        # MAIN WELCOME MESSAGE WITH PERSONALITY INTRODUCTION
+        # Final activation with flashing effect
+        activation_frames = [
+            "🚀 <b>LAUNCHING ALIPAY_ETH INTERFACE</b> 🚀",
+            "🌟 <b>LAUNCHING ALIPAY_ETH INTERFACE</b> 🌟",
+            "💫 <b>LAUNCHING ALIPAY_ETH INTERFACE</b> 💫",
+            "✨ <b>LAUNCHING ALIPAY_ETH INTERFACE</b> ✨"
+        ]
         
+        for frame in activation_frames:
+            time.sleep(0.3)
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=loading_msg.message_id,
+                text=f"{frame}\n\n"
+                    f"<pre>Personality: ACTIVE</pre>\n"
+                    f"<pre>Systems: ONLINE</pre>\n"
+                    f"<pre>Status: READY</pre>\n"
+                    f"<pre>User Experience: OPTIMIZED</pre>",
+                parse_mode='HTML'
+            )
+        
+        # =============== MAIN WELCOME MESSAGE WITH RICH FORMATTING ===============
         # Select random elements for personality variation
         slogan = random.choice(BOT_PERSONALITY["slogans"])
         greeting = random.choice(BOT_PERSONALITY["greetings"])
         traits = random.sample(BOT_PERSONALITY["traits"], 3)  # Pick 3 random traits
         
-        # Create an eye-catching welcome message with bot personality
+        # Enhanced border pattern
+        border_top = "╭" + "━" * 48 + "╮"
+        border_bottom = "╰" + "━" * 48 + "╯"
+        
+        # Create a visually stunning welcome message with emoji decorations
         welcome_message = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+{border_top}
     ✨✨✨ <b>WELCOME TO ALIPAY_ETH</b> ✨✨✨
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+{border_bottom}
 
 🌟 <b>Hello, {name.upper()}!</b> 🌟
 
-I'm your AliPay_ETH assistant, and I'm here to make your 
+I'm your <b>AliPay_ETH assistant</b>, and I'm here to make your 
 AliExpress shopping experience seamless and enjoyable!
 
-<b>{slogan}</b>
+📣 <b>{slogan}</b> 📣
 
-┏━━━━━━ <b>WHO I AM</b> ━━━━━━┓
-┃                              ┃
-┃  ✓ {traits[0]}  ┃
-┃  ✓ {traits[1]}  ┃
-┃  ✓ {traits[2]}  ┃
-┃                              ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━━━━━━━ <b>WHO I AM</b> ━━━━━━━━━┓
+┃                                   ┃
+┃  ✅ {traits[0]}  ┃
+┃  ✅ {traits[1]}  ┃
+┃  ✅ {traits[2]}  ┃
+┃                                   ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-<i>{greeting}</i>
+<i>"{greeting}"</i>
 
-<b>Let's get started with an amazing shopping experience!</b>
+🚀 <b>Let's get started with an amazing shopping experience!</b> 🚀
+
+💡 <b>TIP:</b> Use the menu buttons below to navigate through all services
         """
         
         # Delete the animation message
         bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
         
-        # Send final welcome message
+        # Send the final welcome message with keyboard
         message = bot.send_message(
             chat_id,
             welcome_message,
             parse_mode='HTML'
         )
         
-        logger.info(f"Sent personalized welcome with bot personality introduction to user {chat_id}")
+        logger.info(f"Sent enhanced animated welcome with bot personality introduction to user {chat_id}")
         return message
         
     except Exception as e:
