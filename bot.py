@@ -219,8 +219,9 @@ def start_message(message):
         # Import and use the enhanced welcome animation module
         try:
             from welcome_animation import send_personalized_welcome
-            logger.info(f"Using enhanced welcome animation with personality introduction for user {chat_id}")
-        except ImportError:
+            logger.info(f"✅ Successfully imported welcome animation module for user {chat_id}")
+        except ImportError as e:
+            logger.error(f"❌ Failed to import welcome animation module: {e}")
             logger.warning("Enhanced welcome animation module not found, using fallback welcome")
             
             # Define fallback welcome animation function
@@ -237,8 +238,32 @@ def start_message(message):
                 )
 
         # Send animated welcome message with bot personality introduction
-        logger.info(f"Sending personalized welcome with bot personality to user {chat_id}")
-        send_personalized_welcome(bot, chat_id, {'name': user_name})
+        logger.info(f"Attempting to send personalized welcome animation to user {chat_id}")
+        try:
+            # Check if welcome_animation.py has the proper function and content
+            import os
+            welcome_path = os.path.join(os.getcwd(), 'welcome_animation.py')
+            if os.path.exists(welcome_path):
+                logger.info(f"✅ welcome_animation.py file exists at {welcome_path}")
+                with open(welcome_path, 'r') as f:
+                    content_length = len(f.read())
+                    logger.info(f"✅ welcome_animation.py file size: {content_length} bytes")
+            else:
+                logger.error(f"❌ welcome_animation.py file DOES NOT EXIST at {welcome_path}")
+            
+            # Call the welcome animation function with appropriate error handling
+            welcome_message = send_personalized_welcome(bot, chat_id, {'name': user_name})
+            logger.info(f"✅ Successfully sent welcome animation to user {chat_id}")
+            return welcome_message
+        except Exception as e:
+            logger.error(f"❌ Error sending welcome animation: {str(e)}")
+            logger.error(f"❌ Error type: {type(e).__name__}")
+            # Send fallback message directly if animation fails
+            return bot.send_message(
+                chat_id,
+                f"<b>Hello {user_name or 'there'}!</b>\n\n✨ Welcome to AliPay_ETH! ✨\n\nYour Ethiopian gateway to AliExpress shopping.",
+                parse_mode='HTML'
+            )
 
         # Different welcome message for admins
         if is_admin_user:
