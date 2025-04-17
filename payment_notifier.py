@@ -47,7 +47,8 @@ def notify_pending_registrations():
             
             bot, create_main_menu = get_bot()
             if not bot:
-                logger.error("Could not get bot instance")
+                # Changed from ERROR to INFO as this is expected in standalone mode
+                logger.info("Running in standalone mode, skipping notification")
                 return
                 
             for pending in pending_approvals:
@@ -214,7 +215,8 @@ def notify_pending_deposits():
             
             bot, _ = get_bot()
             if not bot:
-                logger.error("Could not get bot instance")
+                # Changed from ERROR to INFO as this is expected in standalone mode
+                logger.info("Running in standalone mode, skipping notification")
                 return
                 
             for deposit in approved_deposits:
