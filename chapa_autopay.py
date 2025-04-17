@@ -23,13 +23,40 @@ logger = logging.getLogger(__name__)
 VERIFICATION_INTERVAL = 15
 
 def get_bot():
-    """Import and return bot instance"""
+    """Import and return bot instance - with improved reliability"""
     try:
-        from bot import bot, create_main_menu
-        return bot, create_main_menu
+        # First try direct import (this works when run from the same context as bot.py)
+        try:
+            from bot import bot, create_main_menu
+            logger.info("Successfully imported bot directly")
+            return bot, create_main_menu
+        except ImportError:
+            # If direct import fails, try to create a new bot instance
+            logger.info("Direct import failed, creating new bot instance")
+            import telebot
+            import os
+            
+            # Get Telegram token from environment
+            token = os.environ.get('TELEGRAM_BOT_TOKEN')
+            if not token:
+                logger.error("TELEGRAM_BOT_TOKEN not found in environment")
+                return None, None
+                
+            # Create new bot instance
+            temp_bot = telebot.TeleBot(token)
+            
+            # For main menu, create a simple function that returns None
+            # This is just a placeholder - notifications will still work
+            def simple_menu(is_registered=False, chat_id=None):
+                return None
+                
+            logger.info("Created new bot instance for notifications")
+            return temp_bot, simple_menu
     except Exception as e:
-        logger.error(f"Error importing bot: {e}")
+        logger.error(f"Error creating bot instance: {e}")
         logger.error(traceback.format_exc())
+        # Return None but don't halt operations - we can still verify payments
+        # even without being able to send notifications
         return None, None
 
 def verify_payment(tx_ref):
@@ -476,6 +503,9 @@ Please try again with a new deposit or contact support if you believe this is an
 
 def verify_payment_task():
     """Background task to verify payments periodically"""
+    failure_count = 0
+    max_consecutive_failures = 3
+    
     while True:
         try:
             logger.info("Running payment verification check")
@@ -486,17 +516,42 @@ def verify_payment_task():
                 logger.error("Please set the CHAPA_SECRET_KEY to enable payment verification")
                 time.sleep(60)  # Wait longer before retrying if no API key
                 continue
-                
-            # Check registrations
-            check_pending_registrations()
             
-            # Check pending deposits
-            check_pending_deposits()
+            try:
+                # Check registrations
+                check_pending_registrations()
                 
-            logger.info("Payment verification complete")
+                # Check pending deposits
+                check_pending_deposits()
+                
+                # Reset failure count on success
+                if failure_count > 0:
+                    logger.info(f"Successfully recovered after {failure_count} failures")
+                    failure_count = 0
+                    
+                logger.info("Payment verification complete")
+            except Exception as verification_error:
+                # Handle errors that occur during verification
+                failure_count += 1
+                logger.error(f"Error during verification (attempt {failure_count}): {verification_error}")
+                logger.error(traceback.format_exc())
+                
+                if failure_count >= max_consecutive_failures:
+                    logger.warning(f"⚠️ {failure_count} consecutive failures - trying to reset connection")
+                    
+                    # Try to reset database connection
+                    try:
+                        from database import reset_connection_pool
+                        reset_connection_pool()
+                        logger.info("Database connection pool reset")
+                    except Exception as reset_error:
+                        logger.error(f"Failed to reset connection pool: {reset_error}")
         except Exception as e:
-            logger.error(f"Error in payment verification task: {e}")
+            # Handle critical errors that occur outside the verification logic
+            logger.error(f"Critical error in payment verification task: {e}")
             logger.error(traceback.format_exc())
+            
+            # Don't increment failure_count here as this is a different category of error
 
         # Sleep until next check - run frequently for responsive verifications
         # Check every 15 seconds to ensure prompt payment processing
