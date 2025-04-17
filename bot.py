@@ -254,7 +254,6 @@ def start_message(message):
             # Call the welcome animation function with appropriate error handling
             welcome_message = send_personalized_welcome(bot, chat_id, {'name': user_name})
             logger.info(f"✅ Successfully sent welcome animation to user {chat_id}")
-            return welcome_message
         except Exception as e:
             logger.error(f"❌ Error sending welcome animation: {str(e)}")
             logger.error(f"❌ Error type: {type(e).__name__}")
