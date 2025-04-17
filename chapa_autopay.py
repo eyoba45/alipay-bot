@@ -24,37 +24,39 @@ VERIFICATION_INTERVAL = 15
 
 def get_bot():
     """Import and return bot instance - with improved reliability"""
+    # Check if we're not in the main thread (standard for background tasks)
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        # Running in a background thread, don't try to get the bot
+        logger.info("Bot integration disabled for background verification service")
+        return None, None
+
     try:
-        # First try direct import (this works when run from the same context as bot.py)
+        # Attempt to get a Telegram token regardless of import method
+        token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        if not token:
+            logger.info("TELEGRAM_BOT_TOKEN not found in environment")
+            return None, None
+
+        # For notification purposes, create a direct bot instance
+        # This bypasses the need to import from the main bot module
         try:
-            from bot import bot, create_main_menu
-            logger.info("Successfully imported bot directly")
-            return bot, create_main_menu
-        except ImportError:
-            # If direct import fails, try to create a new bot instance
-            logger.info("Direct import failed, creating new bot instance")
             import telebot
-            import os
-            
-            # Get Telegram token from environment
-            token = os.environ.get('TELEGRAM_BOT_TOKEN')
-            if not token:
-                logger.error("TELEGRAM_BOT_TOKEN not found in environment")
-                return None, None
-                
-            # Create new bot instance
             temp_bot = telebot.TeleBot(token)
             
-            # For main menu, create a simple function that returns None
-            # This is just a placeholder - notifications will still work
+            # Simple menu placeholder function
             def simple_menu(is_registered=False, chat_id=None):
                 return None
                 
-            logger.info("Created new bot instance for notifications")
+            logger.info("Created standalone bot instance for payment notifications")
             return temp_bot, simple_menu
+            
+        except Exception as e:
+            logger.info(f"Could not create bot instance: {e}")
+            return None, None
+            
     except Exception as e:
-        logger.error(f"Error creating bot instance: {e}")
-        logger.error(traceback.format_exc())
+        logger.info("Bot integration disabled for payment verification service")
         # Return None but don't halt operations - we can still verify payments
         # even without being able to send notifications
         return None, None
