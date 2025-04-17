@@ -123,7 +123,7 @@ def get_referral_url(referral_code):
     Returns:
         str: A Telegram bot start URL with the referral code
     """
-    bot_username = os.environ.get('TELEGRAM_BOT_USERNAME', 'alipay_eth_bot')
+    bot_username = os.environ.get('TELEGRAM_BOT_USERNAME', 'ali_paybot')
     return f"https://t.me/{bot_username}?start={referral_code}"
 
 def process_referral(referrer_id, referred_user_id, action_type):
