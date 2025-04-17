@@ -10,6 +10,7 @@ import logging
 import time
 import traceback
 import requests
+import telebot
 from datetime import datetime, timedelta
 import threading
 from database import init_db, get_session, safe_close_session
@@ -202,6 +203,35 @@ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     )
                 except Exception as admin_err:
                     logger.error(f"Error notifying admin about auto-approved registration: {admin_err}")
+            
+            # Send tutorial offer after a short delay
+            time.sleep(3)  # Give user time to read welcome message
+            try:
+                # Create tutorial offer with inline buttons
+                tutorial_markup = telebot.types.InlineKeyboardMarkup()
+                tutorial_markup.row(
+                    telebot.types.InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="help_tutorial"),
+                    telebot.types.InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
+                )
+                
+                bot.send_message(
+                    telegram_id,
+                    """
+<b>🎓 Would you like to take a quick tutorial?</b>
+
+Learn how to use all features of our service in just a few minutes!
+The interactive guide will show you how to:
+• Deposit funds
+• Submit and track orders
+• Use the referral system
+• And more!
+""",
+                    parse_mode='HTML',
+                    reply_markup=tutorial_markup
+                )
+                logger.info(f"Sent tutorial offer to newly registered user {telegram_id}")
+            except Exception as tutorial_err:
+                logger.error(f"Error sending tutorial offer: {tutorial_err}")
 
         return True
     except Exception as e:
