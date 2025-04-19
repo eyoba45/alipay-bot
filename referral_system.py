@@ -123,7 +123,7 @@ def get_referral_url(referral_code):
     Returns:
         str: A Telegram bot start URL with the referral code
     """
-    bot_username = os.environ.get('TELEGRAM_BOT_USERNAME', 'ali_paybot')
+    bot_username = os.environ.get('TELEGRAM_BOT_USERNAME', 'alipay_eth_bot')
     return f"https://t.me/{bot_username}?start={referral_code}"
 
 def process_referral(referrer_id, referred_user_id, action_type):
@@ -447,6 +447,99 @@ def complete_referral(referrer_id):
     # Only award points for successful registration - no points for other actions
     # This matches the updated reward structure where only registration rewards points
     return True, REWARD_POINTS['registration']
+
+def get_badge_data(referral_count):
+    """
+    Get badge data based on number of referrals
+    
+    Args:
+        referral_count: Number of successful referrals
+        
+    Returns:
+        dict: Complete badge data with current badge, next badge, and all badges
+    """
+    try:
+        # Create list of all badges with unlocked status
+        badges = []
+        current_badge = None
+        next_badge = None
+        
+        for i, badge in enumerate(REFERRAL_BADGES):
+            badge_info = {
+                'name': badge['name'],
+                'emoji': badge['icon'],
+                'description': badge['hover_text'],
+                'required': badge['referrals_required'],
+                'unlocked': referral_count >= badge['referrals_required'],
+                'color': badge['color']
+            }
+            
+            # Add to list of all badges
+            badges.append(badge_info)
+            
+            # Determine current badge (highest unlocked)
+            if badge_info['unlocked'] and (not current_badge or badge['referrals_required'] > current_badge['required']):
+                current_badge = badge_info
+                
+                # Set next badge if there is one
+                if i < len(REFERRAL_BADGES) - 1:
+                    next_badge_template = REFERRAL_BADGES[i + 1]
+                    next_badge = {
+                        'name': next_badge_template['name'],
+                        'emoji': next_badge_template['icon'],
+                        'description': next_badge_template['hover_text'],
+                        'required': next_badge_template['referrals_required'],
+                        'color': next_badge_template['color']
+                    }
+        
+        # If no badge earned yet, set to first badge
+        if not current_badge:
+            current_badge = {
+                'name': 'No Badge Yet',
+                'emoji': '🔘',
+                'description': 'Get your first referral to earn a badge!',
+                'required': 1,
+                'unlocked': False,
+                'color': '#CCCCCC'
+            }
+            next_badge = {
+                'name': REFERRAL_BADGES[0]['name'],
+                'emoji': REFERRAL_BADGES[0]['icon'],
+                'description': REFERRAL_BADGES[0]['hover_text'],
+                'required': REFERRAL_BADGES[0]['referrals_required'],
+                'color': REFERRAL_BADGES[0]['color']
+            }
+        
+        # Return full badge data
+        return {
+            'current_badge': current_badge,
+            'next_badge': next_badge if next_badge else current_badge,
+            'badges': badges,
+            'referral_count': referral_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting badge data: {e}")
+        # Return fallback data
+        return {
+            'current_badge': {
+                'name': 'Error',
+                'emoji': '⚠️',
+                'description': 'Error determining badge',
+                'required': 0,
+                'unlocked': False,
+                'color': '#FF0000'
+            },
+            'next_badge': {
+                'name': REFERRAL_BADGES[0]['name'],
+                'emoji': REFERRAL_BADGES[0]['icon'],
+                'description': REFERRAL_BADGES[0]['hover_text'],
+                'required': REFERRAL_BADGES[0]['referrals_required'],
+                'color': REFERRAL_BADGES[0]['color']
+            },
+            'badges': [],
+            'referral_count': referral_count
+        }
 
 def get_user_badge(user_id):
     """
