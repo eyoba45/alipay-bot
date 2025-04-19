@@ -250,15 +250,19 @@ def start_tutorial(bot, message, from_help=False):
         
         # Try to send error message if possible
         try:
-            if 'chat_id' in locals():
+            # Get chat ID from the message object
+            if message and hasattr(message, 'chat') and hasattr(message.chat, 'id'):
+                error_chat_id = message.chat.id
                 bot.send_message(
-                    chat_id,
+                    error_chat_id,
                     "❌ Sorry, there was an error starting the tutorial. Please try again later.",
                     parse_mode='HTML'
                 )
-        except:
+            else:
+                logger.error("❌ Cannot extract chat_id from message to send error")
+        except Exception as error_e:
             # If we can't even send an error message, just log it
-            logger.error("❌ Could not send error message to user")
+            logger.error(f"❌ Could not send error message to user: {error_e}")
         
         return None
 
@@ -600,14 +604,20 @@ def handle_tutorial_callback(bot, call):
         logger.error(f"❌ Error handling tutorial callback: {e}")
         logger.error(f"❌ Exception details: {traceback.format_exc()}")
         try:
+            # Safely answer the callback query if possible
             if 'call' in locals() and hasattr(call, 'id'):
                 bot.answer_callback_query(call.id, "An error occurred. Please try again.")
             
-            if 'chat_id' in locals():
+            # Attempt to get chat_id from call object and send error message
+            if 'call' in locals() and hasattr(call, 'message') and hasattr(call.message, 'chat') and hasattr(call.message.chat, 'id'):
+                error_chat_id = call.message.chat.id
                 bot.send_message(
-                    chat_id,
+                    error_chat_id,
                     "Sorry, there was an error with the tutorial. Please try again later or type /start to return to the main menu."
                 )
+                logger.info(f"✅ Successfully sent error message to chat {error_chat_id}")
+            else:
+                logger.error("❌ Could not extract chat_id from call to send error message")
         except Exception as notify_error:
             logger.error(f"❌ Error notifying user of callback error: {notify_error}")
 
