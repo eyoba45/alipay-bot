@@ -355,31 +355,54 @@ def handle_tutorial_callback(bot, call):
                 
                 logger.info(f"➡️ Moving user {user_id} to next tutorial step: {next_step}")
                 
-                # Edit message with new step content
+                # Edit message with new step content - Revamped with explicit error handling
                 try:
+                    logger.info(f"Attempting to edit message for tutorial step {next_step}")
+                    # First answer the callback to prevent issues with telegram API timing
+                    try:
+                        bot.answer_callback_query(call.id)
+                    except Exception as answer_err:
+                        logger.warning(f"⚠️ Could not answer callback query before edit: {answer_err}")
+                    
+                    # Then edit the message with the new content
+                    keyboard = get_tutorial_keyboard(next_step)
+                    content = f"<b>{next_step_info['title']}</b>\n\n{next_step_info['content']}"
+                    
+                    # Make sure we have a valid message_id
+                    message_id = call.message.message_id
+                    
                     bot.edit_message_text(
-                        f"<b>{next_step_info['title']}</b>\n\n{next_step_info['content']}",
+                        text=content,
                         chat_id=chat_id,
-                        message_id=call.message.message_id,
+                        message_id=message_id,
                         parse_mode='HTML',
-                        reply_markup=get_tutorial_keyboard(next_step)
+                        reply_markup=keyboard
                     )
-                    logger.info(f"✅ Successfully displayed tutorial step {next_step} to user {user_id}")
+                    logger.info(f"✅ Successfully edited message for tutorial step {next_step}")
+                    
+                    # Update stored message ID in case it changed
+                    user_tutorial_state[user_id]['message_id'] = message_id
+                    
                 except Exception as e:
-                    logger.error(f"❌ Error displaying tutorial step {next_step}: {e}")
+                    logger.error(f"❌ Error editing message for tutorial step {next_step}: {e}")
+                    logger.error(traceback.format_exc())
+                    
                     # Try to send a new message instead
                     try:
-                        bot.send_message(
-                            chat_id,
-                            f"<b>{next_step_info['title']}</b>\n\n{next_step_info['content']}",
+                        logger.info(f"Attempting to send new message for tutorial step {next_step}")
+                        new_message = bot.send_message(
+                            chat_id=chat_id,
+                            text=f"<b>{next_step_info['title']}</b>\n\n{next_step_info['content']}",
                             parse_mode='HTML',
                             reply_markup=get_tutorial_keyboard(next_step)
                         )
-                        logger.info(f"✅ Successfully sent new message with tutorial step {next_step}")
+                        # Update stored message ID
+                        if new_message and hasattr(new_message, 'message_id'):
+                            user_tutorial_state[user_id]['message_id'] = new_message.message_id
+                        logger.info(f"✅ Successfully sent new message for tutorial step {next_step}")
                     except Exception as send_error:
-                        logger.error(f"❌ Error sending new tutorial message: {send_error}")
-                
-                bot.answer_callback_query(call.id)
+                        logger.error(f"❌ Critical error sending new tutorial message: {send_error}")
+                        logger.error(traceback.format_exc())
             else:
                 logger.warning(f"⚠️ No next step defined for step {current_step}")
                 bot.answer_callback_query(call.id, "You've reached the end of this section")
@@ -394,29 +417,54 @@ def handle_tutorial_callback(bot, call):
                     
                     logger.info(f"⬅️ Moving user {user_id} to previous tutorial step: {step}")
                     
-                    # Edit message with previous step content
+                    # Edit message with previous step content - Improved error handling
                     try:
+                        logger.info(f"Attempting to edit message for previous tutorial step {step}")
+                        # First answer the callback to prevent issues with telegram API timing
+                        try:
+                            bot.answer_callback_query(call.id)
+                        except Exception as answer_err:
+                            logger.warning(f"⚠️ Could not answer callback query before edit: {answer_err}")
+                        
+                        # Then edit the message with the new content
+                        keyboard = get_tutorial_keyboard(step)
+                        content = f"<b>{info['title']}</b>\n\n{info['content']}"
+                        
+                        # Make sure we have a valid message_id
+                        message_id = call.message.message_id
+                        
                         bot.edit_message_text(
-                            f"<b>{info['title']}</b>\n\n{info['content']}",
+                            text=content,
                             chat_id=chat_id,
-                            message_id=call.message.message_id,
+                            message_id=message_id,
                             parse_mode='HTML',
-                            reply_markup=get_tutorial_keyboard(step)
+                            reply_markup=keyboard
                         )
-                        logger.info(f"✅ Successfully displayed previous tutorial step {step}")
+                        logger.info(f"✅ Successfully edited message for previous tutorial step {step}")
+                        
+                        # Update stored message ID in case it changed
+                        user_tutorial_state[user_id]['message_id'] = message_id
+                        
                     except Exception as e:
-                        logger.error(f"❌ Error displaying previous tutorial step: {e}")
+                        logger.error(f"❌ Error editing message for previous tutorial step {step}: {e}")
+                        logger.error(traceback.format_exc())
+                        
                         # Try to send a new message instead
                         try:
-                            bot.send_message(
-                                chat_id,
-                                f"<b>{info['title']}</b>\n\n{info['content']}",
+                            logger.info(f"Attempting to send new message for previous tutorial step {step}")
+                            new_message = bot.send_message(
+                                chat_id=chat_id,
+                                text=f"<b>{info['title']}</b>\n\n{info['content']}",
                                 parse_mode='HTML',
                                 reply_markup=get_tutorial_keyboard(step)
                             )
-                            logger.info(f"✅ Successfully sent new message with previous step {step}")
+                            # Update stored message ID
+                            if new_message and hasattr(new_message, 'message_id'):
+                                user_tutorial_state[user_id]['message_id'] = new_message.message_id
+                            logger.info(f"✅ Successfully sent new message for previous tutorial step {step}")
                         except Exception as send_error:
-                            logger.error(f"❌ Error sending new tutorial message: {send_error}")
+                            logger.error(f"❌ Critical error sending new tutorial message: {send_error}")
+                            logger.error(traceback.format_exc())
                     break
                     
             if not prev_step:
