@@ -300,8 +300,8 @@ def check_pending_payments():
                     
                     # If pending for too long (3 days), mark as needing admin attention
                     if pending.created_at and (datetime.utcnow() - pending.created_at).total_seconds() > 259200:  # 3 days
-                        if pending.status != 'Needs Admin Attention':
-                            pending.status = 'Needs Admin Attention'
+                        if pending.payment_status != 'Needs Admin Attention':
+                            pending.payment_status = 'Needs Admin Attention'
                             session.commit()
                             logger.warning(f"Registration for user {pending.telegram_id} has been pending for over 3 days")
             
