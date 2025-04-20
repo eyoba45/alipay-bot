@@ -1395,14 +1395,15 @@ Each successful referral earns you 50 points that can be converted to account ba
             # Send tutorial offer after a short delay
             time.sleep(3)  # Give user time to read welcome message
             try:
-                # Create tutorial offer with inline buttons
-                tutorial_markup = telebot.types.InlineKeyboardMarkup()
-                tutorial_markup.row(
-                    telebot.types.InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="help_tutorial"),
+                # Create special direct tutorial offer with inline buttons
+                # Using unique callback data to avoid conflicts
+                tutorial_markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+                tutorial_markup.add(
+                    telebot.types.InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="direct_tutorial_start"),
                     telebot.types.InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
                 )
                 
-                bot.send_message(
+                tutorial_msg = bot.send_message(
                     user_id,
                     """
 <b>🎓 Would you like to take a quick tutorial?</b>
@@ -1418,8 +1419,44 @@ The interactive guide will show you how to:
                     reply_markup=tutorial_markup
                 )
                 logger.info(f"Sent tutorial offer to newly registered user {user_id}")
+                
+                # Register a one-time handler for the direct tutorial button
+                @bot.callback_query_handler(func=lambda call: call.data == "direct_tutorial_start")
+                def direct_tutorial_handler(call):
+                    """Handle the direct tutorial button from registration"""
+                    try:
+                        logger.info(f"Direct tutorial button clicked by user {call.from_user.id}")
+                        # Remove this one-time handler after use
+                        for i, handler in enumerate(bot.callback_query_handlers):
+                            if getattr(handler.get('function'), '__name__', '') == 'direct_tutorial_handler':
+                                bot.callback_query_handlers.pop(i)
+                                break
+                                
+                        # Try to answer the callback query first
+                        try:
+                            bot.answer_callback_query(call.id)
+                        except Exception as cb_err:
+                            logger.error(f"Error answering callback query: {cb_err}")
+                            
+                        # Start the tutorial directly
+                        from bot_tutorial import start_tutorial
+                        start_result = start_tutorial(bot, call.message)
+                        logger.info(f"Tutorial start result: {start_result}")
+                    except Exception as e:
+                        logger.error(f"Error starting direct tutorial: {e}")
+                        logger.error(traceback.format_exc())
+                        try:
+                            bot.send_message(
+                                call.message.chat.id,
+                                "Sorry, there was an error starting the tutorial. Please try typing /tutorial",
+                                parse_mode='HTML'
+                            )
+                        except:
+                            pass
+                
             except Exception as tutorial_err:
                 logger.error(f"Error sending tutorial offer: {tutorial_err}")
+                logger.error(traceback.format_exc())
 
             # Update admin message
             bot.edit_message_text(
