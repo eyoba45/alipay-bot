@@ -276,36 +276,75 @@ def cleanup_tutorial(user_id):
 def handle_tutorial_callback(bot, call):
     """Handle callback queries from tutorial buttons"""
     try:
+        # Get necessary IDs
+        if not call or not hasattr(call, 'from_user') or not hasattr(call.from_user, 'id'):
+            logger.error(f"❌ Invalid call object received in handle_tutorial_callback: {call}")
+            return
+            
         user_id = call.from_user.id
+        
+        if not hasattr(call, 'message') or not hasattr(call.message, 'chat') or not hasattr(call.message.chat, 'id'):
+            logger.error(f"❌ Invalid message structure in tutorial callback: {call}")
+            # Try to answer the callback query at least
+            try:
+                bot.answer_callback_query(call.id, "Error processing tutorial. Please try again.")
+            except:
+                pass
+            return
+            
         chat_id = call.message.chat.id
+        
+        if not hasattr(call, 'data'):
+            logger.error(f"❌ No callback data in tutorial callback")
+            return
+            
         callback_data = call.data
         
-        logger.info(f"📣 Handling tutorial callback {callback_data} from user {user_id}")
+        logger.info(f"📣 Handling tutorial callback {callback_data} from user {user_id}, chat_id {chat_id}")
         
         # Check if user is in tutorial mode
         if user_id not in user_tutorial_state:
             logger.warning(f"⚠️ User {user_id} tried to use tutorial but is not in tutorial mode")
-            bot.answer_callback_query(call.id, "Tutorial session expired. Please start again.")
-            # Try to offer to restart tutorial
             try:
-                bot.edit_message_text(
-                    "Your tutorial session has expired. Would you like to start again?",
-                    chat_id=chat_id,
-                    message_id=call.message.message_id,
-                    reply_markup=InlineKeyboardMarkup().add(
-                        InlineKeyboardButton("▶️ Start Tutorial Again", callback_data="help_tutorial"),
-                        InlineKeyboardButton("❌ No Thanks", callback_data="tutorial_exit")
+                bot.answer_callback_query(call.id, "Tutorial session expired. Please start again.")
+                # Try to offer to restart tutorial
+                try:
+                    bot.edit_message_text(
+                        "Your tutorial session has expired. Would you like to start again?",
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        reply_markup=InlineKeyboardMarkup().add(
+                            InlineKeyboardButton("▶️ Start Tutorial Again", callback_data="help_tutorial"),
+                            InlineKeyboardButton("❌ No Thanks", callback_data="tutorial_exit")
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(f"❌ Error offering to restart tutorial: {e}")
+                    # Send as new message instead
+                    bot.send_message(
+                        chat_id,
+                        "Your tutorial session has expired. Would you like to start again?",
+                        reply_markup=InlineKeyboardMarkup().add(
+                            InlineKeyboardButton("▶️ Start Tutorial Again", callback_data="help_tutorial"),
+                            InlineKeyboardButton("❌ No Thanks", callback_data="tutorial_exit")
+                        )
+                    )
             except Exception as e:
-                logger.error(f"❌ Error offering to restart tutorial: {e}")
+                logger.error(f"❌ Error handling expired tutorial session: {e}")
             return
         
+        # At this point we know the user is in a tutorial session
         # Get current step info
         current_step = user_tutorial_state[user_id]['current_step']
         logger.info(f"📋 Current tutorial step for user {user_id}: {current_step}")
         
-        step_info = TUTORIAL_STEPS[current_step]
+        try:
+            step_info = TUTORIAL_STEPS[current_step]
+        except KeyError:
+            logger.error(f"❌ Invalid tutorial step: {current_step}. Resetting to start.")
+            current_step = 'start'
+            user_tutorial_state[user_id]['current_step'] = 'start'
+            step_info = TUTORIAL_STEPS['start']
         
         if callback_data == 'tutorial_next':
             # Move to next step
