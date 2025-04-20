@@ -38,12 +38,19 @@ def add_tutorial_handlers(bot):
                 except:
                     pass
         
-        # Add callback handler for tutorial navigation buttons with high priority
-        @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('tutorial_'), priority=100)
+        # Add callback handler for tutorial navigation buttons with highest priority
+        @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('tutorial_'), priority=1000)
         def tutorial_callbacks(call):
             """Handle tutorial button callbacks"""
             try:
                 logger.info(f"📣 Tutorial callback received: {call.data} from user {call.from_user.id}")
+                # First, answer the callback to stop the loading indicator
+                try:
+                    bot.answer_callback_query(call.id)
+                except Exception as answer_err:
+                    logger.warning(f"⚠️ Could not answer callback query: {answer_err}")
+                
+                # Then handle the tutorial interaction
                 handle_tutorial_callback(bot, call)
                 logger.info(f"✅ Tutorial callback processed successfully: {call.data}")
             except Exception as e:
