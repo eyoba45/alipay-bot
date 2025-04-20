@@ -14,7 +14,7 @@ import string
 import logging
 from datetime import datetime
 
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from database import get_session, safe_close_session
 from models import User, Referral, ReferralReward, Transaction, UserBalance
 
@@ -282,7 +282,7 @@ def get_user_referrals(user_id):
     session = None
     try:
         session = get_session()
-        query = """
+        query = text("""
         SELECT 
             r.id, 
             r.referred_id, 
@@ -293,7 +293,7 @@ def get_user_referrals(user_id):
         JOIN users u ON r.referred_id = u.id
         WHERE r.referrer_id = :user_id
         ORDER BY r.referral_date DESC
-        """
+        """)
         
         result = session.execute(query, {'user_id': user_id})
         referrals = []
@@ -328,7 +328,7 @@ def get_referral_rewards(user_id):
     session = None
     try:
         session = get_session()
-        query = """
+        query = text("""
         SELECT 
             rr.id,
             rr.points,
@@ -340,7 +340,7 @@ def get_referral_rewards(user_id):
         JOIN users u ON rr.referred_id = u.id
         WHERE rr.referrer_id = :user_id
         ORDER BY rr.created_at DESC
-        """
+        """)
         
         result = session.execute(query, {'user_id': user_id})
         rewards = []
@@ -556,12 +556,12 @@ def get_user_badge(user_id):
         session = get_session()
         
         # Count successful referrals
-        query = """
+        query = text("""
         SELECT COUNT(*) as referral_count
         FROM referrals
         WHERE referrer_id = :user_id
         AND status = 'completed'
-        """
+        """)
         
         result = session.execute(query, {'user_id': user_id}).fetchone()
         referral_count = result.referral_count if result else 0
