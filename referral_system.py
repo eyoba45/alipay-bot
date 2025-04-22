@@ -602,52 +602,27 @@ def get_user_badge(user_id):
         
 def generate_badge_html(user_id):
     """
-    Generate HTML for user's badge with hover effect
+    Generate HTML for user's badge
     
     Args:
         user_id: The user's ID
         
     Returns:
-        str: HTML string with badge and hover effect
+        str: HTML string with badge (Telegram-compatible)
     """
     badge = get_user_badge(user_id)
     
     if badge.get('locked'):
-        # Locked badge (gray with lock emoji)
-        html = f"""
-<span style="position:relative; display:inline-block; cursor:pointer;" 
-      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
-      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
-    <span style="font-size:22px; opacity:0.5;">{badge['icon']} 🔒</span>
-    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
-           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
-           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
-           font-size:14px; width:200px; text-align:center;">
-        <b>{badge['name']}</b><br>{badge['hover_text']}
-    </span>
-</span>
-"""
+        # Locked badge (with lock emoji)
+        html = f"{badge['icon']} 🔒 <i>({badge['name']} - locked)</i>"
     else:
-        # Earned badge with color and hover effect
-        next_badge_text = ""
+        # Earned badge
+        next_badge_info = ""
         if badge.get('next_badge'):
-            next_badge_text = f"<br>🔼 {badge['needed_for_next']} more to reach {badge['next_badge']}!"
+            next_badge_info = f" (🔼 {badge['needed_for_next']} more for {badge['next_badge']})"
         
-        hover_info = f"{badge['hover_text']}<br>🌟 You've referred {badge['referral_count']} friends!{next_badge_text}"
+        html = f"<b>{badge['icon']}</b> <i>{badge['name']}{next_badge_info}</i>"
         
-        html = f"""
-<span style="position:relative; display:inline-block; cursor:pointer;" 
-      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
-      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
-    <span style="font-size:22px; color:{badge['color']};">{badge['icon']}</span>
-    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
-           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
-           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
-           font-size:14px; width:200px; text-align:center;">
-        <b>{badge['name']}</b><br>{hover_info}
-    </span>
-</span>
-"""
     return html
 
 def redeem_points(user_id, points_to_redeem):
