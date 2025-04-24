@@ -1392,71 +1392,8 @@ Each successful referral earns you 50 points that can be converted to account ba
                 reply_markup=create_main_menu(is_registered=True)
             )
             
-            # Send tutorial offer after a short delay
-            time.sleep(3)  # Give user time to read welcome message
-            try:
-                # Create special direct tutorial offer with inline buttons
-                # Using unique callback data to avoid conflicts
-                tutorial_markup = telebot.types.InlineKeyboardMarkup(row_width=1)
-                tutorial_markup.add(
-                    telebot.types.InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="direct_tutorial_start"),
-                    telebot.types.InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
-                )
-                
-                tutorial_msg = bot.send_message(
-                    user_id,
-                    """
-<b>🎓 Would you like to take a quick tutorial?</b>
-
-Learn how to use all features of our service in just a few minutes!
-The interactive guide will show you how to:
-• Deposit funds
-• Submit and track orders
-• Use the referral system
-• And more!
-""",
-                    parse_mode='HTML',
-                    reply_markup=tutorial_markup
-                )
-                logger.info(f"Sent tutorial offer to newly registered user {user_id}")
-                
-                # Register a one-time handler for the direct tutorial button
-                @bot.callback_query_handler(func=lambda call: call.data == "direct_tutorial_start")
-                def direct_tutorial_handler(call):
-                    """Handle the direct tutorial button from registration"""
-                    try:
-                        logger.info(f"Direct tutorial button clicked by user {call.from_user.id}")
-                        # Remove this one-time handler after use
-                        for i, handler in enumerate(bot.callback_query_handlers):
-                            if getattr(handler.get('function'), '__name__', '') == 'direct_tutorial_handler':
-                                bot.callback_query_handlers.pop(i)
-                                break
-                                
-                        # Try to answer the callback query first
-                        try:
-                            bot.answer_callback_query(call.id)
-                        except Exception as cb_err:
-                            logger.error(f"Error answering callback query: {cb_err}")
-                            
-                        # Start the tutorial directly
-                        from bot_tutorial import start_tutorial
-                        start_result = start_tutorial(bot, call.message)
-                        logger.info(f"Tutorial start result: {start_result}")
-                    except Exception as e:
-                        logger.error(f"Error starting direct tutorial: {e}")
-                        logger.error(traceback.format_exc())
-                        try:
-                            bot.send_message(
-                                call.message.chat.id,
-                                "Sorry, there was an error starting the tutorial. Please try typing /tutorial",
-                                parse_mode='HTML'
-                            )
-                        except:
-                            pass
-                
-            except Exception as tutorial_err:
-                logger.error(f"Error sending tutorial offer: {tutorial_err}")
-                logger.error(traceback.format_exc())
+            # Tutorial functionality has been completely removed
+            logger.info(f"✅ Registration complete for user {user_id} - not offering tutorial (disabled)")
 
             # Update admin message
             bot.edit_message_text(
@@ -2478,7 +2415,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 • Address: {user.address}
 • User ID: <code>{chat_id}</code>
 
-<b>💰 FINANCIAL DETAILS:</b>
+<b>💰 FINANCIAL DETAILS:�</b>
 • Balance: $<code>{user.balance:.2f}</code>
 • Order #: <code>{new_order_number}</code>
 
@@ -2711,7 +2648,7 @@ Please try again or contact support.
         bot.answer_callback_query(call.id, "Action processed successfully")
 
     except Exception as e:
-        logger.error(f"Error processing deposit decision: {e}")
+        logger.error(f"Error proce�ssing deposit decision: {e}")
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing decision")
     finally:
@@ -2968,7 +2905,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
             # Format order details with emojis and nice formatting
             order_details = f"""
 ╭─────────────────────╮
-<b>🛍️ Order #{order.order_number}</b>
+<b>🛍️ Order #{order.order�_number}</b>
 • Status: {status_emoji} <b>{order.status}</b> {status_color}
 • Amount: <b>${order.amount:.2f}</b>
 • Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
@@ -3204,7 +3141,7 @@ Make a deposit of at least $1 to automatically activate your subscription.
             parse_mode='HTML'
         )
     finally:
-        if session:
+        if ses�sion:
             safe_close_session(session)
 
 def process_order_details(message, order_id, user_telegram_id):
@@ -3423,7 +3360,7 @@ def admin_dashboard(message):
     admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     admin_menu.add(
         KeyboardButton('👥 User Management'),
-        KeyboardButton('📦 Order Management')
+        KeyboardButton('📦 Orde�r Management')
     )
     admin_menu.add(
         KeyboardButton('💰 Deposit Management'),
@@ -3684,7 +3621,7 @@ def handle_users_pagination(call):
 """
 
         for i, user in enumerate(users, 1):
-            # Format subscription status
+            # Format subscript�ion status
             subscription_status = "❌ Inactive"
             if user.subscription_date:
                 days_passed = (datetime.utcnow() - user.subscription_date).days
@@ -3921,7 +3858,7 @@ def handle_manage_user(call):
 
         # Format subscription status
         subscription_status = "❌ Inactive"
-        if user.subscription_date:
+        if user.subscripti�on_date:
             days_passed = (datetime.utcnow() - user.subscription_date).days
             if days_passed < 30:
                 subscription_status = f"✅ Active ({30 - days_passed} days left)"
@@ -4168,7 +4105,7 @@ def handle_orders_pagination(call):
             # Format status with emoji
             status_emoji = "⏳"
             if order.status == "Shipping":
-                status_emoji = "🚚"
+                stat�us_emoji = "🚚"
             elif order.status == "Completed":
                 status_emoji = "✅"
 
@@ -4415,7 +4352,7 @@ def handle_deposit_approval(call):
 
 Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
 
-<b>New Balance:</b> ${user.balance:.2f}
+<b>New Balance:</b> ${user.balan�ce:.2f}
 
 <i>Thank you for using AliPay_ETH!</i>
 """,
@@ -4676,7 +4613,7 @@ def process_balance_amount(message):
 <b>Previous Balance:</b> ${current_balance:.2f}
 <b>New Balance:</b> ${new_balance:.2f}
 
-<i>The user has been notified of the balance update.</i>
+<i>The user has been notified of the balance �update.</i>
 """,
             parse_mode='HTML',
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
@@ -4922,7 +4859,7 @@ def handle_help_buttons(call):
 • You'll gain access to all features
 • You can start depositing funds and placing orders
 
-<b>💡 TIP:</b> Make sure to provide accurate details for smooth delivery of your orders.
+<b>💡 TIP:</b> Make sure to provide accurate details for smooth delivery of your orde�rs.
 """,
             parse_mode='HTML',
             reply_markup=back_markup
@@ -5171,6 +5108,113 @@ def handle_ai_assistant_greeting(message):
     # Process the message
     digital_companion.process_message(message)
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith('retry_payment_'))
+def handle_payment_retry(call):
+    """Hand�le payment retry button for cancelled or failed payments"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+    
+    # Make sure to answer the callback to clear waiting status
+    bot.answer_callback_query(call.id, "Processing payment retry...")
+    
+    try:
+        # Extract user ID from callback data
+        telegram_id = int(call.data.split('retry_payment_')[1])
+        
+        # Verify this is the same user who's clicking their own retry button
+        if chat_id != telegram_id:
+            bot.edit_message_text(
+                "⚠️ This payment retry button is for another user.",
+                chat_id=chat_id,
+                message_id=message_id
+            )
+            return
+            
+        # Get the pending approval from database
+        session = get_session()
+        pending = session.query(PendingApproval).filter_by(telegram_id=telegram_id).first()
+        
+        if not pending:
+            bot.edit_message_text(
+                "⚠️ Your registration is no longer pending. Please restart with /start if needed.",
+                chat_id=chat_id,
+                message_id=message_id
+            )
+            return
+            
+        # Reset failed payment status and generate new payment link
+        pending.status = 'Pending'
+        
+        # Generate a new payment link with Chapa
+        from chapa_payment import generate_registration_payment
+        
+        # Create user data dictionary for payment generation
+        user_data = {
+            'telegram_id': pending.telegram_id,
+            'name': pending.name,
+            'email': f"user.{pending.telegram_id}@gmail.com",  # Fallback email format
+            'phone': pending.phone
+        }
+        
+        # Generate a new payment link
+        payment_result = generate_registration_payment(user_data)
+        
+        if not payment_result or 'checkout_url' not in payment_result:
+            logger.error(f"Failed to generate payment retry URL for user {telegram_id}")
+            bot.edit_message_text(
+                "❌ <b>Payment Error</b>\n\nWe couldn't generate a new payment link. Please try again later or contact support.",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+            return
+            
+        # Extract payment URL and tx_ref from result
+        payment_url = payment_result.get('checkout_url')
+        tx_ref = payment_result.get('tx_ref')
+        
+        # Update the transaction reference
+        pending.tx_ref = tx_ref
+        session.commit()
+        
+        # Send the new payment link
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        payment_markup = InlineKeyboardMarkup()
+        payment_markup.add(InlineKeyboardButton("💳 Pay 350 Birr", url=payment_url))
+        
+        bot.edit_message_text(
+            f"""
+<b>🔄 PAYMENT RETRY INITIALIZED</b>
+
+Your previous payment attempt was cancelled. A new payment link has been generated.
+
+<b>Registration Fee:</b>
+• One-time Fee: 200 Birr
+• First Month Subscription: 150 Birr
+• <b>Total: 350 Birr</b>
+
+<i>Click the button below to complete your payment. After successful payment, your registration will be automatically approved.</i>
+""",
+            chat_id=chat_id,
+            message_id=message_id,
+            parse_mode='HTML',
+            reply_markup=payment_markup
+        )
+        
+        logger.info(f"Payment retry initialized for user {telegram_id} with new tx_ref: {tx_ref}")
+        
+    except Exception as e:
+        logger.error(f"Error handling payment retry: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id,
+            "❌ <b>Error</b>\n\nThere was a problem processing your payment retry. Please try again or contact support.",
+            parse_mode='HTML'
+        )
+    finally:
+        safe_close_session(session)
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('companion_'))
 def handle_companion_callback(call):
     """Handle companion button callbacks"""
@@ -5298,7 +5342,7 @@ Enter how many points you want to redeem:
             
             # Get user's referral code and URL
             from referral_system import get_referral_url
-            referral_code = user.referral_code or ""
+            referral_code = user.referral_code or "�"
             referral_url = get_referral_url(referral_code) if referral_code else "Referral code not set"
             
             # Send referral system explanation
@@ -5496,7 +5540,7 @@ Enter how many points you want to redeem:
 <i>Copy the link above and share it with friends!</i>
 """,
                     parse_mode='HTML',
-                    reply_markup=markup
+                    reply�_markup=markup
                 )
             except Exception as ref_err:
                 logger.error(f"Error displaying referral link: {ref_err}")
