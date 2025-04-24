@@ -2073,52 +2073,19 @@ Click 🔑 Register to create your account.
             # Generate current badge HTML
             current_badge_html = generate_badge_html(user.id)
             
-            # Generate all badges HTML
+            # Generate all badges HTML (simplified for Telegram compatibility)
             all_badges_html = ""
             for badge in REFERRAL_BADGES:
                 # Determine if badge is earned, locked, or next target
                 if referral_count >= badge['referrals_required']:
                     # Earned badge
-                    badge_html = f"""
-<span style="position:relative; display:inline-block; cursor:pointer; margin:5px;" 
-      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
-      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
-    <span style="font-size:24px; color:{badge['color']};">{badge['icon']}</span>
-    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
-           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
-           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
-           font-size:14px; width:200px; text-align:center;">
-        <b>{badge['name']}</b><br>{badge['hover_text']}<br>✅ Achieved!
-    </span>
-</span>"""
+                    badge_html = f"<b>{badge['icon']}</b> <i>{badge['name']} ✅</i>\n"
                 elif referral_count + 1 == badge['referrals_required']:
                     # Next target badge
-                    badge_html = f"""
-<span style="position:relative; display:inline-block; cursor:pointer; margin:5px;" 
-      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
-      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
-    <span style="font-size:24px; opacity:0.5;">{badge['icon']} 🔜</span>
-    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
-           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
-           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
-           font-size:14px; width:200px; text-align:center;">
-        <b>{badge['name']}</b><br>Just 1 more referral to earn this!<br>🔜 Almost there!
-    </span>
-</span>"""
+                    badge_html = f"{badge['icon']} 🔜 <i>{badge['name']} (1 more to earn!)</i>\n"
                 else:
                     # Locked badge
-                    badge_html = f"""
-<span style="position:relative; display:inline-block; cursor:pointer; margin:5px;" 
-      onmouseover="this.querySelector('.badge-tooltip').style.display='block'" 
-      onmouseout="this.querySelector('.badge-tooltip').style.display='none'">
-    <span style="font-size:24px; opacity:0.3;">{badge['icon']} 🔒</span>
-    <span class="badge-tooltip" style="display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); 
-           background-color:#f8f9fa; color:#333; padding:8px 12px; border-radius:6px; 
-           box-shadow:0 2px 8px rgba(0,0,0,0.2); white-space:nowrap; z-index:1000; 
-           font-size:14px; width:200px; text-align:center;">
-        <b>{badge['name']}</b><br>Needs {badge['referrals_required']} referrals<br>🔒 {badge['referrals_required'] - referral_count} more to unlock!
-    </span>
-</span>"""
+                    badge_html = f"{badge['icon']} 🔒 <i>{badge['name']} ({badge['referrals_required'] - referral_count} more to unlock)</i>\n"
                 
                 all_badges_html += badge_html
                 
