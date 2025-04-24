@@ -3141,7 +3141,7 @@ Make a deposit of at least $1 to automatically activate your subscription.
             parse_mode='HTML'
         )
     finally:
-        if ses�sion:
+        if session:
             safe_close_session(session)
 
 def process_order_details(message, order_id, user_telegram_id):
