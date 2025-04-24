@@ -4849,13 +4849,12 @@ def system_stats(message):
 
 @bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
 def help_center(message):
-    """Handle Help Center button with all necessary information and interactive tutorial access"""
+    """Handle Help Center button with all necessary information"""
     chat_id = message.chat.id
 
     # Create help center inline buttons
     help_markup = InlineKeyboardMarkup(row_width=1)
     help_markup.add(
-        InlineKeyboardButton("🎓 Interactive Tutorial", callback_data="help_tutorial"),
         InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
         InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
         InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
@@ -4872,12 +4871,9 @@ def help_center(message):
 
 <b>Welcome to AliPay_ETH Help Center!</b>
 
-<i>New to the bot? Try our 5-minute Interactive Tutorial!</i>
-
 How can we assist you today? Select a topic below to get detailed information and step-by-step guides.
 
 <b>📋 AVAILABLE HELP TOPICS:</b>
-• Interactive Tutorial - Guided walkthrough of all features
 • Registration Process
 • Deposit Methods
 • Ordering from AliExpress
@@ -4892,56 +4888,13 @@ How can we assist you today? Select a topic below to get detailed information an
         reply_markup=help_markup
     )
 
-@bot.callback_query_handler(func=lambda call: call.data == "skip_tutorial")
-def handle_skip_tutorial(call):
-    """Handle skip tutorial button"""
-    chat_id = call.message.chat.id
-    
-    try:
-        # Acknowledge the skip action
-        bot.answer_callback_query(call.id, "Tutorial skipped. You can always access it from the Help Center.")
-        
-        # Update the message to show it was skipped
-        bot.edit_message_text(
-            """
-<b>📝 Tutorial Skipped</b>
-
-You've chosen to explore the bot on your own. 
-Remember, you can always access the tutorial later by:
-• Going to the Help Center from the main menu
-• Using the /tutorial command
-
-Happy exploring! Feel free to ask if you need any help.
-""",
-            chat_id=chat_id,
-            message_id=call.message.message_id,
-            parse_mode='HTML'
-        )
-        
-        logger.info(f"User {chat_id} skipped the tutorial")
-    except Exception as e:
-        logger.error(f"Error handling skip tutorial: {e}")
+# Skip tutorial functionality has been removed
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('help_'))
 def handle_help_buttons(call):
     """Handle help center button callbacks"""
     chat_id = call.message.chat.id
     help_topic = call.data.split('_')[1]
-
-    # Handle tutorial callback specifically
-    if help_topic == "tutorial":
-        # Import the tutorial module
-        try:
-            from bot_tutorial import start_tutorial, handle_tutorial_callback
-            # Start the tutorial and indicate it was launched from help center
-            start_tutorial(bot, call.message, from_help=True)
-            bot.answer_callback_query(call.id)
-            return
-        except Exception as e:
-            logger.error(f"Error starting tutorial: {e}")
-            logger.error(traceback.format_exc())
-            bot.answer_callback_query(call.id, "Tutorial currently unavailable")
-            return
 
     # Back button for all help responses
     back_markup = InlineKeyboardMarkup()
@@ -5069,7 +5022,6 @@ def handle_help_buttons(call):
         # Return to the main help center menu
         help_markup = InlineKeyboardMarkup(row_width=1)
         help_markup.add(
-            InlineKeyboardButton("🎓 Interactive Tutorial", callback_data="help_tutorial"),
             InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
             InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
             InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
@@ -5696,20 +5648,8 @@ def main():
             logger.error(f"Failed to initialize AI Assistant: {e}")
             digital_companion = None
             
-    # Initialize tutorial handlers
-    try:
-        from bot_commands import add_tutorial_handlers, setup_help_center_tutorial
-        tutorial_success = add_tutorial_handlers(bot)
-        help_center_success = setup_help_center_tutorial(bot)
-        
-        if tutorial_success:
-            logger.info("✅ Interactive Tutorial enabled with /tutorial command")
-        
-        if help_center_success:
-            logger.info("✅ Help Center tutorial integration enabled")
-    except Exception as e:
-        logger.error(f"Failed to initialize Tutorial: {e}")
-        logger.error(traceback.format_exc())
+    # Tutorial functionality is now disabled
+    logger.info("🚫 Interactive Tutorial functionality has been completely disabled")
 
     # Delete any existing webhook
     try:
