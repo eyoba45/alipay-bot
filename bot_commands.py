@@ -39,32 +39,43 @@ def add_tutorial_handlers(bot):
                     pass
         
         # Add callback handler for tutorial navigation buttons with highest priority
-        @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('tutorial_'), priority=1000)
+        @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('tutorial_'), priority=2000)
         def tutorial_callbacks(call):
             """Handle tutorial button callbacks"""
             try:
-                logger.info(f"📣 Tutorial callback received: {call.data} from user {call.from_user.id}")
-                # First, answer the callback to stop the loading indicator
+                # CRITICAL: Immediately answer the callback to stop the loading indicator
+                # This must happen before any other operations to ensure the loading state clears
                 try:
                     bot.answer_callback_query(call.id)
+                    logger.info(f"📣 Tutorial callback immediately answered: {call.data} from user {call.from_user.id}")
                 except Exception as answer_err:
-                    logger.warning(f"⚠️ Could not answer callback query: {answer_err}")
+                    logger.error(f"❌ Critical error answering callback query: {answer_err}")
+                    # Try one more time with error message
+                    try:
+                        bot.answer_callback_query(call.id, "Loading...")
+                    except:
+                        pass
                 
-                # Then handle the tutorial interaction
-                handle_tutorial_callback(bot, call)
-                logger.info(f"✅ Tutorial callback processed successfully: {call.data}")
-            except Exception as e:
-                logger.error(f"❌ Error in tutorial callback handler: {e}")
-                logger.error(traceback.format_exc())
-                # Try to notify user
+                # Then handle the tutorial interaction in a separate try block
                 try:
-                    bot.answer_callback_query(
-                        call.id,
-                        "Sorry, there was an error processing your request. Please try again.",
-                        show_alert=True
-                    )
-                except:
-                    pass
+                    handle_tutorial_callback(bot, call)
+                    logger.info(f"✅ Tutorial callback processed successfully: {call.data}")
+                except Exception as handle_err:
+                    logger.error(f"❌ Error handling tutorial callback: {handle_err}")
+                    logger.error(traceback.format_exc())
+                    # Try to send an error message to the user
+                    try:
+                        bot.send_message(
+                            call.message.chat.id,
+                            "Sorry, there was an error processing your tutorial request. Please try again by typing /tutorial.",
+                            reply_markup=None
+                        )
+                    except:
+                        pass
+                        
+            except Exception as e:
+                logger.error(f"❌ Unhandled error in tutorial callback handler: {e}")
+                logger.error(traceback.format_exc())
             
         # Log success
         logger.info("✅ Tutorial command handlers added successfully")
