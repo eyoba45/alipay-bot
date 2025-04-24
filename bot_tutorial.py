@@ -347,7 +347,8 @@ def handle_tutorial_callback(bot, call):
             step_info = TUTORIAL_STEPS['start']
         
         if callback_data == 'tutorial_next':
-            # Move to next step
+            # Note: The callback should have already been answered in bot_commands.py
+            # but as a safety measure we'll check and answer if needed
             next_step = step_info['next_step']
             if next_step:
                 user_tutorial_state[user_id]['current_step'] = next_step
@@ -355,22 +356,28 @@ def handle_tutorial_callback(bot, call):
                 
                 logger.info(f"➡️ Moving user {user_id} to next tutorial step: {next_step}")
                 
-                # Edit message with new step content - Revamped with explicit error handling
+                # Double-check that callback was answered (belt-and-suspenders approach)
                 try:
-                    logger.info(f"Attempting to edit message for tutorial step {next_step}")
-                    # First answer the callback to prevent issues with telegram API timing
-                    try:
-                        bot.answer_callback_query(call.id)
-                    except Exception as answer_err:
-                        logger.warning(f"⚠️ Could not answer callback query before edit: {answer_err}")
-                    
-                    # Then edit the message with the new content
+                    # CRITICAL: We must answer the callback to clear the loading state
+                    # This should already have happened in the callback handler, but just in case
+                    # NOTE: Telegram only allows one answer per callback
+                    # so if it was already answered, this might fail - that's okay
+                    bot.answer_callback_query(call.id)
+                    logger.info(f"✅ Callback query double-checked and answered in handle_tutorial_callback")
+                except Exception as answer_err:
+                    # This might be normal if already answered in bot_commands.py
+                    logger.debug(f"Note: Could not answer callback query again (likely already answered): {answer_err}")
+                
+                # Now edit the message with the new content - separated for better error isolation
+                try:
+                    # Prepare the new message content
                     keyboard = get_tutorial_keyboard(next_step)
                     content = f"<b>{next_step_info['title']}</b>\n\n{next_step_info['content']}"
                     
                     # Make sure we have a valid message_id
                     message_id = call.message.message_id
                     
+                    # Update the message
                     bot.edit_message_text(
                         text=content,
                         chat_id=chat_id,
@@ -408,6 +415,9 @@ def handle_tutorial_callback(bot, call):
                 bot.answer_callback_query(call.id, "You've reached the end of this section")
             
         elif callback_data == 'tutorial_prev':
+            # Note: The callback should have already been answered in bot_commands.py
+            # but as a safety measure we'll check and answer if needed
+            
             # Find previous step
             prev_step = None
             for step, info in TUTORIAL_STEPS.items():
@@ -417,22 +427,28 @@ def handle_tutorial_callback(bot, call):
                     
                     logger.info(f"⬅️ Moving user {user_id} to previous tutorial step: {step}")
                     
-                    # Edit message with previous step content - Improved error handling
+                    # Double-check that callback was answered (belt-and-suspenders approach)
                     try:
-                        logger.info(f"Attempting to edit message for previous tutorial step {step}")
-                        # First answer the callback to prevent issues with telegram API timing
-                        try:
-                            bot.answer_callback_query(call.id)
-                        except Exception as answer_err:
-                            logger.warning(f"⚠️ Could not answer callback query before edit: {answer_err}")
-                        
-                        # Then edit the message with the new content
+                        # CRITICAL: We must answer the callback to clear the loading state
+                        # This should already have happened in the callback handler, but just in case
+                        # NOTE: Telegram only allows one answer per callback
+                        # so if it was already answered, this might fail - that's okay
+                        bot.answer_callback_query(call.id)
+                        logger.info(f"✅ Callback query double-checked and answered in handle_tutorial_callback")
+                    except Exception as answer_err:
+                        # This might be normal if already answered in bot_commands.py
+                        logger.debug(f"Note: Could not answer callback query again (likely already answered): {answer_err}")
+                    
+                    # Now edit the message with the previous step content - separated for better error handling
+                    try:
+                        # Prepare the message content
                         keyboard = get_tutorial_keyboard(step)
                         content = f"<b>{info['title']}</b>\n\n{info['content']}"
                         
                         # Make sure we have a valid message_id
                         message_id = call.message.message_id
                         
+                        # Update the message
                         bot.edit_message_text(
                             text=content,
                             chat_id=chat_id,
@@ -476,6 +492,19 @@ def handle_tutorial_callback(bot, call):
         elif callback_data == 'tutorial_exit':
             # End tutorial
             logger.info(f"🚪 User {user_id} is exiting the tutorial")
+            
+            # Note: The callback should have already been answered in bot_commands.py
+            # but as a safety measure we'll check and answer if needed
+            try:
+                # CRITICAL: We must answer the callback to clear the loading state
+                # This should already have happened in the callback handler, but just in case
+                bot.answer_callback_query(call.id)
+                logger.info(f"✅ Callback query double-checked and answered in exit handler")
+            except Exception as answer_err:
+                # This might be normal if already answered in bot_commands.py
+                logger.debug(f"Note: Could not answer callback query again (likely already answered): {answer_err}")
+            
+            # Continue with exit process
             from_help = user_tutorial_state[user_id].get('from_help', False)
             
             # Store value and then delete from dict
@@ -564,15 +593,22 @@ def handle_tutorial_callback(bot, call):
                         )
                     except Exception as ultimate_error:
                         logger.error(f"❌ Ultimate fallback also failed: {ultimate_error}")
-            
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception as answer_error:
-                logger.error(f"❌ Error answering callback query: {answer_error}")
         
         elif callback_data == 'tutorial_skip':
             # Skip tutorial
             logger.info(f"⏭️ User {user_id} is skipping the tutorial")
+            
+            # Note: The callback should have already been answered in bot_commands.py
+            # but as a safety measure we'll check and answer if needed
+            try:
+                # CRITICAL: We must answer the callback to clear the loading state
+                # This should already have happened in the callback handler, but just in case
+                bot.answer_callback_query(call.id)
+                logger.info(f"✅ Callback query double-checked and answered in skip handler")
+            except Exception as answer_err:
+                # This might be normal if already answered in bot_commands.py
+                logger.debug(f"Note: Could not answer callback query again (likely already answered): {answer_err}")
+            
             try:
                 del user_tutorial_state[user_id]
                 logger.info(f"✅ Successfully removed user {user_id} from tutorial state")
@@ -601,15 +637,22 @@ def handle_tutorial_callback(bot, call):
             except Exception as menu_error:
                 logger.error(f"❌ Error creating main menu: {menu_error}")
                 logger.error(f"❌ Exception details: {traceback.format_exc()}")
-            
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception as answer_error:
-                logger.error(f"❌ Error answering callback query: {answer_error}")
         
         elif callback_data == 'tutorial_register':
             # Start registration process
             logger.info(f"📝 User {user_id} is starting registration from tutorial")
+            
+            # Note: The callback should have already been answered in bot_commands.py
+            # but as a safety measure we'll check and answer if needed
+            try:
+                # CRITICAL: We must answer the callback to clear the loading state
+                # This should already have happened in the callback handler, but just in case
+                bot.answer_callback_query(call.id)
+                logger.info(f"✅ Callback query double-checked and answered in register handler")
+            except Exception as answer_err:
+                # This might be normal if already answered in bot_commands.py
+                logger.debug(f"Note: Could not answer callback query again (likely already answered): {answer_err}")
+            
             try:
                 del user_tutorial_state[user_id]
                 logger.info(f"✅ Successfully removed user {user_id} from tutorial state")
@@ -641,11 +684,6 @@ def handle_tutorial_callback(bot, call):
                     )
                 except Exception as send_error:
                     logger.error(f"❌ Error sending registration error message: {send_error}")
-            
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception as answer_error:
-                logger.error(f"❌ Error answering callback query: {answer_error}")
         
         elif callback_data == 'tutorial_help':
             # Go to help center
