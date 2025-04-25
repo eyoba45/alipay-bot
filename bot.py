@@ -2415,7 +2415,7 @@ Please try again or press 'Back to Main Menu' to cancel.
 • Address: {user.address}
 • User ID: <code>{chat_id}</code>
 
-<b>💰 FINANCIAL DETAILS:�</b>
+<b>💰 FINANCIAL DETAILS:</b>
 • Balance: $<code>{user.balance:.2f}</code>
 • Order #: <code>{new_order_number}</code>
 
@@ -2648,7 +2648,7 @@ Please try again or contact support.
         bot.answer_callback_query(call.id, "Action processed successfully")
 
     except Exception as e:
-        logger.error(f"Error proce�ssing deposit decision: {e}")
+        logger.error(f"Error processing deposit decision: {e}")
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing decision")
     finally:
@@ -3360,7 +3360,7 @@ def admin_dashboard(message):
     admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     admin_menu.add(
         KeyboardButton('👥 User Management'),
-        KeyboardButton('📦 Orde�r Management')
+        KeyboardButton('📦 Order Management')
     )
     admin_menu.add(
         KeyboardButton('💰 Deposit Management'),
@@ -3621,7 +3621,7 @@ def handle_users_pagination(call):
 """
 
         for i, user in enumerate(users, 1):
-            # Format subscript�ion status
+            # Format subscription status
             subscription_status = "❌ Inactive"
             if user.subscription_date:
                 days_passed = (datetime.utcnow() - user.subscription_date).days
@@ -4352,7 +4352,7 @@ def handle_deposit_approval(call):
 
 Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
 
-<b>New Balance:</b> ${user.balan�ce:.2f}
+<b>New Balance:</b> ${user.balance:.2f}
 
 <i>Thank you for using AliPay_ETH!</i>
 """,
@@ -4859,7 +4859,7 @@ def handle_help_buttons(call):
 • You'll gain access to all features
 • You can start depositing funds and placing orders
 
-<b>💡 TIP:</b> Make sure to provide accurate details for smooth delivery of your orde�rs.
+<b>💡 TIP:</b> Make sure to provide accurate details for smooth delivery of your orders.
 """,
             parse_mode='HTML',
             reply_markup=back_markup
@@ -5110,7 +5110,7 @@ def handle_ai_assistant_greeting(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('retry_payment_'))
 def handle_payment_retry(call):
-    """Hand�le payment retry button for cancelled or failed payments"""
+    """Handle payment retry button for cancelled or failed payments"""
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     session = None
@@ -5342,7 +5342,7 @@ Enter how many points you want to redeem:
             
             # Get user's referral code and URL
             from referral_system import get_referral_url
-            referral_code = user.referral_code or "�"
+            referral_code = user.referral_code or ""
             referral_url = get_referral_url(referral_code) if referral_code else "Referral code not set"
             
             # Send referral system explanation
