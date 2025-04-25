@@ -2905,7 +2905,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
             # Format order details with emojis and nice formatting
             order_details = f"""
 ╭─────────────────────╮
-<b>🛍️ Order #{order.order�_number}</b>
+<b>🛍️ Order #{order.order_number}</b>
 • Status: {status_emoji} <b>{order.status}</b> {status_color}
 • Amount: <b>${order.amount:.2f}</b>
 • Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
