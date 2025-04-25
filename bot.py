@@ -3858,7 +3858,7 @@ def handle_manage_user(call):
 
         # Format subscription status
         subscription_status = "❌ Inactive"
-        if user.subscripti�on_date:
+        if user.subscription_date:
             days_passed = (datetime.utcnow() - user.subscription_date).days
             if days_passed < 30:
                 subscription_status = f"✅ Active ({30 - days_passed} days left)"
