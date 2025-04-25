@@ -5540,7 +5540,7 @@ Enter how many points you want to redeem:
 <i>Copy the link above and share it with friends!</i>
 """,
                     parse_mode='HTML',
-                    reply�_markup=markup
+                    reply_markup=markup
                 )
             except Exception as ref_err:
                 logger.error(f"Error displaying referral link: {ref_err}")
