@@ -4105,7 +4105,7 @@ def handle_orders_pagination(call):
             # Format status with emoji
             status_emoji = "⏳"
             if order.status == "Shipping":
-                stat�us_emoji = "🚚"
+                status_emoji = "🚚"
             elif order.status == "Completed":
                 status_emoji = "✅"
 
@@ -4613,7 +4613,7 @@ def process_balance_amount(message):
 <b>Previous Balance:</b> ${current_balance:.2f}
 <b>New Balance:</b> ${new_balance:.2f}
 
-<i>The user has been notified of the balance �update.</i>
+<i>The user has been notified of the balance update.</i>
 """,
             parse_mode='HTML',
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
