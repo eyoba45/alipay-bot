@@ -25,39 +25,61 @@ VERIFICATION_INTERVAL = 15
 
 def get_bot():
     """Import and return bot instance - with improved reliability"""
-    # Check if we're not in the main thread (standard for background tasks)
-    import threading
-    if threading.current_thread() is not threading.main_thread():
-        # Running in a background thread, don't try to get the bot
-        logger.info("Bot integration disabled for background verification service")
-        return None, None
-
     try:
         # Attempt to get a Telegram token regardless of import method
         token = os.environ.get('TELEGRAM_BOT_TOKEN')
         if not token:
-            logger.info("TELEGRAM_BOT_TOKEN not found in environment")
+            logger.error("TELEGRAM_BOT_TOKEN not found in environment")
             return None, None
 
         # For notification purposes, create a direct bot instance
         # This bypasses the need to import from the main bot module
         try:
             import telebot
+            from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+            
             temp_bot = telebot.TeleBot(token)
             
-            # Simple menu placeholder function
+            # Simple menu creator function
             def simple_menu(is_registered=False, chat_id=None):
-                return None
+                markup = ReplyKeyboardMarkup(resize_keyboard=True)
                 
-            logger.info("Created standalone bot instance for payment notifications")
+                if is_registered:
+                    # Main menu for registered users
+                    markup.row(
+                        KeyboardButton('💰 Deposit'),
+                        KeyboardButton('📦 Submit Order')
+                    )
+                    markup.row(
+                        KeyboardButton('🔍 Track Order'),
+                        KeyboardButton('💳 Balance')
+                    )
+                    markup.row(
+                        KeyboardButton('📊 Order Status'),
+                        KeyboardButton('⏱ Subscription')
+                    )
+                    markup.row(
+                        KeyboardButton('👥 My Referral Link'),
+                        KeyboardButton('❓ Help Center')
+                    )
+                else:
+                    # Registration menu
+                    markup.row(KeyboardButton('🔑 Register'))
+                    markup.row(KeyboardButton('❓ Help Center'))
+                
+                return markup
+                
+            logger.info("✅ Created standalone bot instance for payment notifications")
             return temp_bot, simple_menu
             
         except Exception as e:
-            logger.info(f"Could not create bot instance: {e}")
+            logger.error(f"Could not create bot instance: {e}")
+            logger.error(traceback.format_exc())
             return None, None
             
     except Exception as e:
-        logger.info("Bot integration disabled for payment verification service")
+        logger.error(f"Error initializing bot: {e}")
+        logger.error(traceback.format_exc())
         # Return None but don't halt operations - we can still verify payments
         # even without being able to send notifications
         return None, None
@@ -127,7 +149,7 @@ def verify_payment(tx_ref):
         return False
 
 def process_verified_registration(telegram_id, payment_data):
-    """Process a verified registration payment"""
+    """Process a verified registration payment with improved notification"""
     session = None
     try:
         logger.info(f"Processing verified registration for user {telegram_id}")
@@ -163,12 +185,40 @@ def process_verified_registration(telegram_id, payment_data):
 
         logger.info(f"✅ User {telegram_id} registered with AUTO-APPROVAL via Chapa")
 
-        # Notify user
-        bot, create_main_menu = get_bot()
-        if bot and create_main_menu:
-            bot.send_message(
-                telegram_id,
-                """
+        # Create direct bot instance for notifications to ensure delivery
+        try:
+            import telebot
+            from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+            
+            token = os.environ.get('TELEGRAM_BOT_TOKEN')
+            if token:
+                # Create bot instance directly
+                temp_bot = telebot.TeleBot(token)
+                logger.info(f"✅ Created direct bot instance for registration approval notification")
+                
+                # Create main menu for reply
+                markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                markup.row(
+                    KeyboardButton('💰 Deposit'),
+                    KeyboardButton('📦 Submit Order')
+                )
+                markup.row(
+                    KeyboardButton('🔍 Track Order'),
+                    KeyboardButton('💳 Balance')
+                )
+                markup.row(
+                    KeyboardButton('📊 Order Status'),
+                    KeyboardButton('⏱ Subscription')
+                )
+                markup.row(
+                    KeyboardButton('👥 My Referral Link'),
+                    KeyboardButton('❓ Help Center')
+                )
+                
+                # Send welcome message with menu
+                temp_bot.send_message(
+                    telegram_id,
+                    """
 ✅ <b>Registration Approved!</b>
 
 🎉 <b>Welcome to AliPay_ETH!</b> 🎉
@@ -183,17 +233,18 @@ Your account has been automatically activated after successful payment verificat
 
 Need assistance? Use ❓ <b>Help Center</b> anytime!
 """,
-                parse_mode='HTML',
-                reply_markup=create_main_menu(is_registered=True)
-            )
-            
-            # Also notify admin if admin ID is set
-            admin_id = os.environ.get('ADMIN_ID')
-            if admin_id:
-                try:
-                    bot.send_message(
-                        int(admin_id),
-                        f"""
+                    parse_mode='HTML',
+                    reply_markup=markup
+                )
+                logger.info(f"✅ Successfully sent registration approval notification to user {telegram_id}")
+                
+                # Also notify admin if admin ID is set
+                admin_id = os.environ.get('ADMIN_ID')
+                if admin_id:
+                    try:
+                        temp_bot.send_message(
+                            int(admin_id),
+                            f"""
 ✅ <b>AUTO-APPROVED REGISTRATION</b>
 
 User successfully registered with payment verification:
@@ -205,24 +256,24 @@ Payment was automatically verified through Chapa API.
 Transaction Reference: <code>{pending.tx_ref}</code>
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """,
-                        parse_mode='HTML'
-                    )
-                except Exception as admin_err:
-                    logger.error(f"Error notifying admin about auto-approved registration: {admin_err}")
-            
-            # Send tutorial offer after a short delay
-            time.sleep(3)  # Give user time to read welcome message
-            try:
-                # Create tutorial offer with inline buttons
-                tutorial_markup = telebot.types.InlineKeyboardMarkup()
-                tutorial_markup.row(
-                    telebot.types.InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="help_tutorial"),
-                    telebot.types.InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
-                )
+                            parse_mode='HTML'
+                        )
+                    except Exception as admin_err:
+                        logger.error(f"Error notifying admin about auto-approved registration: {admin_err}")
                 
-                bot.send_message(
-                    telegram_id,
-                    """
+                # Send tutorial offer after a short delay
+                time.sleep(1)  # Give user time to read welcome message
+                try:
+                    # Create tutorial offer with inline buttons
+                    tutorial_markup = InlineKeyboardMarkup()
+                    tutorial_markup.row(
+                        InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="help_tutorial"),
+                        InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
+                    )
+                    
+                    temp_bot.send_message(
+                        telegram_id,
+                        """
 <b>🎓 Would you like to take a quick tutorial?</b>
 
 Learn how to use all features of our service in just a few minutes!
@@ -232,12 +283,18 @@ The interactive guide will show you how to:
 • Use the referral system
 • And more!
 """,
-                    parse_mode='HTML',
-                    reply_markup=tutorial_markup
-                )
-                logger.info(f"Sent tutorial offer to newly registered user {telegram_id}")
-            except Exception as tutorial_err:
-                logger.error(f"Error sending tutorial offer: {tutorial_err}")
+                        parse_mode='HTML',
+                        reply_markup=tutorial_markup
+                    )
+                    logger.info(f"✅ Sent tutorial offer to newly registered user {telegram_id}")
+                except Exception as tutorial_err:
+                    logger.error(f"Error sending tutorial offer: {tutorial_err}")
+                    logger.error(traceback.format_exc())
+            else:
+                logger.error("TELEGRAM_BOT_TOKEN not found for registration notifications")
+        except Exception as notification_err:
+            logger.error(f"Error sending registration notification: {notification_err}")
+            logger.error(traceback.format_exc())
 
         return True
     except Exception as e:
@@ -320,19 +377,48 @@ def process_verified_deposit(telegram_id, amount, payment_data):
 
         logger.info(f"✅ Deposit of ${amount} for user {telegram_id} auto-approved via Chapa")
 
-        # Notify user
-        bot, _ = get_bot()
-        if bot:
-            birr_amount = int(amount * 160)
+        # Create direct bot instance for notification
+        try:
+            import telebot
+            from telebot.types import ReplyKeyboardMarkup, KeyboardButton
             
-            # Create subscription message if applicable
-            subscription_msg = ""
-            if subscription_updated:
-                subscription_msg = f"\n<b>📅 SUBSCRIPTION {'RENEWED' if user.subscription_date else 'ACTIVATED'}:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
-            
-            bot.send_message(
-                telegram_id,
-                f"""
+            token = os.environ.get('TELEGRAM_BOT_TOKEN')
+            if token:
+                # Create bot instance directly
+                temp_bot = telebot.TeleBot(token)
+                logger.info(f"✅ Created direct bot instance for deposit approval notification")
+                
+                # Calculate birr amount with improved conversion rate
+                birr_amount = int(amount * 160)
+                
+                # Create subscription message if applicable
+                subscription_msg = ""
+                if subscription_updated:
+                    subscription_msg = f"\n<b>📅 SUBSCRIPTION {'RENEWED' if user.subscription_date else 'ACTIVATED'}:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                
+                # Create main menu for reply
+                markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                markup.row(
+                    KeyboardButton('💰 Deposit'),
+                    KeyboardButton('📦 Submit Order')
+                )
+                markup.row(
+                    KeyboardButton('🔍 Track Order'),
+                    KeyboardButton('💳 Balance')
+                )
+                markup.row(
+                    KeyboardButton('📊 Order Status'),
+                    KeyboardButton('⏱ Subscription')
+                )
+                markup.row(
+                    KeyboardButton('👥 My Referral Link'),
+                    KeyboardButton('❓ Help Center')
+                )
+                
+                # Send notification with appropriate menu
+                temp_bot.send_message(
+                    telegram_id,
+                    f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>DEPOSIT APPROVED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -350,32 +436,35 @@ def process_verified_deposit(telegram_id, amount, payment_data):
 
 <i>Browse AliExpress and submit your orders now!</i>
 """,
-                parse_mode='HTML'
-            )
-            
-            # Notify admin if admin ID is set
-            admin_id = os.environ.get('ADMIN_ID')
-            if admin_id:
-                try:
-                    bot.send_message(
-                        int(admin_id),
-                        f"""
+                    parse_mode='HTML',
+                    reply_markup=markup
+                )
+                logger.info(f"✅ Successfully sent deposit approval notification to user {telegram_id}")
+                
+                # Notify admin about deposit approval
+                admin_id = os.environ.get('ADMIN_ID')
+                if admin_id:
+                    try:
+                        temp_bot.send_message(
+                            int(admin_id),
+                            f"""
 ✅ <b>AUTO-APPROVED DEPOSIT</b>
 
-Deposit successfully processed with payment verification:
-• User: <b>{user.name}</b> [ID: <code>{telegram_id}</code>]
-• Amount: <code>${amount:.2f}</code> ({birr_amount:,} birr)
-• New Balance: <code>${user.balance:.2f}</code> ({int(user.balance * 160):,} birr)
-{f"• Subscription: {'Renewed' if user.subscription_date else 'Activated'} until {(now + timedelta(days=30)).strftime('%Y-%m-%d')}" if subscription_updated else ""}
-
-Payment was automatically verified through Chapa API.
-Transaction Reference: <code>{tx_ref}</code>
-Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+User deposit auto-approved:
+• User ID: <code>{telegram_id}</code>
+• Amount: {birr_amount:,} birr (${amount:.2f})
+• Transaction: <code>{tx_ref}</code>
+• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """,
-                        parse_mode='HTML'
-                    )
-                except Exception as admin_err:
-                    logger.error(f"Error notifying admin about auto-approved deposit: {admin_err}")
+                            parse_mode='HTML'
+                        )
+                    except Exception as admin_err:
+                        logger.error(f"Error notifying admin about deposit: {admin_err}")
+            else:
+                logger.error("TELEGRAM_BOT_TOKEN not found for deposit notifications")
+        except Exception as notification_err:
+            logger.error(f"Error sending deposit notification: {notification_err}")
+            logger.error(traceback.format_exc())
 
         return True
     except Exception as e:
@@ -406,6 +495,47 @@ def check_pending_registrations():
             
         # Close the first session to avoid keeping detached objects
         safe_close_session(session)
+        
+        # Initialize bot for notifications (do this once to avoid recreation for each user)
+        import telebot
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+        
+        token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        if token:
+            bot = telebot.TeleBot(token)
+            logger.info("✅ Created standalone bot for payment notifications")
+        else:
+            bot = None
+            logger.error("TELEGRAM_BOT_TOKEN not found in environment")
+            
+        # Simple menu creation function
+        def create_main_menu(is_registered=False, chat_id=None):
+            markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            
+            if is_registered:
+                # Main menu for registered users
+                markup.row(
+                    KeyboardButton('💰 Deposit'),
+                    KeyboardButton('📦 Submit Order')
+                )
+                markup.row(
+                    KeyboardButton('🔍 Track Order'),
+                    KeyboardButton('💳 Balance')
+                )
+                markup.row(
+                    KeyboardButton('📊 Order Status'),
+                    KeyboardButton('⏱ Subscription')
+                )
+                markup.row(
+                    KeyboardButton('👥 My Referral Link'),
+                    KeyboardButton('❓ Help Center')
+                )
+            else:
+                # Registration menu
+                markup.row(KeyboardButton('🔑 Register'))
+                markup.row(KeyboardButton('❓ Help Center'))
+            
+            return markup
         
         # Process each pending registration with a fresh session
         for item in pending_data:
@@ -503,31 +633,50 @@ You can retry your payment by clicking the button below.
                     # Check if registration is older than 24 hours - clean up old pending registrations
                     if created_at and (datetime.utcnow() - created_at).total_seconds() > 86400:
                         logger.warning(f"Registration for {telegram_id} pending for >24 hours, marking as expired")
+                        # Update status and add retry button instead
                         pending.status = "Payment Expired"
                         session.commit()
                         
-                        # Notify user about expired registration
-                        bot, create_main_menu = get_bot()
-                        if bot and create_main_menu:
+                        # Create payment retry button for expired registration instead of direct message
+                        try:
+                            # Create retry button
+                            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                            retry_markup = InlineKeyboardMarkup()
+                            retry_markup.add(InlineKeyboardButton("🔄 Retry Payment", callback_data=f"retry_payment_{telegram_id}"))
+                            
+                            # Get the bot directly initialized
                             try:
-                                bot.send_message(
-                                    telegram_id,
-                                    """
+                                import telebot
+                                token = os.environ.get('TELEGRAM_BOT_TOKEN')
+                                if token:
+                                    temp_bot = telebot.TeleBot(token)
+                                    logger.info(f"Sending payment retry notification to expired registration: {telegram_id}")
+                                    
+                                    # Send message with retry button
+                                    temp_bot.send_message(
+                                        telegram_id,
+                                        """
 ⏰ <b>REGISTRATION PAYMENT EXPIRED</b>
 
-Your registration payment was not confirmed within 24 hours.
+Your registration payment was not completed within 24 hours.
 This could be due to:
-• Payment was not completed
-• Transaction was canceled
+• Payment was cancelled
+• Transaction timed out
 • Network or processing issues
 
-Please start a new registration with /start if you would like to try again.
+You can retry your registration by clicking the button below.
 """,
-                                    parse_mode='HTML',
-                                    reply_markup=create_main_menu(is_registered=False)
-                                )
-                            except Exception as msg_error:
-                                logger.error(f"Error sending expiration message: {msg_error}")
+                                        parse_mode='HTML',
+                                        reply_markup=retry_markup
+                                    )
+                                    logger.info(f"✅ Successfully sent payment retry button to {telegram_id}")
+                            except Exception as bot_err:
+                                logger.error(f"Error creating bot instance for notification: {bot_err}")
+                                logger.error(traceback.format_exc())
+                                
+                        except Exception as msg_error:
+                            logger.error(f"Error preparing retry message: {msg_error}")
+                            logger.error(traceback.format_exc())
 
             except Exception as e:
                 logger.error(f"Error checking registration for {pending.telegram_id}: {e}")
