@@ -5717,14 +5717,10 @@ def main():
     except Exception as optimization_error:
         logger.warning(f"Could not apply all performance optimizations: {optimization_error}")
 
-    # Start payment notification checker
-    try:
-        logger.info("Starting payment notification checker...")
-        import payment_notifier
-        payment_notifier.start_checker()
-        logger.info("Payment notification checker started")
-    except Exception as e:
-        logger.error(f"Error starting payment notification checker: {e}")
+    # Payment notifications are now handled entirely by the standalone chapa_autopay.py process
+    # No need to start a duplicate payment notifier from here
+    logger.info("✅ Using standalone chapa_autopay.py for payment processing")
+    logger.info("✓ Payment notifications will be handled by the Payment Auto-Approver workflow")
 
     # Start polling with recovery
     while not shutdown_requested:
