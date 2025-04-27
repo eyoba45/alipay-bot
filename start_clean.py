@@ -195,15 +195,12 @@ def start_payment_notifier():
     """Start the payment notification service"""
     logger.info("Starting payment notification service...")
     
-    # Check if chapa_autopay.py exists - this is our enhanced auto-approval script
+    # Always use chapa_autopay.py as the primary payment notification service
     if os.path.exists("chapa_autopay.py"):
         logger.info("Using enhanced auto-approval payment verification service")
         script_name = "chapa_autopay.py"
-    elif os.path.exists("payment_notifier.py"):
-        logger.info("Using standard payment notification service")
-        script_name = "payment_notifier.py"
     else:
-        logger.error("Payment notification service scripts not found!")
+        logger.error("Enhanced payment verification script (chapa_autopay.py) not found!")
         return False
     
     try:    
