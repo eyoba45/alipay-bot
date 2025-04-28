@@ -5422,6 +5422,110 @@ def handle_ai_assistant_greeting(message):
     # Process the message
     digital_companion.process_message(message)
 
+@bot.callback_query_handler(func=lambda call: call.data == "deposit_renew")
+def handle_subscription_renewal(call):
+    """Handle subscription renewal button clicks"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+    
+    # Make sure to answer the callback to clear waiting status
+    bot.answer_callback_query(call.id, "Processing subscription renewal...")
+    
+    try:
+        session = get_session()
+        user = session.query(User).filter_by(telegram_id=chat_id).first()
+        
+        if not user:
+            bot.send_message(
+                chat_id, 
+                "⚠️ Please register first to renew your subscription.",
+                reply_markup=create_main_menu()
+            )
+            return
+            
+        # Generate a unique transaction reference
+        import uuid
+        tx_ref = f"SUB-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:12]}"
+        
+        # Create a pending record in the database
+        renewal = PendingDeposit(
+            user_id=user.id,
+            telegram_id=chat_id,
+            amount=1.0,  # $1 for subscription
+            tx_ref=tx_ref,
+            status="pending",
+            for_subscription=True,
+            created_at=datetime.utcnow()
+        )
+        session.add(renewal)
+        session.commit()
+        
+        # Generate payment link
+        from chapa_payment import generate_deposit_payment
+        payment_data = {
+            "email": user.name.replace(" ", "") + f".{chat_id}@example.com",
+            "amount": 150,  # 150 birr
+            "first_name": user.name.split()[0] if ' ' in user.name else user.name,
+            "last_name": user.name.split()[-1] if ' ' in user.name else "User",
+            "tx_ref": tx_ref,
+            "callback_url": os.environ.get("CALLBACK_URL", "https://alipayeth.onrender.com/webhook"),
+            "return_url": os.environ.get("RETURN_URL", "https://t.me/AliPayEthBot"),
+            "currency": "ETB",
+            "phone_number": user.phone,
+            "customization": {
+                "title": "Subscription Renewal",
+                "description": "Payment for AliPay ETH subscription renewal"
+            }
+        }
+        
+        # Generate Chapa payment URL
+        payment_result = generate_deposit_payment(payment_data, 1.0)  # 1.0 USD = 150 birr
+        
+        # Extract checkout URL from result
+        checkout_url = payment_result.get('checkout_url') if payment_result else None
+        
+        if not checkout_url:
+            bot.send_message(
+                chat_id,
+                "❌ Error generating payment link. Please try again later or contact support.",
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            return
+            
+        # Send payment instructions with the payment link
+        payment_markup = InlineKeyboardMarkup()
+        payment_markup.add(InlineKeyboardButton("💳 Pay Now - 150 birr", url=checkout_url))
+        
+        bot.send_message(
+            chat_id,
+            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💰 <b>SUBSCRIPTION RENEWAL</b> 💰  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+You're about to renew your subscription for:
+• Monthly fee: <b>$1.00</b> (150 birr)
+• Duration: <b>30 days</b>
+
+<b>Click the Pay Now button below to complete your renewal:</b>
+""",
+            parse_mode='HTML',
+            reply_markup=payment_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing subscription renewal: {e}")
+        logger.error(traceback.format_exc())
+        bot.send_message(
+            chat_id, 
+            "⚠️ An error occurred while processing your subscription renewal. Please try again later.",
+            reply_markup=create_main_menu(is_registered=True)
+        )
+    finally:
+        if session:
+            safe_close_session(session)
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('retry_payment_'))
 def handle_payment_retry(call):
     """Handle payment retry button for cancelled or failed payments"""
