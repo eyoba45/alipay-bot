@@ -36,6 +36,40 @@ except ImportError as e:
     logger.warning(f"AI Assistant not available: {e}")
     COMPANION_ENABLED = False
 
+# Decorator to check subscription status
+def subscription_required(func):
+    """Decorator to ensure user has a valid subscription before accessing features"""
+    def wrapper(message, *args, **kwargs):
+        chat_id = message.chat.id
+        
+        # Check if user has a valid subscription
+        if not has_valid_subscription(chat_id):
+            # User doesn't have a valid subscription, send locked message
+            # This will be handled inside has_valid_subscription which sends proper payment link
+            
+            bot.send_message(
+                chat_id,
+                """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔒 <b>FEATURE LOCKED</b> 🔒  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+This feature requires an active subscription.
+
+Please renew your subscription to access all bot features.
+
+To check your subscription status, use the 📅 Subscription button.
+""",
+                parse_mode='HTML'
+            )
+            logger.info(f"Blocked access to feature for user {chat_id} due to expired subscription")
+            return
+            
+        # User has valid subscription, proceed with original function
+        return func(message, *args, **kwargs)
+        
+    return wrapper
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -102,6 +136,180 @@ _user_cache = {}
 user_states = {}
 registration_data = {}
 digital_companion = None  # Will be initialized in main() if COMPANION_ENABLED
+
+# Dictionary to track users with expired subscriptions
+# Key: user_id, Value: Boolean (True if subscription is expired)
+expired_subscriptions = {}
+
+def has_valid_subscription(user_id):
+    """Check if a user has a valid subscription or should be blocked from using features
+    
+    This function also handles auto-renewal from user balance if possible
+    """
+    if is_admin(user_id):
+        return True  # Admins always have access
+        
+    # Check if user is registered
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            return False  # Not registered
+            
+        # If no subscription date, user hasn't paid yet
+        if not user.subscription_date:
+            return False
+            
+        # Calculate if subscription is active
+        days_passed = (datetime.utcnow() - user.subscription_date).days
+        
+        # If subscription is active, return True
+        if days_passed < 30:
+            # If they were in expired dict, remove them
+            if user_id in expired_subscriptions:
+                del expired_subscriptions[user_id]
+            return True
+            
+        # Subscription has expired, try to auto-renew from balance
+        if user.balance >= 1.0:  # User has enough balance to auto-renew ($1)
+            # Deduct subscription fee
+            previous_balance = user.balance
+            user.balance -= 1.0
+            
+            # Update subscription date
+            user.subscription_date = datetime.utcnow()
+            session.commit()
+            
+            # Notify user about automatic renewal
+            try:
+                bot.send_message(
+                    user_id,
+                    f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>SUBSCRIPTION RENEWED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your subscription has been automatically renewed for 30 days.
+
+💰 <b>Previous balance:</b> ${previous_balance:.2f}
+💵 <b>Subscription fee:</b> $1.00
+💼 <b>New balance:</b> ${user.balance:.2f}
+
+Your subscription will expire on {(datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d")}.
+""",
+                    parse_mode='HTML'
+                )
+                
+                # Notify admin about the renewal
+                for admin_id in ADMIN_IDS:
+                    try:
+                        bot.send_message(
+                            admin_id,
+                            f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💲 <b>SUBSCRIPTION AUTO-RENEWED</b>  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Subscription auto-renewed for user:
+👤 <b>{user.name}</b> [ID: <code>{user_id}</code>]
+💰 Previous balance: ${previous_balance:.2f}
+💰 New balance: ${user.balance:.2f}
+""",
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.error(f"Error notifying admin {admin_id} about auto-renewal: {e}")
+                
+                logger.info(f"✅ Auto-renewed subscription for user {user_id} from balance")
+                
+                # Remove from expired dict if present
+                if user_id in expired_subscriptions:
+                    del expired_subscriptions[user_id]
+                    
+                return True
+            except Exception as e:
+                logger.error(f"Error notifying about subscription renewal: {e}")
+                return True  # Still return True since subscription was renewed
+                
+        # Subscription expired and not enough balance to auto-renew
+        # Mark this user as expired if not already marked
+        if user_id not in expired_subscriptions:
+            expired_subscriptions[user_id] = True
+            try:
+                # Generate Chapa payment link for subscription renewal
+                from chapa_payment import generate_tx_ref
+                
+                # Create a renewal transaction reference
+                tx_ref = f"SUB-{datetime.now().strftime('%Y%m%d%H%M%S')}-{generate_tx_ref()}"
+                
+                # Store this in pending approvals for later verification
+                renewal = PendingApproval(
+                    telegram_id=user_id,
+                    tx_ref=tx_ref,
+                    amount=1,  # $1 subscription fee
+                    status="pending",
+                    for_registration=False,
+                    created_at=datetime.utcnow()
+                )
+                session.add(renewal)
+                session.commit()
+                
+                # Generate payment link
+                from chapa_payment import generate_deposit_payment
+                payment_data = {
+                    "email": user.name.replace(" ", "") + f".{user_id}@example.com",
+                    "amount": 150,  # 150 birr
+                    "first_name": user.name.split()[0] if ' ' in user.name else user.name,
+                    "last_name": user.name.split()[-1] if ' ' in user.name else "User",
+                    "tx_ref": tx_ref,
+                    "callback_url": os.environ.get("CALLBACK_URL", "https://alipayeth.onrender.com/webhook"),
+                    "return_url": os.environ.get("RETURN_URL", "https://t.me/AliPayEthBot"),
+                    "currency": "ETB",
+                    "phone_number": user.phone,
+                    "customization": {
+                        "title": "Subscription Renewal",
+                        "description": "Payment for AliPay ETH subscription renewal"
+                    }
+                }
+                
+                # Generate Chapa payment URL
+                checkout_url = generate_deposit_payment(payment_data)
+                
+                # Send subscription expired message with renewal link
+                renewal_markup = InlineKeyboardMarkup()
+                renewal_markup.add(InlineKeyboardButton("💳 Pay Now - 150 birr", url=checkout_url))
+                
+                bot.send_message(
+                    user_id,
+                    f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔒 <b>SUBSCRIPTION LOCKED</b> 🔒  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your subscription has expired and your balance is too low for automatic renewal.
+
+You need to renew your subscription to continue using the bot features.
+
+Subscription fee: $1.00 (150 birr)
+
+<b>Click the Pay Now button below to renew:</b>
+""",
+                    parse_mode='HTML',
+                    reply_markup=renewal_markup
+                )
+                
+                logger.info(f"Sent subscription locked notification to user {user_id}")
+            except Exception as e:
+                logger.error(f"Error processing expired subscription for {user_id}: {e}")
+                
+        return False  # Subscription expired
+        
+    except Exception as e:
+        logger.error(f"Error checking subscription status: {e}")
+        return False  # Error checking subscription
+    finally:
+        safe_close_session(session)
+
 
 def is_admin(chat_id):
     """Check if a user is an admin"""
@@ -1440,6 +1648,7 @@ Please try registering again.
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '💰 Deposit')
+@subscription_required
 def deposit_funds(message):
     """Handle deposit button"""
     return deposit_funds_internal(message, for_subscription=False)
@@ -1900,6 +2109,7 @@ Screenshot attached below
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '💳 Balance')
+@subscription_required
 def check_balance(message):
     """Check user balance with referral badges and hover effects"""
     chat_id = message.chat.id
@@ -1967,6 +2177,7 @@ def check_balance(message):
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges')
+@subscription_required
 def referral_badges(message):
     """Display referral badges with hover effects and statistics"""
     chat_id = message.chat.id
@@ -2088,6 +2299,7 @@ Click 🔑 Register to create your account.
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link')
+@subscription_required
 def my_referral_link(message):
     """Handle My Referral Link button to display and share referral link"""
     chat_id = message.chat.id
@@ -2227,6 +2439,7 @@ def join_community(message):
     )
 
 @bot.message_handler(func=lambda msg: msg.text == '📦 Submit Order')
+@subscription_required
 def submit_order(message):
     """Handle submit order button with enhanced UI"""
     chat_id = message.chat.id
@@ -2655,6 +2868,7 @@ Please try again or contact support.
         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
+@subscription_required
 def track_order(message):
     """Handle track order button with enhanced UI and options"""
     chat_id = message.chat.id
@@ -2832,6 +3046,7 @@ Please try again or contact support if the problem persists.
             safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
+@subscription_required
 def order_status(message):
     """Handle order status button with improved tracking"""
     chat_id = message.chat.id
@@ -3249,6 +3464,11 @@ def check_subscription_status():
         now = datetime.utcnow()
         logger.info(f"Checking subscription status for {len(users)} users")
 
+        # Keep track of counts for logging
+        auto_renewed = 0
+        expiring_notified = 0
+        expired_notified = 0
+        
         for user in users:
             try:
                 # Skip users without subscription date (never subscribed)
@@ -3258,78 +3478,172 @@ def check_subscription_status():
                 # Calculate days remaining in subscription
                 days_passed = (now - user.subscription_date).days
                 days_remaining = 30 - days_passed
-
-                # Determine if we should send a reminder
-                should_remind = False
-
-                # Check when the last reminder was sent
-                if user.last_subscription_reminder:
-                    days_since_last_reminder = (now - user.last_subscription_reminder).days
-                    if days_since_last_reminder >= 3:  # Don't spam users, minimum 3 days between reminders
-                        should_remind = True
-                else:
-                    should_remind = True
-
-                if should_remind:
-                    # Case 1: Subscription is about to expire (5 days or less remaining)
-                    if 0 < days_remaining <= 5:
+                
+                # Subscription is current/active
+                if days_remaining > 3:
+                    # Remove from expired dict if present
+                    if user.telegram_id in expired_subscriptions:
+                        del expired_subscriptions[user.telegram_id]
+                    continue
+                    
+                # Subscription expiring soon (send notification 3 days before)
+                if days_remaining > 0 and days_remaining <= 3:
+                    # Only notify once per day by checking if we've already sent
+                    notification_key = f"{user.telegram_id}_expiring_{days_remaining}"
+                    if notification_key in expired_subscriptions:
+                        continue
+                        
+                    try:
+                        # Mark notification as sent for today
+                        expired_subscriptions[notification_key] = True
+                        
+                        # Send expiration warning with renewal button
                         renewal_markup = InlineKeyboardMarkup()
-                        renewal_markup.add(InlineKeyboardButton("💰 Deposit to Renew", callback_data="deposit_renew"))
-                        renewal_markup.add(InlineKeyboardButton("📋 Subscription Benefits", callback_data="sub_benefits"))
-
+                        renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                        
                         bot.send_message(
                             user.telegram_id,
                             f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ⚠️ <b>SUBSCRIPTION REMINDER</b> ⚠️  
+   ⚠️ <b>SUBSCRIPTION EXPIRING SOON</b> ⚠️  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Your subscription will expire in <b>{days_remaining} days</b>.
+Your subscription will expire in <b>{days_remaining} day{'s' if days_remaining > 1 else ''}</b>.
 
-To maintain uninterrupted access to our services, please make a deposit of at least $1 (150 birr) before your subscription expires.
+<b>📅 SUBSCRIPTION DETAILS:</b>
+• Expiry date: <b>{(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}</b>
+• Monthly fee: <b>$1.00</b> (150 birr)
 
-<i>Note: Your next deposit will automatically renew your subscription for another month.</i>
+<b>💰 RENEWAL OPTIONS:</b>
+• Auto-renewal: Your subscription will auto-renew if your balance is at least $1.00
+• Current balance: <b>${user.balance:.2f}</b>
+• Manual renewal: Click 'Renew Now' to add funds
+
+<i>Renew now to maintain uninterrupted access!</i>
 """,
                             parse_mode='HTML',
                             reply_markup=renewal_markup
                         )
-                        logger.info(f"Sent subscription expiry reminder to user {user.telegram_id}, {days_remaining} days remaining")
+                        expiring_notified += 1
+                        logger.info(f"Sent expiration warning to user {user.telegram_id} ({days_remaining} days left)")
+                    except Exception as e:
+                        logger.error(f"Error sending expiration warning to user {user.telegram_id}: {e}")
+                    
+                # Subscription expired - check for auto-renewal from balance
+                else:
+                    # Try to auto-renew from balance
+                    if user.balance >= 1.0:  # User has at least $1
+                        try:
+                            # Deduct subscription fee
+                            previous_balance = user.balance
+                            user.balance -= 1.0
+                            
+                            # Update subscription date
+                            user.subscription_date = now
+                            session.commit()
+                            
+                            # Remove from expired dict if present
+                            if user.telegram_id in expired_subscriptions:
+                                del expired_subscriptions[user.telegram_id]
+                                
+                            # Send notification
+                            bot.send_message(
+                                user.telegram_id,
+                                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>SUBSCRIPTION AUTO-RENEWED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-                    # Case 2: Subscription has expired
-                    elif days_remaining <= 0:
-                        renewal_markup = InlineKeyboardMarkup()
-                        renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+Your subscription has been automatically renewed for 30 days.
 
-                        bot.send_message(
-                            user.telegram_id,
-                            f"""
+<b>💰 PAYMENT DETAILS:</b>
+• Previous balance: <b>${previous_balance:.2f}</b>
+• Renewal fee: <b>$1.00</b>
+• New balance: <b>${user.balance:.2f}</b>
+
+<b>📅 NEW EXPIRY DATE:</b>
+• {(now + timedelta(days=30)).strftime('%Y-%m-%d')}
+
+<i>Thank you for your continued subscription!</i>
+""",
+                                parse_mode='HTML'
+                            )
+                            auto_renewed += 1
+                            logger.info(f"✅ Auto-renewed subscription for user {user.telegram_id} from balance ${previous_balance:.2f} -> ${user.balance:.2f}")
+                            
+                            # Notify admin about renewal
+                            for admin_id in ADMIN_IDS:
+                                try:
+                                    bot.send_message(
+                                        admin_id,
+                                        f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   💲 <b>SUBSCRIPTION AUTO-RENEWED</b>  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Subscription auto-renewed for user:
+👤 <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
+💰 Previous balance: ${previous_balance:.2f}
+💰 New balance: ${user.balance:.2f}
+""",
+                                        parse_mode='HTML'
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Error notifying admin {admin_id} about auto-renewal: {e}")
+                        except Exception as e:
+                            logger.error(f"Error auto-renewing subscription for user {user.telegram_id}: {e}")
+                    
+                    # Can't auto-renew, remind user if not already notified
+                    elif user.telegram_id not in expired_subscriptions:
+                        try:
+                            # Mark user as expired
+                            expired_subscriptions[user.telegram_id] = True
+                            
+                            # Create renewal link and notification
+                            renewal_markup = InlineKeyboardMarkup()
+                            renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                            
+                            days_expired = abs(days_remaining)
+                            bot.send_message(
+                                user.telegram_id,
+                                f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    🚫 <b>SUBSCRIPTION EXPIRED</b> 🚫  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Your subscription has expired. It's been {abs(days_remaining)} days since your subscription ended.
+Your subscription has expired {days_expired} day{'s' if days_expired != 1 else ''} ago.
 
-To continue using our services, please make a deposit of at least $1 (150 birr) to automatically renew your subscription.
+<b>❗ FEATURE RESTRICTIONS:</b>
+• Some features are now locked
+• Deposit funds to restore full access
 
-<i>Your account features may be limited until you renew your subscription.</i>
+<b>💰 RENEWAL OPTIONS:</b>
+• Your balance: <b>${user.balance:.2f}</b>
+• Required: <b>$1.00</b> (150 birr)
+
+<i>Click 'Renew Now' to regain immediate access to all features!</i>
 """,
-                            parse_mode='HTML',
-                            reply_markup=renewal_markup
-                        )
-                        logger.info(f"Sent subscription expired notification to user {user.telegram_id}, expired {abs(days_remaining)} days ago")
-
-                    # Update last reminder time
-                    user.last_subscription_reminder = now
-                    session.commit()
-
+                                parse_mode='HTML',
+                                reply_markup=renewal_markup
+                            )
+                            expired_notified += 1
+                            logger.info(f"Sent expired notification to user {user.telegram_id} (expired {days_expired} days ago)")
+                        except Exception as e:
+                            logger.error(f"Error sending expired notification to user {user.telegram_id}: {e}")
+            
             except Exception as e:
-                logger.error(f"Error notifying user {user.telegram_id}: {e}")
-                continue
-
+                logger.error(f"Error processing subscription for user {user.id}: {e}")
+                
+        logger.info(f"Subscription check completed: {auto_renewed} auto-renewed, {expiring_notified} expiring, {expired_notified} expired")
+                
     except Exception as e:
-        logger.error(f"Error checking subscriptions: {e}")
+        logger.error(f"Error checking subscription status: {e}")
+        logger.error(traceback.format_exc())
     finally:
-        safe_close_session(session)
+        if session:
+            safe_close_session(session)
+
+
 
 def run_subscription_checker():
     """Run the subscription checker periodically"""
