@@ -36,3 +36,4 @@ python-telegram-bot
 sqlalchemy
 pytelegrambotapi
 uvicorn[standard]
+gunicorn==21.2.0
