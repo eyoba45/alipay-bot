@@ -5,8 +5,8 @@ werkzeug==2.3.7
 python-dotenv==1.0.1
 
 # Telegram Bot (choose only one)
-pytelegrambotapi==4.26.0
-# python-telegram-bot==20.7  # Uncomment this ONLY if you use this library instead
+# pytelegrambotapi==4.26.0
+python-telegram-bot==20.7  # Uncomment this ONLY if you use this library instead
 
 # Database and ORM
 SQLAlchemy==2.0.38
