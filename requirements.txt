@@ -1,39 +1,27 @@
-pytelegrambotapi>=4.26.0
-sqlalchemy>=2.0.38
-flask>=2.0.1
-requests>=2.27.1
-psycopg2-binary>=2.9.3
-filelock>=3.6.0
-backoff>=2.0.0
-werkzeug>=2.0.2
-gunicorn>=20.1.0
-statistics==1.0.3.5
-tabulate
-psutil
-psutil
-python-dotenv
-flask
-psutil
-flask
-psycopg2-binary
-pytelegrambotapi
-requests
-sqlalchemy
-aiofiles
-pytelegrambotapi
-anthropic
-anthropic
-pillow
-pytelegrambotapi
-requests
-sqlalchemy
-cairosvg
-anthropic
-pytelegrambotapi
-sqlalchemy
-anthropic
-python-telegram-bot
-sqlalchemy
-pytelegrambotapi
-uvicorn[standard]
+# Flask web framework
+Flask==2.3.2
 gunicorn==21.2.0
+werkzeug==2.3.7
+python-dotenv==1.0.1
+
+# Telegram Bot (choose only one)
+pytelegrambotapi==4.26.0
+# python-telegram-bot==20.7  # Uncomment this ONLY if you use this library instead
+
+# Database and ORM
+SQLAlchemy==2.0.38
+psycopg2-binary==2.9.9
+
+# Utilities and helpers
+requests==2.31.0
+filelock==3.13.1
+backoff==2.2.1
+psutil==5.9.8
+statistics==1.0.3.5
+tabulate==0.9.0
+aiofiles==23.2.1
+Pillow==10.2.0
+cairosvg==2.7.1
+
+# Anthropic API (Claude etc.)
+anthropic==0.21.3
