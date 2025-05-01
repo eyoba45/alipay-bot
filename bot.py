@@ -42,10 +42,18 @@ def subscription_required(func):
     def wrapper(message, *args, **kwargs):
         chat_id = message.chat.id
         
+        # Allow deposit feature to work even with expired subscription
+        func_name = func.__name__
+        if func_name in ['deposit_funds', 'deposit_funds_internal', 'handle_deposit_amount', 
+                         'send_payment_details', 'payment_details', 'process_custom_amount',
+                         'handle_deposit_screenshot']:
+            # Always allow deposit related functions
+            return func(message, *args, **kwargs)
+        
         # Check if user has a valid subscription
         if not has_valid_subscription(chat_id):
             # User doesn't have a valid subscription, send locked message
-            # This will be handled inside has_valid_subscription which sends proper payment link
+            # This will be handled inside has_valid_subscription for renewal instructions
             
             bot.send_message(
                 chat_id,
@@ -56,9 +64,10 @@ def subscription_required(func):
 
 This feature requires an active subscription.
 
-Please renew your subscription to access all bot features.
+Your subscription has expired. Please deposit funds to your account 
+to automatically renew your subscription ($1.00 will be deducted).
 
-To check your subscription status, use the 📅 Subscription button.
+Use the 💰 Deposit button to add funds to your account.
 """,
                 parse_mode='HTML'
             )
@@ -236,49 +245,7 @@ Subscription auto-renewed for user:
         if user_id not in expired_subscriptions:
             expired_subscriptions[user_id] = True
             try:
-                # Generate Chapa payment link for subscription renewal
-                from chapa_payment import generate_tx_ref
-                
-                # Create a renewal transaction reference
-                tx_ref = f"SUB-{datetime.now().strftime('%Y%m%d%H%M%S')}-{generate_tx_ref()}"
-                
-                # Store this in pending approvals for later verification
-                renewal = PendingApproval(
-                    telegram_id=user_id,
-                    tx_ref=tx_ref,
-                    amount=1,  # $1 subscription fee
-                    status="pending",
-                    for_registration=False,
-                    created_at=datetime.utcnow()
-                )
-                session.add(renewal)
-                session.commit()
-                
-                # Generate payment link
-                from chapa_payment import generate_deposit_payment
-                payment_data = {
-                    "email": user.name.replace(" ", "") + f".{user_id}@example.com",
-                    "amount": 150,  # 150 birr
-                    "first_name": user.name.split()[0] if ' ' in user.name else user.name,
-                    "last_name": user.name.split()[-1] if ' ' in user.name else "User",
-                    "tx_ref": tx_ref,
-                    "callback_url": os.environ.get("CALLBACK_URL", "https://alipayeth.onrender.com/webhook"),
-                    "return_url": os.environ.get("RETURN_URL", "https://t.me/AliPayEthBot"),
-                    "currency": "ETB",
-                    "phone_number": user.phone,
-                    "customization": {
-                        "title": "Subscription Renewal",
-                        "description": "Payment for AliPay ETH subscription renewal"
-                    }
-                }
-                
-                # Generate Chapa payment URL
-                checkout_url = generate_deposit_payment(payment_data)
-                
-                # Send subscription expired message with renewal link
-                renewal_markup = InlineKeyboardMarkup()
-                renewal_markup.add(InlineKeyboardButton("💳 Pay Now - 150 birr", url=checkout_url))
-                
+                # Send subscription expired message instructing to deposit funds
                 bot.send_message(
                     user_id,
                     f"""
@@ -288,14 +255,16 @@ Subscription auto-renewed for user:
 
 Your subscription has expired and your balance is too low for automatic renewal.
 
-You need to renew your subscription to continue using the bot features.
+To continue using all bot features, please:
+
+1. Use the 💰 <b>Deposit</b> button in the main menu to add funds to your account
+2. When you have at least $1.00 balance, your subscription will be automatically renewed
 
 Subscription fee: $1.00 (150 birr)
 
-<b>Click the Pay Now button below to renew:</b>
+<i>Note: Deposit functionality is still available even with an expired subscription.</i>
 """,
-                    parse_mode='HTML',
-                    reply_markup=renewal_markup
+                    parse_mode='HTML'
                 )
                 
                 logger.info(f"Sent subscription locked notification to user {user_id}")
@@ -2803,7 +2772,7 @@ def handle_deposit_admin_decision(call):
 {subscription_renewal_msg}
 
 <b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 166.67):,}</code> birr
+• New Balance: <code>{int(user.balance * 160):,}</code> birr
 
 ✨ <b>You're ready to start shopping!</b> ✨
 
