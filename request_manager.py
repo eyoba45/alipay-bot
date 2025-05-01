@@ -23,10 +23,10 @@ class RequestManager:
     """Manager for handling concurrent requests with rate limiting"""
     
     def __init__(self, 
-                 global_rate_limit=25,         # Max 25 requests per second globally
-                 user_rate_limit=5,            # Max 5 requests per second per user
-                 max_queue_size=1000,          # Maximum queue size
-                 worker_count=5,               # Number of worker threads
+                 global_rate_limit=15,         # Max 15 requests per second globally
+                 user_rate_limit=3,            # Max 3 requests per second per user
+                 max_queue_size=500,           # Maximum queue size (reduced to avoid memory issues)
+                 worker_count=3,               # Number of worker threads (reduced to avoid thread limit)
                  recovery_timeout=10,          # Seconds to wait for recovery
                  max_retry_attempts=3):        # Maximum retry attempts
         
