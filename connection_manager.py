@@ -255,3 +255,30 @@ def session_scope():
     """Provide a transactional scope (compatibility function)"""
     with connection_manager.session_scope() as session:
         yield session
+        
+def init_db(retry=True, max_retries=5):
+    """Initialize the database, creating all tables with retry logic"""
+    # Import inside function to avoid circular imports
+    from models import Base
+    
+    retry_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            # Create tables
+            Base.metadata.create_all(connection_manager.engine)
+            logger.info("✅ Database tables created successfully")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error creating database tables (attempt {attempt+1}/{max_retries}): {e}")
+            if retry and attempt < max_retries - 1:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error(traceback.format_exc())
+                if not retry:
+                    return False
+                raise
+    
+    return False
