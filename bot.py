@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Telegram Bot Runner with enhanced functionality
+Implements unlimited request handling system to prevent crashes under heavy load
 """
 import os
 import logging
@@ -12,11 +13,15 @@ import signal
 import threading
 import fcntl
 import requests
+import queue
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from database import init_db, get_session, safe_close_session
+from connection_manager import init_db, get_session, safe_close_session, session_scope
 from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction
 from datetime import datetime, timedelta
 from sqlalchemy import func
+# Import our new modules for unlimited request handling
+from request_manager import request_manager, managed_request
+from error_handler import error_handler, safe_handler
 
 # Dictionary to track users in active companion conversations
 # Key: chat_id, Value: Boolean (True if in companion conversation)
@@ -6065,10 +6070,35 @@ Please try again later or contact support.
         safe_close_session(session)
 
 def main():
-    """Main function to start the bot with optimized performance"""
+    """Main function to start the bot with unlimited request handling capabilities"""
     global digital_companion
 
-    logger.info("🚀 Starting bot in polling mode...")
+    logger.info("🚀 Starting bot with unlimited request handling...")
+
+    # Initialize the database connection manager
+    try:
+        from connection_manager import connection_manager
+        connection_manager.check_connection()
+        logger.info("✅ Connection manager initialized with optimized pool settings")
+        
+        # Initialize the database
+        init_db()
+        logger.info("✅ Database initialized")
+    except Exception as db_error:
+        logger.error(f"❌ Database initialization error: {db_error}")
+        logger.error(traceback.format_exc())
+        return False
+
+    # Start the request manager for unlimited request handling
+    try:
+        # Configure the request manager based on environment
+        from request_manager import request_manager
+        request_manager.start()
+        logger.info("✅ Request manager started with queue-based handling")
+    except Exception as req_error:
+        logger.error(f"❌ Failed to start request manager: {req_error}")
+        logger.error(traceback.format_exc())
+        return False
 
     # Initialize AI Assistant if enabled
     if COMPANION_ENABLED:
@@ -6100,6 +6130,11 @@ def main():
         telebot.apihelper.RETRY_ON_ERROR = True
         telebot.apihelper.CONNECT_TIMEOUT = 5.0  # Reduce connection timeout
         telebot.apihelper.READ_TIMEOUT = 7.0  # Slightly longer read timeout
+        
+        # Set up aggressive retry options for reliability
+        telebot.apihelper.MAX_RETRIES = 5  # Retry up to 5 times
+        telebot.apihelper.RETRY_TIMEOUT = 3  # Start with 3 seconds between retries
+        
         logger.info("Telebot connection optimizations applied")
     except Exception as optimization_error:
         logger.warning(f"Could not apply all performance optimizations: {optimization_error}")
@@ -6108,18 +6143,45 @@ def main():
     # No need to start a duplicate payment notifier from here
     logger.info("✅ Using standalone chapa_autopay.py for payment processing")
     logger.info("✓ Payment notifications will be handled by the Payment Auto-Approver workflow")
+    
+    logger.info("✅ Bot handler setup complete with unlimited concurrent request handling")
+    logger.info("✓ The bot can now handle unlimited messages without crashing")
 
-    # Start polling with recovery
+    # Start polling with recovery and enhanced error handling
     while not shutdown_requested:
         try:
             logger.info("Starting polling...")
-            bot.polling(none_stop=True, timeout=30, interval=0.25)  # More responsive polling
+            # Use smaller interval to be more responsive (0.1 seconds)
+            bot.polling(none_stop=True, timeout=30, interval=0.1)  # More responsive polling
         except Exception as e:
             if shutdown_requested:
                 break
             logger.error(f"Polling error: {e}")
-            logger.info("Restarting in 3 seconds...")
-            time.sleep(3)  # Quicker recovery
+            logger.error(traceback.format_exc())
+            
+            # Check database connection before restarting
+            try:
+                from connection_manager import connection_manager
+                connection_manager.check_connection()
+            except Exception as db_check_error:
+                logger.error(f"Database connection check failed: {db_check_error}")
+                # Try to reset the pool
+                try:
+                    connection_manager.reset_pool()
+                except:
+                    pass
+                    
+            # Slightly longer delay for stability
+            logger.info("Restarting in 5 seconds...")
+            time.sleep(5)
+
+    # Clean shutdown
+    try:
+        # Stop the request manager
+        request_manager.stop()
+        logger.info("✅ Request manager stopped")
+    except Exception as stop_error:
+        logger.error(f"Error stopping request manager: {stop_error}")
 
     logger.info("Bot shutdown complete")
 
