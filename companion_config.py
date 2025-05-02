@@ -99,7 +99,7 @@ BOT FUNCTIONALITY (PROVIDE DETAILED EXPLANATIONS FOR THESE):
    - Referral links and tracking
 
 6. CUSTOMER SUPPORT:
-   - If users need to contact support: direct them to @AliPayEthSupport on Telegram
+   - If users need to contact support: direct them to @AliPay_help_center on Telegram
    - Administrative assistance for complex issues
 
 VALUE PROPOSITION:
