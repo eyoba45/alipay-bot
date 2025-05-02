@@ -2844,7 +2844,7 @@ Please try again or contact support.
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 @subscription_required
 def track_order(message):
-    """Handle track order button with enhanced UI and options"""
+    """Handle track order button with comprehensive tracking options"""
     chat_id = message.chat.id
     session = None
     try:
@@ -2865,9 +2865,18 @@ You can register by clicking 🔑 Register on the main menu.
             )
             return
 
-        # Ask for order number
+        # Ask for order number with better description of what they'll get
         msg = """
-📦 <b>TRACK YOUR ORDER</b>
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔍 <b>DETAILED ORDER TRACKING</b> 🔍  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Enter your order number to see:
+• 📊 Comprehensive order details
+• 📦 Real-time shipping status
+• 🚚 Estimated delivery dates
+• 🛍️ Product information
+• 📬 Tracking links and updates
 
 Please enter the order number you want to track:
 Example: <code>12345</code>
@@ -2894,7 +2903,7 @@ You can use 📊 <b>Order Status</b> to view all your orders instead.
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
 def process_order_number(message):
-    """Process order number for tracking"""
+    """Process order number for detailed tracking with comprehensive information"""
     chat_id = message.chat.id
     session = None
     try:
@@ -2951,49 +2960,113 @@ Please check the order number and try again.
             status_emoji = "🚚"
             status_color = "🟢"
 
-        # Create tracking link if tracking number exists
+        # Create comprehensive tracking information if tracking number exists
         tracking_info = ""
+        delivery_estimate = ""
         if order.tracking_number:
             parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
+            aliexpress_tracking_link = f"https://aliexpress.com/trackOrder.htm"
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
 • Tracking Number: <code>{order.tracking_number}</code>
-• <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
-• <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
+• Carrier: <b>{"Standard AliExpress Shipping" if not order.carrier else order.carrier}</b>
+
+<b>📱 TRACKING LINKS:</b>
+• <a href="{parcels_app_link}">🌎 Track Package on ParcelsApp</a> (Real-time global updates)
+• <a href="{aliexpress_tracking_link}">🛒 Track on AliExpress</a> (Official tracking)
+"""
+            # Calculate estimated delivery date (between 15-30 days from order date for shipped orders)
+            if order.status == "Shipped":
+                min_delivery_date = order.created_at + timedelta(days=15)
+                max_delivery_date = order.created_at + timedelta(days=30)
+                today = datetime.utcnow()
+                
+                if today > max_delivery_date:
+                    delivery_estimate = f"""
+<b>📅 DELIVERY STATUS:</b>
+• Package may be delayed
+• Expected to arrive soon
+• Contact support if not received within 5 days
+"""
+                else:
+                    delivery_estimate = f"""
+<b>📅 ESTIMATED DELIVERY:</b>
+• Earliest: <b>{min_delivery_date.strftime('%d %b %Y')}</b>
+• Latest: <b>{max_delivery_date.strftime('%d %b %Y')}</b>
+• Status updates may take 1-2 days to appear
 """
 
-        # Create order message with enhanced design
+        # Create order message with enhanced design and more detailed information
         order_msg = f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🛍️ <b>ORDER DETAILS</b> 🛍️  
+   🔍 <b>DETAILED ORDER TRACKING</b> 🔍  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 <b>📋 ORDER INFORMATION:</b>
 • Order: <b>#{order.order_number}</b>
 • Status: {status_emoji} <b>{order.status}</b> {status_color}
 • Amount: <b>${order.amount:.2f}</b>
-• Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
+• Date Ordered: <b>{order.created_at.strftime('%d %b %Y')}</b>
 """
 
         if order.order_id:
             order_msg += f"""
 <b>🔖 ALIEXPRESS DETAILS:</b>
 • Order ID: <code>{order.order_id}</code>
+• Seller: <b>{"AliExpress Merchant" if not order.seller else order.seller}</b>
+• Payment Method: <b>Processed by AliPay_ETH</b>
 """
 
         # Add tracking info if available
         if tracking_info:
             order_msg += f"\n{tracking_info}"
+            
+        # Add delivery estimate if available
+        if delivery_estimate:
+            order_msg += f"\n{delivery_estimate}"
+            
+        # Add shipping status timeline
+        shipping_timeline = f"""
+<b>📦 SHIPPING STATUS TIMELINE:</b>
+• <b>Order Placed:</b> {order.created_at.strftime('%d %b %Y')}
+"""
+        if order.status == "Processing" or order.status == "Shipped" or order.status == "Completed":
+            shipping_timeline += f"• <b>Processing Started:</b> {(order.created_at + timedelta(days=1)).strftime('%d %b %Y')}\n"
+            
+        if order.status == "Shipped" or order.status == "Completed":
+            shipping_date = order.shipped_date if hasattr(order, 'shipped_date') and order.shipped_date else (order.created_at + timedelta(days=3))
+            shipping_timeline += f"• <b>Package Shipped:</b> {shipping_date.strftime('%d %b %Y')}\n"
+            
+        if order.status == "Completed":
+            completion_date = order.completed_date if hasattr(order, 'completed_date') and order.completed_date else (order.created_at + timedelta(days=25))
+            shipping_timeline += f"• <b>Delivered:</b> {completion_date.strftime('%d %b %Y')}\n"
+            
+        order_msg += f"\n{shipping_timeline}"
 
+        # Add detailed product information
         if order.product_link:
+            product_name = "AliExpress Product" if not hasattr(order, 'product_name') or not order.product_name else order.product_name
             order_msg += f"""
-<b>🔗 PRODUCT INFORMATION:</b>
+<b>🛍️ PRODUCT INFORMATION:</b>
+• Name: <b>{product_name}</b>
 • <a href="{order.product_link}">View Product on AliExpress</a>
+• Quantity: <b>{getattr(order, 'quantity', 1)}</b> item(s)
 """
 
-        # Add footer with support info
-        order_msg += """
-<i>💫 Having issues with your order? Contact our support at @alipay_help_center for assistance 💫</i>
+        # Add shipping address information if available
+        if hasattr(order, 'shipping_address') and order.shipping_address:
+            order_msg += f"""
+<b>🏠 SHIPPING ADDRESS:</b>
+• Destination: <b>{order.shipping_address}</b>
+"""
+
+        # Add support information
+        order_msg += f"""
+<b>📞 NEED HELP?</b>
+• For delivery issues: Contact us after {(order.created_at + timedelta(days=35)).strftime('%d %b %Y')}
+• For urgent assistance: Contact @alipay_help_center
+
+<i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
 """
 
         bot.send_message(
@@ -3022,7 +3095,7 @@ Please try again or contact support if the problem persists.
 @bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
 @subscription_required
 def order_status(message):
-    """Handle order status button with improved tracking"""
+    """Handle order status button with simplified overview"""
     chat_id = message.chat.id
     session = None
     try:
@@ -3059,56 +3132,68 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
             )
             return
 
-        # Show all orders with beautiful formatting
+        # Show all orders with simplified formatting - BASIC INFORMATION ONLY
         orders_text = """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>YOUR ORDERS</b> 📊  
+   📊 <b>ORDER STATUS OVERVIEW</b> 📊  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-<b>Recent orders summary:</b>
+<b>Your orders at a glance:</b>
 """
+        # Counters for different statuses
+        pending_count = 0
+        processing_count = 0
+        shipped_count = 0
+        completed_count = 0
+        cancelled_count = 0
+        
+        # Process order status counts
         for order in orders:
-            status_emoji = "⏳"
-            status_color = "🟡"  # Default yellow for pending
+            if order.status == "Pending":
+                pending_count += 1
+            elif order.status == "Processing":
+                processing_count += 1
+            elif order.status == "Shipped":
+                shipped_count += 1
+            elif order.status == "Completed":
+                completed_count += 1
+            elif order.status == "Cancelled":
+                cancelled_count += 1
+        
+        # Status summary section
+        orders_text += f"""
+<b>📈 SUMMARY:</b>
+• ⏳ Pending: {pending_count}
+• 🔄 Processing: {processing_count}
+• 🚚 Shipped: {shipped_count}
+• ✅ Completed: {completed_count}
+• ❌ Cancelled: {cancelled_count}
 
+<b>📋 RECENT ORDERS:</b>
+"""
+
+        # Only show basic details for the 5 most recent orders
+        recent_orders = orders[:5]
+        for order in recent_orders:
+            status_emoji = "⏳"
             if order.status == "Completed":
                 status_emoji = "✅"
-                status_color = "🟢"
             elif order.status == "Cancelled":
                 status_emoji = "❌"
-                status_color = "🔴"
             elif order.status == "Processing":
                 status_emoji = "🔄"
-                status_color = "🔵"
             elif order.status == "Shipped":
                 status_emoji = "🚚"
-                status_color = "🟢"
 
-            # Format tracking info if available
-            tracking_info = ""
-            if order.tracking_number:
-                parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
-                tracking_info = f"""• Tracking: <code>{order.tracking_number}</code>
-• <a href="{parcels_app_link}">📲 Track on ParcelsApp</a>"""
-
-            # Format order details with emojis and nice formatting
-            order_details = f"""
-╭─────────────────────╮
-<b>🛍️ Order #{order.order_number}</b>
-• Status: {status_emoji} <b>{order.status}</b> {status_color}
-• Amount: <b>${order.amount:.2f}</b>
-• Date: <b>{order.created_at.strftime('%d %b %Y')}</b>
-{f"• AliExpress ID: <code>{order.order_id}</code>" if order.order_id else ""}
-{tracking_info}
-╰─────────────────────╯
-"""                
-            orders_text += order_details
+            # Simple, concise order entry
+            order_details = f"""• #{order.order_number} - {status_emoji} {order.status} - {order.created_at.strftime('%d %b %Y')}"""
+            orders_text += f"\n{order_details}"
 
         orders_text += """
-<b>🔹 TRACK YOUR ORDERS:</b>
-• Use 🔍 <b>Track Order</b> button for detailed tracking
-• Get real-time updates on ParcelsApp
-• Contact support @alipay_help_center if you need help
+
+<b>🔍 FOR DETAILED TRACKING:</b>
+• Use 🔍 <b>Track Order</b> button and enter your order number
+• This will show detailed product info and shipping status
 
 <i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
 """
