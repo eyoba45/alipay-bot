@@ -25,3 +25,4 @@ cairosvg==2.7.1
 
 # Anthropic API (Claude etc.)
 anthropic==0.21.3
+#alipay ETH
