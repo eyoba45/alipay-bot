@@ -303,29 +303,8 @@ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 # Send tutorial offer after a short delay
                 time.sleep(1)  # Give user time to read welcome message
                 try:
-                    # Create tutorial offer with inline buttons
-                    tutorial_markup = InlineKeyboardMarkup()
-                    tutorial_markup.row(
-                        InlineKeyboardButton("✅ Yes, show me how to use the bot", callback_data="help_tutorial"),
-                        InlineKeyboardButton("❌ No thanks, I'll explore myself", callback_data="skip_tutorial")
-                    )
-                    
-                    temp_bot.send_message(
-                        telegram_id,
-                        """
-<b>🎓 Would you like to take a quick tutorial?</b>
-
-Learn how to use all features of our service in just a few minutes!
-The interactive guide will show you how to:
-• Deposit funds
-• Submit and track orders
-• Use the referral system
-• And more!
-""",
-                        parse_mode='HTML',
-                        reply_markup=tutorial_markup
-                    )
-                    logger.info(f"✅ Sent tutorial offer to newly registered user {telegram_id}")
+                    # Tutorial message removed as requested
+                    logger.info(f"✅ Tutorial message removed as requested")
                 except Exception as tutorial_err:
                     logger.error(f"Error sending tutorial offer: {tutorial_err}")
                     logger.error(traceback.format_exc())
@@ -401,18 +380,31 @@ def process_verified_deposit(telegram_id, amount, payment_data):
         now = datetime.utcnow()
         subscription_updated = False
         
+        # Fix: First ensure balance exists and is a number
+        if user.balance is None:
+            user.balance = 0.0
+        
         # Check if user has subscription date and if it needs renewal
         if amount >= 1.0 and (not user.subscription_date or (now - user.subscription_date).days >= 30):
             # Deduct subscription fee
+            old_balance = user.balance
             user.balance += (amount - 1.0)  # Add amount after subscription fee
             user.subscription_date = now  # Reset subscription date
             subscription_updated = True
             logger.info(f"Subscription {'renewed' if user.subscription_date else 'activated'} for user {telegram_id}")
+            logger.info(f"Balance updated: ${old_balance:.2f} -> ${user.balance:.2f}")
         else:
             # Regular deposit or amount too small for subscription renewal
+            old_balance = user.balance
             user.balance += amount
+            logger.info(f"Balance updated: ${old_balance:.2f} -> ${user.balance:.2f}")
             
+        # Force the balance to be updated immediately
         session.commit()
+        
+        # Double-check the balance update
+        session.refresh(user)
+        logger.info(f"Verified balance after update: ${user.balance:.2f}")
 
         logger.info(f"✅ Deposit of ${amount} for user {telegram_id} auto-approved via Chapa")
 
