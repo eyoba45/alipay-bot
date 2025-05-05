@@ -85,7 +85,7 @@ def get_bot():
         return None, None
 
 def verify_payment(tx_ref):
-    """Verify a payment with Chapa API"""
+    """Verify a payment with Chapa API with enhanced error handling"""
     try:
         chapa_secret = os.environ.get('CHAPA_SECRET_KEY')
         if not chapa_secret:
@@ -98,9 +98,39 @@ def verify_payment(tx_ref):
             "Content-Type": "application/json"
         }
 
-        # Make the API request to Chapa with a timeout
-        response = requests.get(url, headers=headers, timeout=30)
-        response_data = response.json()
+        # Initialize response outside the try block
+        response = None
+        
+        # Make the API request to Chapa with a timeout and retry logic
+        for attempt in range(3):  # Try up to 3 times
+            try:
+                response = requests.get(url, headers=headers, timeout=30)
+                # Check if rate limited or server error
+                if response.status_code == 429 or response.status_code >= 500:
+                    wait_time = min(2 ** attempt, 8)  # Exponential backoff up to 8 seconds
+                    logger.warning(f"Rate limited or server error ({response.status_code}), retrying in {wait_time}s")
+                    time.sleep(wait_time)
+                    continue
+                # Break if successful or client error (not worth retrying)
+                break
+            except requests.exceptions.RequestException as e:
+                if attempt < 2:  # Don't log on last attempt as we'll catch it below
+                    logger.warning(f"Network error on attempt {attempt+1}/3: {e}")
+                    time.sleep(2)
+                else:
+                    raise
+        
+        # Check if we got a response at all
+        if response is None:
+            logger.error("Failed to get response from Chapa API after multiple attempts")
+            return False
+
+        # Process the response
+        try:
+            response_data = response.json()
+        except ValueError:
+            logger.error(f"Invalid JSON response from Chapa API: {response.text}")
+            return False
 
         # Log the full response for debugging
         logger.info(f"Payment verification response for {tx_ref}: {response_data}")
@@ -108,6 +138,10 @@ def verify_payment(tx_ref):
         # First check the overall response status
         if response_data.get('status') != 'success':
             logger.warning(f"Payment verification failed with status: {response_data.get('status')}")
+            # Return special response for "Transaction not found" since this might mean payment was not initiated
+            if 'Transaction not found' in str(response_data.get('message', '')):
+                logger.warning(f"Transaction {tx_ref} not found in Chapa system")
+                return {'payment_status': 'not_found', 'message': 'Transaction not found'}
             return False
             
         # Then check the data status 
@@ -123,9 +157,14 @@ def verify_payment(tx_ref):
             logger.warning(f"Payment found but status is not success: {payment_status}")
             # For failed/cancelled payments, we'll return the data with the status
             # so we can update pending approvals to allow users to retry
-            if payment_status == 'failed/cancelled':
-                logger.info(f"Payment {tx_ref} was cancelled or failed, marking for retry")
+            if payment_status in ['failed', 'cancelled', 'failed/cancelled']:
+                logger.info(f"Payment {tx_ref} was {payment_status}, marking for retry")
                 data['payment_status'] = 'failed/cancelled'
+                return data
+            # For pending payments, return a special status
+            if payment_status == 'pending':
+                logger.info(f"Payment {tx_ref} is still pending in Chapa system")
+                data['payment_status'] = 'pending'
                 return data
             return False
             
@@ -568,32 +607,35 @@ def check_pending_registrations():
                 logger.info(f"Verifying payment for registration tx_ref: {tx_ref}")
                 payment_data = verify_payment(tx_ref)
                 
-                # Handle failed or cancelled payments
-                if payment_data and isinstance(payment_data, dict) and payment_data.get('payment_status') == 'failed/cancelled':
-                    logger.info(f"Payment for user {telegram_id} was cancelled or failed, updating status")
+                # Handle different payment verification results based on status
+                if payment_data and isinstance(payment_data, dict):
+                    payment_status = payment_data.get('payment_status')
                     
-                    # Update the status to allow retry
-                    # Add payment_status column if it doesn't exist
-                    try:
-                        pending.payment_status = 'Failed'
-                    except:
-                        # If column doesn't exist, just use status
-                        logger.info(f"payment_status column not found, using status field only")
-                    pending.status = 'Payment Failed'
-                    session.commit()
-                    
-                    # Send a message to the user with retry option
-                    bot, create_main_menu = get_bot()
-                    if bot:
+                    # Case 1: Failed or cancelled payments
+                    if payment_status == 'failed/cancelled':
+                        logger.info(f"Payment for user {telegram_id} was cancelled or failed, updating status for retry")
+                        
+                        # Update the status to allow retry
                         try:
-                            # Create payment retry button
-                            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-                            retry_markup = InlineKeyboardMarkup()
-                            retry_markup.add(InlineKeyboardButton("🔄 Retry Payment", callback_data=f"retry_payment_{telegram_id}"))
-                            
-                            bot.send_message(
-                                telegram_id,
-                                """
+                            pending.payment_status = 'Failed'
+                        except:
+                            # If column doesn't exist, just use status
+                            logger.info(f"payment_status column not found, using status field only")
+                        pending.status = 'Payment Failed'
+                        session.commit()
+                        
+                        # Send a message to the user with retry option
+                        bot, create_main_menu = get_bot()
+                        if bot:
+                            try:
+                                # Create payment retry button
+                                from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                                retry_markup = InlineKeyboardMarkup()
+                                retry_markup.add(InlineKeyboardButton("🔄 Retry Payment", callback_data=f"retry_payment_{telegram_id}"))
+                                
+                                bot.send_message(
+                                    telegram_id,
+                                    """
 ❌ <b>PAYMENT CANCELLED OR FAILED</b>
 
 Your previous payment attempt was not completed. This could be because:
@@ -603,20 +645,72 @@ Your previous payment attempt was not completed. This could be because:
 
 You can retry your payment by clicking the button below.
 """,
-                                parse_mode='HTML',
-                                reply_markup=retry_markup
-                            )
-                            logger.info(f"Sent payment retry notification to user {telegram_id}")
-                        except Exception as e:
-                            logger.error(f"Error sending payment retry notification: {e}")
+                                    parse_mode='HTML',
+                                    reply_markup=retry_markup
+                                )
+                                logger.info(f"Sent payment retry notification to user {telegram_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending payment retry notification: {e}")
+                        
+                        # Close this session and continue to next registration
+                        safe_close_session(session)
+                        session = None
+                        continue
                     
-                    # Close this session and continue to next registration
-                    safe_close_session(session)
-                    session = None
-                    continue
+                    # Case 2: Transaction not found in Chapa system
+                    elif payment_status == 'not_found':
+                        logger.warning(f"Payment for user {telegram_id} not found in Chapa system")
+                        
+                        # Only update status if it's been more than 30 minutes
+                        if created_at and (datetime.utcnow() - created_at).total_seconds() > 1800:  # 30 minutes
+                            pending.status = 'Payment Not Found'
+                            session.commit()
+                            
+                            # Send a message to the user with retry option
+                            bot, create_main_menu = get_bot()
+                            if bot:
+                                try:
+                                    # Create payment retry button
+                                    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                                    retry_markup = InlineKeyboardMarkup()
+                                    retry_markup.add(InlineKeyboardButton("🔄 Try Again", callback_data=f"retry_payment_{telegram_id}"))
+                                    
+                                    bot.send_message(
+                                        telegram_id,
+                                        """
+⚠️ <b>PAYMENT NOT FOUND</b>
+
+We couldn't find your payment in the Chapa system. This could be because:
+• You didn't complete the payment process
+• There was a delay in processing your payment
+• Technical issues with the payment system
+
+You can try again by clicking the button below.
+""",
+                                        parse_mode='HTML',
+                                        reply_markup=retry_markup
+                                    )
+                                    logger.info(f"Sent payment not found notification to user {telegram_id}")
+                                except Exception as e:
+                                    logger.error(f"Error sending payment not found notification: {e}")
+                        
+                        # Continue to next registration
+                        safe_close_session(session)
+                        session = None
+                        continue
+                    
+                    # Case 3: Payment is still pending in Chapa system
+                    elif payment_status == 'pending':
+                        logger.info(f"Payment for user {telegram_id} is still pending in Chapa system")
+                        pending.status = 'Payment Pending'
+                        session.commit()
+                        # Continue to next registration without sending notification
+                        safe_close_session(session)
+                        session = None
+                        continue
                 
-                # If payment is successful, automatically approve the registration
-                if payment_data:
+                # Case 4: Payment is successful (no special payment_status field means success)
+                if payment_data and not payment_data.get('payment_status'):
                     logger.info(f"✅ Payment successfully verified for user {telegram_id}")
                     
                     # Process the verified registration (creates user account)
@@ -625,37 +719,42 @@ You can retry your payment by clicking the button below.
                         logger.info(f"✅ Registration for user {telegram_id} automatically approved after payment verification")
                     else:
                         logger.error(f"Failed to process verified registration for {telegram_id}")
-                else:
-                    # Payment verification failed - this is normal during pending payments
-                    # We'll keep trying until payment is completed or timeout
-                    logger.info(f"Payment not yet verified for user {telegram_id}, will retry later")
-                    
-                    # Check if registration is older than 24 hours - clean up old pending registrations
-                    if created_at and (datetime.utcnow() - created_at).total_seconds() > 86400:
-                        logger.warning(f"Registration for {telegram_id} pending for >24 hours, marking as expired")
-                        # Update status and add retry button instead
-                        pending.status = "Payment Expired"
-                        session.commit()
                         
-                        # Create payment retry button for expired registration instead of direct message
+                    # Close session and continue to next registration
+                    safe_close_session(session)
+                    session = None
+                    continue
+                
+                # Case 5: Payment verification failed or returned false - this is normal during pending payments
+                # We'll keep trying until payment is completed or timeout
+                logger.info(f"Payment not yet verified for user {telegram_id}, will retry later")
+                
+                # Case 6: Registration is older than 24 hours - clean up old pending registrations
+                if created_at and (datetime.utcnow() - created_at).total_seconds() > 86400:
+                    logger.warning(f"Registration for {telegram_id} pending for >24 hours, marking as expired")
+                    # Update status and add retry button instead
+                    pending.status = "Payment Expired"
+                    session.commit()
+                    
+                    # Create payment retry button for expired registration instead of direct message
+                    try:
+                        # Create retry button
+                        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                        retry_markup = InlineKeyboardMarkup()
+                        retry_markup.add(InlineKeyboardButton("🔄 Retry Payment", callback_data=f"retry_payment_{telegram_id}"))
+                        
+                        # Get the bot directly initialized
                         try:
-                            # Create retry button
-                            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-                            retry_markup = InlineKeyboardMarkup()
-                            retry_markup.add(InlineKeyboardButton("🔄 Retry Payment", callback_data=f"retry_payment_{telegram_id}"))
-                            
-                            # Get the bot directly initialized
-                            try:
-                                import telebot
-                                token = os.environ.get('TELEGRAM_BOT_TOKEN')
-                                if token:
-                                    temp_bot = telebot.TeleBot(token)
-                                    logger.info(f"Sending payment retry notification to expired registration: {telegram_id}")
-                                    
-                                    # Send message with retry button
-                                    temp_bot.send_message(
-                                        telegram_id,
-                                        """
+                            import telebot
+                            token = os.environ.get('TELEGRAM_BOT_TOKEN')
+                            if token:
+                                temp_bot = telebot.TeleBot(token)
+                                logger.info(f"Sending payment retry notification to expired registration: {telegram_id}")
+                                
+                                # Send message with retry button
+                                temp_bot.send_message(
+                                    telegram_id,
+                                    """
 ⏰ <b>REGISTRATION PAYMENT EXPIRED</b>
 
 Your registration payment was not completed within 24 hours.
@@ -666,17 +765,17 @@ This could be due to:
 
 You can retry your registration by clicking the button below.
 """,
-                                        parse_mode='HTML',
-                                        reply_markup=retry_markup
-                                    )
-                                    logger.info(f"✅ Successfully sent payment retry button to {telegram_id}")
-                            except Exception as bot_err:
-                                logger.error(f"Error creating bot instance for notification: {bot_err}")
-                                logger.error(traceback.format_exc())
-                                
-                        except Exception as msg_error:
-                            logger.error(f"Error preparing retry message: {msg_error}")
+                                    parse_mode='HTML',
+                                    reply_markup=retry_markup
+                                )
+                                logger.info(f"✅ Successfully sent payment retry button to {telegram_id}")
+                        except Exception as bot_err:
+                            logger.error(f"Error creating bot instance for notification: {bot_err}")
                             logger.error(traceback.format_exc())
+                            
+                    except Exception as msg_error:
+                        logger.error(f"Error preparing retry message: {msg_error}")
+                        logger.error(traceback.format_exc())
 
             except Exception as e:
                 logger.error(f"Error checking registration for {pending.telegram_id}: {e}")
@@ -714,40 +813,137 @@ def check_pending_deposits():
                 logger.info(f"Verifying payment for deposit {deposit.tx_ref}, user {user.telegram_id}...")
                 payment_data = verify_payment(deposit.tx_ref)
                 
-                if payment_data:
-                    # Payment verified successfully
-                    logger.info(f"✅ Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
-                    process_verified_deposit(user.telegram_id, deposit.amount, payment_data)
-                else:
-                    # Payment verification failed
-                    logger.warning(f"❌ Payment not verified for deposit {deposit.tx_ref}, user {user.telegram_id}")
+                # Handle different payment verification results based on status
+                if payment_data and isinstance(payment_data, dict):
+                    payment_status = payment_data.get('payment_status')
                     
-                    # Check if deposit has been in 'Processing' for too long (over 24 hours)
-                    if deposit.created_at and (datetime.utcnow() - deposit.created_at).total_seconds() > 86400:
-                        logger.warning(f"Deposit {deposit.id} has been processing for over 24 hours, marking as 'Failed'")
+                    # Case 1: Failed or cancelled payments
+                    if payment_status == 'failed/cancelled':
+                        logger.info(f"Payment for deposit {deposit.tx_ref}, user {user.telegram_id} was cancelled or failed")
+                        
+                        # Update status to allow retry
                         deposit.status = 'Failed'
                         session.commit()
                         
-                        # Notify user
+                        # Send a message to the user with retry option
                         bot, _ = get_bot()
                         if bot:
                             try:
+                                # Create payment retry button
+                                from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                                retry_markup = InlineKeyboardMarkup()
+                                retry_markup.add(InlineKeyboardButton("🔄 Try Another Deposit", callback_data=f"deposit_again"))
+                                
                                 bot.send_message(
                                     user.telegram_id,
-                                    """
-❌ <b>Payment Verification Failed</b>
+                                    f"""
+❌ <b>DEPOSIT PAYMENT CANCELLED</b>
 
-We couldn't verify your payment with Chapa after 24 hours. This could be due to:
+Your deposit of ${deposit.amount:.2f} ({int(deposit.amount * 160):,} birr) was not completed. This could be because:
+• You cancelled the payment process
+• The payment process timed out
+• There was a technical issue
+
+You can try another deposit by clicking the button below.
+""",
+                                    parse_mode='HTML',
+                                    reply_markup=retry_markup
+                                )
+                                logger.info(f"Sent deposit failure notification to user {user.telegram_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending deposit failure notification: {e}")
+                        
+                        continue
+                    
+                    # Case 2: Transaction not found in Chapa system
+                    elif payment_status == 'not_found':
+                        logger.warning(f"Deposit payment for user {user.telegram_id} not found in Chapa system")
+                        
+                        # Only update status if it's been more than 1 hour
+                        if deposit.created_at and (datetime.utcnow() - deposit.created_at).total_seconds() > 3600:
+                            deposit.status = 'Payment Not Found'
+                            session.commit()
+                            
+                            # Send a message to the user with retry option
+                            bot, _ = get_bot()
+                            if bot:
+                                try:
+                                    # Create retry button
+                                    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                                    retry_markup = InlineKeyboardMarkup()
+                                    retry_markup.add(InlineKeyboardButton("🔄 Try Again", callback_data=f"deposit_again"))
+                                    
+                                    bot.send_message(
+                                        user.telegram_id,
+                                        f"""
+⚠️ <b>DEPOSIT NOT FOUND</b>
+
+We couldn't find your deposit payment of ${deposit.amount:.2f} in the Chapa system after 1 hour. This could be because:
+• You didn't complete the payment process
+• There was a delay in processing your payment
+• Technical issues with the payment system
+
+You can try again by clicking the button below.
+""",
+                                        parse_mode='HTML',
+                                        reply_markup=retry_markup
+                                    )
+                                    logger.info(f"Sent deposit not found notification to user {user.telegram_id}")
+                                except Exception as e:
+                                    logger.error(f"Error sending deposit not found notification: {e}")
+                        
+                        continue
+                    
+                    # Case 3: Payment is still pending in Chapa system
+                    elif payment_status == 'pending':
+                        logger.info(f"Deposit payment for user {user.telegram_id} is still pending in Chapa system")
+                        # Don't update status, just continue checking
+                        continue
+                
+                # Case 4: Payment is successful (no special payment_status field means success)
+                if payment_data and not payment_data.get('payment_status'):
+                    # Payment verified successfully
+                    logger.info(f"✅ Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
+                    process_verified_deposit(user.telegram_id, deposit.amount, payment_data)
+                    continue
+                
+                # Case 5: Payment verification failed or returned false - keep checking
+                # Check if deposit has been in 'Processing' for too long (over 24 hours)
+                if deposit.created_at and (datetime.utcnow() - deposit.created_at).total_seconds() > 86400:
+                    logger.warning(f"Deposit {deposit.id} has been processing for over 24 hours, marking as 'Failed'")
+                    deposit.status = 'Failed'
+                    session.commit()
+                    
+                    # Notify user
+                    bot, _ = get_bot()
+                    if bot:
+                        try:
+                            # Create retry button
+                            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                            retry_markup = InlineKeyboardMarkup()
+                            retry_markup.add(InlineKeyboardButton("🔄 Make New Deposit", callback_data=f"deposit_again"))
+                            
+                            bot.send_message(
+                                user.telegram_id,
+                                f"""
+⏰ <b>DEPOSIT EXPIRED</b>
+
+We couldn't verify your payment of ${deposit.amount:.2f} with Chapa after 24 hours. This could be due to:
 • Payment was not completed
 • Transaction was canceled
 • Network or processing issues
 
-Please try again with a new deposit or contact support if you believe this is an error.
+Please try again with a new deposit by clicking the button below.
 """,
-                                    parse_mode='HTML'
-                                )
-                            except Exception as e:
-                                logger.error(f"Error sending payment failure notification: {e}")
+                                parse_mode='HTML',
+                                reply_markup=retry_markup
+                            )
+                            logger.info(f"Sent deposit expired notification to user {user.telegram_id}")
+                        except Exception as e:
+                            logger.error(f"Error sending payment failure notification: {e}")
+                else:
+                    # Still in valid timeframe, keep checking
+                    logger.info(f"Deposit {deposit.tx_ref} for user {user.telegram_id} not yet verified, will retry later")
             except Exception as e:
                 logger.error(f"Error processing pending deposit: {e}")
                 logger.error(traceback.format_exc())
