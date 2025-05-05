@@ -508,13 +508,70 @@ def register_user(message):
         # Check if user already exists
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if user:
-            bot.send_message(chat_id, "You are already registered!", reply_markup=create_main_menu(is_registered=True))
-            return
+            bot.send_message(
+                chat_id,
+                """
+✅ <b>You are already registered!</b>
 
-        # Check pending approvals
+Your account is active and ready to use.
+""",
+                parse_mode='HTML',
+                reply_markup=create_main_menu(is_registered=True)
+            )
+            return
+            
+        # Only check pending approvals if user is not yet registered
         pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
         if pending:
-            bot.send_message(chat_id, "Your registration is pending approval. Please wait.", reply_markup=create_main_menu(is_registered=False))
+            # First verify if the payment was successful but user not created yet
+            if pending.tx_ref:
+                # Try to verify the payment one more time directly
+                try:
+                    from chapa_payment import verify_payment
+                    payment_status = verify_payment(pending.tx_ref)
+                    
+                    # If payment is successful, create user immediately
+                    if payment_status and payment_status.get('status') == 'success':
+                        from chapa_autopay import process_verified_registration
+                        if process_verified_registration(chat_id, payment_status):
+                            # User was created - redirect to main menu
+                            bot.send_message(
+                                chat_id,
+                                """
+✅ <b>Registration Successful!</b>
+
+Your account is now active and ready to use.
+""",
+                                parse_mode='HTML',
+                                reply_markup=create_main_menu(is_registered=True)
+                            )
+                            return
+                except Exception as e:
+                    logger.error(f"Error checking payment status: {e}")
+                    # Continue with standard flow if verification fails
+                
+                # If verification failed or payment not yet successful, redirect to make payment
+                bot.send_message(
+                    chat_id,
+                    """
+🔸 <b>Complete Your Registration</b>
+
+Please complete your payment to activate your account.
+""",
+                    parse_mode='HTML',
+                    reply_markup=create_main_menu(is_registered=False)
+                )
+            else:
+                bot.send_message(
+                    chat_id,
+                    """
+🔸 <b>Complete Your Registration</b>
+
+Please complete your registration by making the payment.
+""",
+                    parse_mode='HTML',
+                    reply_markup=create_main_menu(is_registered=False)
+                )
             return
 
         # Initialize registration state
