@@ -1562,28 +1562,46 @@ def handle_admin_decision(call):
                 referral_code = registration_data[user_id]['referral_code']
                 logger.info(f"Found referral code {referral_code} for user {user_id}")
 
+            # Generate a referral code for the new user first
+            try:
+                from referral_system import assign_referral_code
+                user_referral_code = assign_referral_code(new_user.id)
+                logger.info(f"✅ Generated referral code {user_referral_code} for user {user_id}")
+                
+                # Refresh to make sure we have the updated record
+                session.refresh(new_user)
+            except Exception as ref_err:
+                logger.error(f"Error generating referral code: {ref_err}")
+                logger.error(f"Full error details: {str(ref_err)}")
+
             # Handle referral code processing
             if referral_code:
                 try:
                     from referral_system import process_referral_code, complete_referral
+                    
+                    # Log that we're about to process the referral
+                    logger.info(f"Processing referral code {referral_code} for user {user_id}")
+                    
+                    # Process the referral
                     success, result = process_referral_code(user_id, referral_code)
-                    if success and hasattr(result, 'id'):
+                    
+                    if success and result and hasattr(result, 'id'):
+                        # Log success that we've found the referrer
+                        logger.info(f"✅ Found referrer with ID {result.id} for code {referral_code}")
+                        
                         # Complete the referral and award points
                         complete_success, reward = complete_referral(result.id)
+                        
                         if complete_success:
-                            logger.info(f"Completed referral for user {user_id} with code {referral_code}")
+                            logger.info(f"✅ Successfully awarded {reward} points to referrer {result.id} for referring user {user_id}")
                         else:
-                            logger.warning(f"Failed to complete referral: {reward}")
+                            logger.warning(f"❌ Failed to complete referral: {reward}")
+                    else:
+                        logger.warning(f"❌ Failed to process referral code {referral_code} for user {user_id}")
+                        
                 except Exception as ref_err:
                     logger.error(f"Error processing referral: {ref_err}")
-
-            # Generate a referral code for the new user
-            try:
-                from referral_system import assign_referral_code
-                user_referral_code = assign_referral_code(new_user.id)
-                logger.info(f"Generated referral code {user_referral_code} for user {user_id}")
-            except Exception as ref_err:
-                logger.error(f"Error generating referral code: {ref_err}")
+                    logger.error(f"Full error details: {str(ref_err)}")
 
             logger.info(f"User {user_id} approved and added to database")
 
