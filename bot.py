@@ -1891,8 +1891,8 @@ def payment_details(message, amount, for_subscription=False):
                 amount=amount,
                 status='Processing',
                 tx_ref=payment_link['tx_ref'],  # Save the transaction reference for automatic verification
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                created_at=datetime.utcnow()
+                # Note: updated_at removed as it's not in the PendingDeposit model
             )
             session.add(pending_deposit)
             session.commit()
