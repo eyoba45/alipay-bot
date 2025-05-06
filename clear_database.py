@@ -1,51 +1,47 @@
 
-import os
-import psycopg2
+#!/usr/bin/env python3
+"""
+⛔️ DISABLED: Clear Database Script - Data Protection Measure
+
+This script was previously used to TRUNCATE ALL TABLES in the database, causing COMPLETE DATA LOSS.
+It has been DISABLED to prevent any accidental data loss in the future.
+
+DO NOT ATTEMPT TO RE-ENABLE THIS SCRIPT.
+"""
+
 import logging
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def get_db():
-    try:
-        return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=5)
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
-        return None
+    """DISABLED: Previously used to connect to database for data deletion"""
+    logger.error("⛔️ DATA PROTECTION: Database connection for deletion blocked")
+    return None
 
 def clear_all_tables():
-    try:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                # Clear all tables
-                logger.info("Clearing all tables...")
-                
-                # Disable foreign key checks temporarily
-                cur.execute("SET CONSTRAINTS ALL DEFERRED")
-                
-                # Clear tables
-                cur.execute("TRUNCATE TABLE pending_deposits CASCADE")
-                logger.info("Cleared pending_deposits table")
-                
-                cur.execute("TRUNCATE TABLE orders CASCADE")
-                logger.info("Cleared orders table")
-                
-                cur.execute("TRUNCATE TABLE users CASCADE")
-                logger.info("Cleared users table")
-                
-                cur.execute("TRUNCATE TABLE pending_approvals CASCADE")
-                logger.info("Cleared pending_approvals table")
-                
-                # Re-enable foreign key checks
-                cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
-                
-                conn.commit()
-                logger.info("All tables have been cleared successfully!")
-                print("✅ Database cleared successfully! All users and data have been removed.")
-    except Exception as e:
-        logger.error(f"Error clearing tables: {e}")
-        print(f"❌ Error clearing database: {e}")
+    """DISABLED: Previously used to TRUNCATE ALL TABLES (SEVERE DATA LOSS RISK)"""
+    logger.error("⛔️ THIS DATABASE CLEARING SCRIPT HAS BEEN DISABLED")
+    logger.error("This script would have TRUNCATED ALL TABLES - CAUSING COMPLETE DATA LOSS")
+    logger.error("For data protection, this functionality has been completely removed")
+    
+    print("\n")
+    print("╔═══════════════════════════════════════════════════════════════╗")
+    print("║                      🚫 DANGER BLOCKED 🚫                     ║")
+    print("╠═══════════════════════════════════════════════════════════════╣")
+    print("║                                                               ║")
+    print("║  This script previously TRUNCATED ALL DATABASE TABLES.        ║")
+    print("║  This would have caused COMPLETE DATA LOSS.                   ║")
+    print("║                                                               ║")
+    print("║  It has been DISABLED to prevent accidental data loss.        ║")
+    print("║                                                               ║")
+    print("║  DO NOT attempt to restore or re-enable this script!          ║")
+    print("║                                                               ║")
+    print("╚═══════════════════════════════════════════════════════════════╝")
+    print("\n")
+    
+    return False
 
 if __name__ == "__main__":
     clear_all_tables()
