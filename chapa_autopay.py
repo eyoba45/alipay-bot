@@ -358,9 +358,10 @@ def process_verified_deposit(telegram_id, amount, payment_data):
 
         if pending_deposit:
             # Only update if not already approved
-            if pending_deposit.status != 'Approved':
-                pending_deposit.status = 'Approved'
+            if pending_deposit.status != 'Auto-Approved' and pending_deposit.status != 'Approved':
+                pending_deposit.status = 'Auto-Approved'
                 pending_deposit.updated_at = datetime.utcnow()
+                logger.info(f"✅ Automatically approved deposit with tx_ref {tx_ref} for user {telegram_id}")
             else:
                 logger.info(f"Deposit already approved, skipping")
                 return True
@@ -369,12 +370,13 @@ def process_verified_deposit(telegram_id, amount, payment_data):
             pending_deposit = PendingDeposit(
                 user_id=user.id,
                 amount=amount,
-                status='Approved',
+                status='Auto-Approved',
                 tx_ref=tx_ref,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
             session.add(pending_deposit)
+            logger.info(f"✅ Created automatically approved deposit with tx_ref {tx_ref} for user {telegram_id}")
 
         # Check if we need to handle subscription
         now = datetime.utcnow()
@@ -896,7 +898,12 @@ You can try again by clicking the button below.
                 if payment_data and not payment_data.get('payment_status'):
                     # Payment verified successfully
                     logger.info(f"✅ Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
-                    process_verified_deposit(user.telegram_id, deposit.amount, payment_data)
+                    # Process and automatically approve the deposit
+                    success = process_verified_deposit(user.telegram_id, deposit.amount, payment_data)
+                    if success:
+                        logger.info(f"✅ Deposit auto-approved and processed successfully for user {user.telegram_id}")
+                    else:
+                        logger.error(f"❌ Failed to auto-approve deposit for user {user.telegram_id}")
                     continue
                 
                 # Case 5: Payment verification failed or returned false - keep checking
@@ -1004,7 +1011,8 @@ def verify_payment_task():
 def start_verification_service():
     """Start the verification service in a background thread"""
     try:
-        # Initialize database
+        # Initialize database - this will only create tables if they don't exist
+        # It will NEVER drop or reset existing tables
         init_db()
         logger.info("✅ Chapa Auto-Payment verification service started")
         logger.info("✓ Will auto-approve payments when verified by Chapa API")
