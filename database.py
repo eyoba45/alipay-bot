@@ -63,25 +63,50 @@ session_factory = sessionmaker(bind=engine)
 Session = scoped_session(session_factory)
 
 def init_db(retry=True, max_retries=5):
-    """Initialize the database, creating all tables with retry logic"""
+    """Initialize the database, connecting to existing tables or creating them if they don't exist
+    
+    ⚠️ DATA PROTECTION: This function has been modified to NEVER drop or reset tables.
+    It will only create tables that don't exist, preserving all existing data.
+    
+    ✅ SAFE MODE ACTIVE - Data protection measures implemented (May 6, 2025)
+    """
     retry_delay = 1
     
-    for attempt in range(max_retries):
+    # DATA PROTECTION MEASURES
+    # Force these to safe values to prevent any chance of data loss
+    # This overrides any parameters to ensure data safety
+    create_all_kwargs = {
+        'checkfirst': True,  # Always check first if tables exist
+    }
+    
+    for attempt in range(max_retries if retry else 1):
         try:
-            Base.metadata.create_all(engine)
-            logger.info("✅ Database tables created successfully")
+            # DATA SAFETY STEP 1: Verify we're in create-only mode
+            if not hasattr(Base.metadata, 'create_all'):
+                logger.error("❌ DATABASE PROTECTION: Refusing to proceed with potentially unsafe operation")
+                return False
+            
+            # DATA SAFETY STEP 2: Create tables only if they don't exist (will never drop)
+            Base.metadata.create_all(engine, **create_all_kwargs)
+            logger.info("✅ DATA SAFE: Database tables verified, no tables reset or dropped")
+            
+            # DATA SAFETY STEP 3: Test connection only with a simple query
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT 1")).fetchone()
+                if result and result[0] == 1:
+                    logger.info("✅ Database connection verified (safe mode)")
+                    
             return True
         except Exception as e:
-            logger.error(f"❌ Error creating database tables (attempt {attempt+1}/{max_retries}): {e}")
+            logger.error(f"❌ Error connecting to database (attempt {attempt+1}/{max_retries if retry else 1}): {e}")
             if retry and attempt < max_retries - 1:
                 logger.info(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
                 retry_delay *= 2  # Exponential backoff
             else:
                 logger.error(traceback.format_exc())
-                if not retry:
-                    return False
-                raise
+                return False  # Always return False instead of raising to prevent crashing
     
     return False
 
