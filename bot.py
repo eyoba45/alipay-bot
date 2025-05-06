@@ -1876,26 +1876,29 @@ def payment_details(message, amount, for_subscription=False):
 • TeleBirr
 • CBE Birr
 • HelloCash
-•Amole
+• Amole
 • Credit/Debit Cards
 • And more!
 
-<i>💎 Your balance will update automatically after payment! 💎</i>
-<i>No need to send screenshots with online payment</i>
+<i>✅ AUTO-APPROVAL: Your balance will update automatically within 1 minute of successful payment!</i>
+<i>No manual approval needed - no screenshots required</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
 
-            # Store transaction reference
+            # Store transaction reference for automatic verification
             pending_deposit = PendingDeposit(
                 user_id=user.id,
                 amount=amount,
                 status='Processing',
-                tx_ref=payment_link['tx_ref']  # Save the transaction reference for verification
+                tx_ref=payment_link['tx_ref'],  # Save the transaction reference for automatic verification
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
             )
             session.add(pending_deposit)
             session.commit()
             
-            logger.info(f"Created pending deposit with tx_ref: {payment_link['tx_ref']} for user {chat_id}")
+            logger.info(f"✅ Created deposit record with tx_ref: {payment_link['tx_ref']} for user {chat_id}")
+            logger.info(f"👍 Deposit will be auto-approved by system within 1 minute of successful payment")
 
             # Update user state
             user_states[chat_id] = {
@@ -4652,39 +4655,53 @@ def list_pending_deposits(message):
 
     try:
         session = get_session()
-        # Get all pending deposits with user info
+        # Get all pending deposits with user info (exclude auto-approved ones)
         pending_deposits = session.query(PendingDeposit, User).join(User).filter(
             PendingDeposit.status == 'Processing'
         ).order_by(PendingDeposit.created_at.desc()).all()
+        
+        # Get auto-approved deposits count for the admin
+        auto_approved_count = session.query(PendingDeposit).filter(
+            PendingDeposit.status == 'Auto-Approved'
+        ).count()
 
         if not pending_deposits:
             bot.send_message(
                 chat_id,
-                """
+                f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 <b>PENDING DEPOSITS</b>  
+   📋 <b>DEPOSIT MANAGEMENT</b>  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-✅ <b>No pending deposits!</b>
+✅ <b>No manual approvals needed!</b>
 
-All deposits have been processed. There are no deposits waiting for approval.
+All deposits have been processed. There are no deposits waiting for manual approval.
+
+<b>{auto_approved_count}</b> deposits have been automatically approved by the system.
+
+<i>✅ Online payments through Chapa are now fully automated and require no admin approval!</i>
+<i>Only manual deposits (with screenshots) require admin review.</i>
 """,
                 parse_mode='HTML',
                 reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
             )
             return
 
-        # Send introduction message
+        # Send introduction message with auto-approved count
         bot.send_message(
             chat_id,
             f"""
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>PENDING DEPOSITS</b> 💰  
+   💰 <b>DEPOSIT MANAGEMENT</b> 💰  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-Found <b>{len(pending_deposits)}</b> deposits pending approval.
+Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
+<b>{auto_approved_count}</b> deposits have been automatically approved by the system.
 
-<i>Each deposit will be shown below with approval options.</i>
+<i>✅ Online payments through Chapa are now automatically verified and approved!</i>
+<i>Manual deposits (with screenshots) still require admin approval.</i>
+
+<i>Each pending deposit will be shown below with approval options.</i>
 """,
             parse_mode='HTML'
         )
