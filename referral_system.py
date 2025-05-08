@@ -436,12 +436,12 @@ def get_user_referrals(user_id):
             r.id, 
             r.referred_id, 
             u.name as referred_name,
-            r.referral_date,
+            r.created_at,
             r.status
         FROM referrals r
         JOIN users u ON r.referred_id = u.id
         WHERE r.referrer_id = :user_id
-        ORDER BY r.referral_date DESC
+        ORDER BY r.created_at DESC
         """)
         
         result = session.execute(query, {'user_id': user_id})
@@ -452,7 +452,7 @@ def get_user_referrals(user_id):
                 'id': row.id,
                 'referred_id': row.referred_id,
                 'referred_name': row.referred_name,
-                'referral_date': row.referral_date,
+                'referral_date': row.created_at,  # Use created_at as referral_date for backwards compatibility
                 'status': row.status
             })
             
@@ -477,6 +477,8 @@ def get_referral_rewards(user_id):
     session = None
     try:
         session = get_session()
+        
+        # Modified query to use JOIN with referrals to get referred user info where available
         query = text("""
         SELECT 
             rr.id,
@@ -486,8 +488,9 @@ def get_referral_rewards(user_id):
             rr.created_at,
             u.name as referred_name
         FROM referral_rewards rr
-        JOIN users u ON rr.referred_id = u.id
-        WHERE rr.referrer_id = :user_id
+        LEFT JOIN referrals r ON rr.referral_id = r.id
+        LEFT JOIN users u ON r.referred_id = u.id
+        WHERE rr.user_id = :user_id
         ORDER BY rr.created_at DESC
         """)
         
@@ -495,14 +498,21 @@ def get_referral_rewards(user_id):
         rewards = []
         
         for row in result:
-            rewards.append({
+            reward_data = {
                 'id': row.id,
                 'points': row.points,
                 'reward_type': row.reward_type,
                 'description': row.description,
-                'created_at': row.created_at,
-                'referred_name': row.referred_name
-            })
+                'created_at': row.created_at
+            }
+            
+            # Only add referred_name if it exists
+            if hasattr(row, 'referred_name') and row.referred_name:
+                reward_data['referred_name'] = row.referred_name
+            else:
+                reward_data['referred_name'] = "Unknown User"
+                
+            rewards.append(reward_data)
             
         return rewards
         
