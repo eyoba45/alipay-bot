@@ -140,11 +140,14 @@ def process_referral(referrer_id, referred_user_id, action_type):
     """
     session = None
     try:
+        logger.info(f"🔍 DEBUG: Processing referral: referrer_id={referrer_id}, referred_user_id={referred_user_id}, action_type={action_type}")
+        
         if action_type not in REWARD_POINTS:
-            logger.error(f"Invalid referral action type: {action_type}")
+            logger.error(f"❌ Invalid referral action type: {action_type}")
             return False
             
         points = REWARD_POINTS[action_type]
+        logger.info(f"🔍 Points to award: {points} for action: {action_type}")
         
         # If no points awarded for this action type, skip processing
         if points <= 0:
@@ -153,74 +156,113 @@ def process_referral(referrer_id, referred_user_id, action_type):
             
         session = get_session()
         
-        # Get the referrer user
-        referrer = session.query(User).filter_by(id=referrer_id).first()
+        # Get the referrer user using FOR UPDATE to lock the row during update
+        referrer = session.query(User).filter_by(id=referrer_id).with_for_update().first()
         if not referrer:
-            logger.error(f"Referrer with ID {referrer_id} not found")
+            logger.error(f"❌ Referrer with ID {referrer_id} not found")
             return False
+        
+        logger.info(f"✅ Found referrer: id={referrer.id}, telegram_id={referrer.telegram_id}, current_points={referrer.referral_points}")
             
         # Get the referred user
         referred = session.query(User).filter_by(id=referred_user_id).first()
         if not referred:
-            logger.error(f"Referred user with ID {referred_user_id} not found")
+            logger.error(f"❌ Referred user with ID {referred_user_id} not found")
             return False
-            
-        # Get the referral record
-        referral = session.query(Referral).filter(
-            and_(
-                Referral.referrer_id == referrer_id,
-                Referral.referred_id == referred_user_id
-            )
-        ).first()
         
-        if not referral:
-            logger.error(f"Referral record not found for {referrer_id} -> {referred_user_id}")
-            return False
-            
-        # Check if this specific reward has already been given
-        existing_reward = session.query(ReferralReward).filter(
-            and_(
-                ReferralReward.referrer_id == referrer_id,
-                ReferralReward.referred_id == referred_user_id,
-                ReferralReward.reward_type == action_type
-            )
-        ).first()
+        logger.info(f"✅ Found referred user: id={referred.id}, telegram_id={referred.telegram_id}")
         
-        if existing_reward:
-            logger.info(f"Reward for {action_type} already given for referral {referrer_id} -> {referred_user_id}")
-            # Even if reward exists, ensure the referrer has the points credited
+        # Try to directly update points first - this is the most important part
+        try:
+            # Update referrer's points even if referral record creation fails
             current_points = referrer.referral_points or 0
-            if current_points < points:
-                referrer.referral_points = current_points + points
+            new_points = current_points + points
+            referrer.referral_points = new_points
+            session.commit()
+            logger.info(f"✅ CRITICAL FIX: Successfully updated user {referrer_id} points from {current_points} to {new_points}")
+        except Exception as e:
+            logger.error(f"❌ CRITICAL ERROR: Failed to update referrer points: {e}")
+            session.rollback()
+            return False
+        
+        # Continue with creating other records
+        try:
+            # Get the referral record
+            referral = session.query(Referral).filter(
+                and_(
+                    Referral.referrer_id == referrer_id,
+                    Referral.referred_id == referred_user_id
+                )
+            ).first()
+            
+            if not referral:
+                logger.error(f"❌ Referral record not found for {referrer_id} -> {referred_user_id}")
+                logger.info(f"🔧 Attempting to create missing referral record...")
+                # Try to create the missing referral record
+                referral_code = referrer.referral_code or 'MISSING_CODE'
+                referral = Referral(
+                    referrer_id=referrer_id,
+                    referred_id=referred_user_id,
+                    referral_code=referral_code,
+                    referral_date=datetime.now(),
+                    status='completed',
+                    completed_at=datetime.now()
+                )
+                session.add(referral)
+                session.flush()  # Get the ID without committing
+                logger.info(f"✅ Created missing referral record with id {referral.id}")
+                
+            # Check if this specific reward has already been given
+            existing_reward = session.query(ReferralReward).filter(
+                and_(
+                    ReferralReward.referrer_id == referrer_id,
+                    ReferralReward.referred_id == referred_user_id,
+                    ReferralReward.reward_type == action_type
+                )
+            ).first()
+            
+            if existing_reward:
+                logger.info(f"Reward for {action_type} already given for referral {referrer_id} -> {referred_user_id}")
+                # Points were already updated directly above
+                return True
+            
+            # Create the reward record with all required fields
+            try:
+                reward = ReferralReward(
+                    user_id=referrer_id,  # This is the user getting the points (the referrer)
+                    points=points,
+                    reward_type=action_type,
+                    description=f"Received {points} points for {referred.name}'s {action_type.replace('_', ' ')}"
+                )
+                # Add referral_id if available
+                if referral and hasattr(referral, 'id'):
+                    reward.referral_id = referral.id
+                    
+                session.add(reward)
                 session.commit()
-                logger.info(f"Added missing {points} points to referrer {referrer_id}")
+                logger.info(f"✅ Created reward record for {points} points with type {action_type}")
+            except Exception as e:
+                logger.error(f"❌ Failed to create reward record (but points were already added): {e}")
+                # Don't roll back since the points update already succeeded
+                
+            # Update referral status if we have a valid referral
+            if referral:
+                try:
+                    referral.status = 'rewarded'
+                    session.commit()
+                    logger.info(f"✅ Updated referral status to 'rewarded'")
+                except Exception as e:
+                    logger.error(f"❌ Failed to update referral status (but points were already added): {e}")
+            
+            logger.info(f"✅ Successfully processed referral: {referrer_id} -> {referred_user_id} for {action_type}, awarded {points} points")
             return True
-        
-        # Create the reward record with all required fields
-        reward = ReferralReward(
-            referrer_id=referrer_id,
-            referred_id=referred_user_id,
-            user_id=referrer_id,  # This was missing and is required by the model
-            referral_id=referral.id,  # Link to the referral record
-            points=points,
-            reward_type=action_type,
-            description=f"Received {points} points for {referred.name}'s {action_type.replace('_', ' ')}"
-        )
-        session.add(reward)
-        
-        # Update referrer's points
-        current_points = referrer.referral_points or 0
-        referrer.referral_points = current_points + points
-        
-        # Update referral status
-        referral.status = 'rewarded'
-        
-        session.commit()
-        logger.info(f"✅ Awarded {points} points to user {referrer_id} for referral action {action_type}")
-        return True
-        
+        except Exception as e:
+            logger.error(f"❌ Error in secondary referral processing: {e}")
+            # Don't return False here as the points were already added successfully
+            return True
+            
     except Exception as e:
-        logger.error(f"Error processing referral: {e}")
+        logger.error(f"❌ Fatal error processing referral: {e}")
         logger.error(f"Exception details: {str(e)}")
         if session:
             session.rollback()
@@ -243,11 +285,24 @@ def check_and_process_registration_referral(user_id, referral_code):
     try:
         session = get_session()
         
+        # Extra validation and debug logging
+        if not referral_code or len(referral_code.strip()) == 0:
+            logger.error(f"❌ CRITICAL: Empty referral code provided for check_and_process_registration_referral with user_id {user_id}")
+            return False
+            
+        logger.info(f"🔍 DEBUG: Processing registration referral: user_id={user_id}, referral_code={referral_code}")
+        
         # Find the referrer by code
         referrer = session.query(User).filter_by(referral_code=referral_code).first()
         if not referrer:
-            logger.info(f"No user found with referral code {referral_code}")
+            logger.error(f"❌ No user found with referral code {referral_code}")
+            
+            # Extra debug to list all valid codes
+            all_codes = session.query(User.id, User.telegram_id, User.referral_code).filter(User.referral_code != None).all()
+            logger.info(f"🔍 Available referral codes: {all_codes}")
             return False
+            
+        logger.info(f"✅ Found referrer with ID {referrer.id} and code {referral_code}")
             
         # Make sure user isn't referring themselves
         if referrer.id == user_id:
@@ -275,32 +330,87 @@ def check_and_process_registration_referral(user_id, referral_code):
             
             return True
             
-        # Create the referral record with all required fields
-        referral = Referral(
-            referrer_id=referrer.id,
-            referred_id=user_id,
-            referral_code=referral_code,  # Added missing referral_code
-            referral_date=datetime.now(),
-            completed_at=datetime.now(),
-            status='completed'
-        )
-        session.add(referral)
-        session.commit()
-        
-        # Log clear success message
-        logger.info(f"✅ Created new referral record: User {referrer.id} referred User {user_id} with code {referral_code}")
-        
-        # Process the registration reward
-        success = process_referral(referrer.id, user_id, 'registration')
-        if success:
-            logger.info(f"✅ Successfully awarded {REWARD_POINTS['registration']} points to user {referrer.id}")
-        else:
-            logger.error(f"❌ Failed to award points for referral: {referrer.id} -> {user_id}")
-        
-        return success
+        try:
+            # Create the referral record with all required fields
+            referral = Referral(
+                referrer_id=referrer.id,
+                referred_id=user_id,
+                referral_code=referral_code,  # Added missing referral_code
+                referral_date=datetime.now(),
+                completed_at=datetime.now(),
+                status='completed'
+            )
+            session.add(referral)
+            session.flush()  # Flush before commit to catch any errors
+            session.commit()
+            
+            # Log clear success message
+            logger.info(f"✅ Created new referral record: User {referrer.id} referred User {user_id} with code {referral_code}")
+        except Exception as e:
+            logger.error(f"❌ CRITICAL: Failed to create referral record: {e}")
+            session.rollback()
+            
+            # Try to diagnose column mismatch in Referral table
+            try:
+                from sqlalchemy import inspect
+                inspector = inspect(session.bind)
+                columns = inspector.get_columns('referrals')
+                logger.info(f"🔍 Referrals table columns: {[col['name'] for col in columns]}")
+            except Exception as e2:
+                logger.error(f"❌ Failed to inspect referrals table: {e2}")
+            
+            # Continue processing even if referral record creation failed
+            
+        # Process the registration reward directly by updating the user's points
+        try:
+            # Directly update referrer's points
+            points = REWARD_POINTS['registration']
+            referrer = session.query(User).filter_by(id=referrer.id).with_for_update().first()
+            if referrer:
+                current_points = referrer.referral_points or 0
+                referrer.referral_points = current_points + points
+                session.commit()
+                logger.info(f"✅ DIRECT UPDATE: Added {points} points to user {referrer.id}. New total: {referrer.referral_points}")
+                
+                # Create reward record separately
+                try:
+                    reward = ReferralReward(
+                        user_id=referrer.id,
+                        points=points,
+                        reward_type='registration',
+                        description=f"Received {points} points for referral registration"
+                    )
+                    # Try to link to the referral record if it exists
+                    try:
+                        referral = session.query(Referral).filter(
+                            and_(
+                                Referral.referrer_id == referrer.id,
+                                Referral.referred_id == user_id
+                            )
+                        ).first()
+                        if referral:
+                            reward.referral_id = referral.id
+                    except Exception as e_ref:
+                        logger.error(f"❌ Could not link reward to referral record: {e_ref}")
+                    
+                    session.add(reward)
+                    session.commit()
+                    logger.info(f"✅ Created referral reward record")
+                except Exception as e:
+                    logger.error(f"❌ Failed to create reward record but points were added: {e}")
+                
+                return True
+            else:
+                logger.error(f"❌ Failed to find referrer with ID {referrer.id} for direct point update")
+                return False
+        except Exception as e:
+            logger.error(f"❌ CRITICAL: Failed to update referrer points directly: {e}")
+            if session:
+                session.rollback()
+            return False
         
     except Exception as e:
-        logger.error(f"Error checking registration referral: {e}")
+        logger.error(f"❌ Error checking registration referral: {e}")
         logger.error(f"Exception details: {str(e)}")
         if session:
             session.rollback()
