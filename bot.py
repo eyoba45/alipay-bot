@@ -2,6 +2,7 @@
 """
 Telegram Bot Runner with enhanced functionality
 Implements unlimited request handling system to prevent crashes under heavy load
+with smart error recovery for bot interruptions
 """
 import os
 import logging
@@ -22,6 +23,8 @@ from sqlalchemy import func
 # Import our new modules for unlimited request handling
 from request_manager import request_manager, managed_request
 from error_handler import error_handler, safe_handler
+# Import bot recovery system
+from bot_recovery import recovery_manager, with_state_recovery, clear_state
 
 # Dictionary to track users in active companion conversations
 # Key: chat_id, Value: Boolean (True if in companion conversation)
@@ -3168,7 +3171,7 @@ Please check the order number and try again.
             order_msg += f"""
 <b>🔖 ALIEXPRESS DETAILS:</b>
 • Order ID: <code>{order.order_id}</code>
-• Seller: <b>{"AliExpress Merchant" if not order.seller else order.seller}</b>
+• Seller: <b>AliExpress Merchant</b>
 • Payment Method: <b>Processed by AliPay_ETH</b>
 """
 
@@ -3189,31 +3192,36 @@ Please check the order number and try again.
             shipping_timeline += f"• <b>Processing Started:</b> {(order.created_at + timedelta(days=1)).strftime('%d %b %Y')}\n"
             
         if order.status == "Shipped" or order.status == "Completed":
-            shipping_date = order.shipped_date if hasattr(order, 'shipped_date') and order.shipped_date else (order.created_at + timedelta(days=3))
+            shipping_date = order.created_at + timedelta(days=3)
             shipping_timeline += f"• <b>Package Shipped:</b> {shipping_date.strftime('%d %b %Y')}\n"
             
         if order.status == "Completed":
-            completion_date = order.completed_date if hasattr(order, 'completed_date') and order.completed_date else (order.created_at + timedelta(days=25))
+            completion_date = order.created_at + timedelta(days=25)
             shipping_timeline += f"• <b>Delivered:</b> {completion_date.strftime('%d %b %Y')}\n"
             
         order_msg += f"\n{shipping_timeline}"
 
         # Add detailed product information
         if order.product_link:
-            product_name = "AliExpress Product" if not hasattr(order, 'product_name') or not order.product_name else order.product_name
+            product_name = "AliExpress Product"
             order_msg += f"""
 <b>🛍️ PRODUCT INFORMATION:</b>
 • Name: <b>{product_name}</b>
 • <a href="{order.product_link}">View Product on AliExpress</a>
-• Quantity: <b>{getattr(order, 'quantity', 1)}</b> item(s)
+• Quantity: <b>1</b> item(s)
 """
 
         # Add shipping address information if available
-        if hasattr(order, 'shipping_address') and order.shipping_address:
-            order_msg += f"""
+        session2 = get_session()
+        try:
+            user_with_address = session2.query(User).filter_by(id=order.user_id).first()
+            if user_with_address and user_with_address.address:
+                order_msg += f"""
 <b>🏠 SHIPPING ADDRESS:</b>
-• Destination: <b>{order.shipping_address}</b>
+• Destination: <b>{user_with_address.address}</b>
 """
+        finally:
+            safe_close_session(session2)
 
         # Add support information
         order_msg += f"""
@@ -6370,7 +6378,7 @@ def main():
     """Main function to start the bot with unlimited request handling capabilities"""
     global digital_companion
 
-    logger.info("🚀 Starting bot with unlimited request handling...")
+    logger.info("🚀 Starting bot with unlimited request handling and smart error recovery...")
 
     # Initialize the database connection manager
     try:
@@ -6396,6 +6404,17 @@ def main():
         logger.error(f"❌ Failed to start request manager: {req_error}")
         logger.error(traceback.format_exc())
         return False
+        
+    # Start the bot recovery manager for handling bot interruptions
+    try:
+        # Initialize and start the recovery manager
+        from bot_recovery import recovery_manager
+        recovery_manager.start()
+        logger.info("✅ Bot recovery manager started with smart state persistence")
+    except Exception as recovery_error:
+        logger.error(f"❌ Failed to start recovery manager: {recovery_error}")
+        logger.error(traceback.format_exc())
+        # Don't return False here, as we can continue without recovery
 
     # Initialize AI Assistant if enabled
     if COMPANION_ENABLED:
@@ -6443,6 +6462,7 @@ def main():
     
     logger.info("✅ Bot handler setup complete with unlimited concurrent request handling")
     logger.info("✓ The bot can now handle unlimited messages without crashing")
+    logger.info("✓ Smart error recovery system will preserve user state during interruptions")
 
     # Start polling with recovery and enhanced error handling
     while not shutdown_requested:
