@@ -50,6 +50,7 @@ class Order(Base):
     product_link = Column(String, nullable=False)
     order_id = Column(String)  # AliExpress order ID
     tracking_number = Column(String)
+    carrier = Column(String)  # Shipping carrier name
     status = Column(String, default='Processing')
     amount = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
