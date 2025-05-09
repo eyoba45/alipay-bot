@@ -16,7 +16,7 @@ import requests
 import queue
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from connection_manager import init_db, get_session, safe_close_session, session_scope
-from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction
+from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction, Transaction
 from datetime import datetime, timedelta
 from sqlalchemy import func
 # Import our new modules for unlimited request handling
