@@ -1577,13 +1577,15 @@ def handle_admin_decision(call):
             # Handle referral code processing
             if referral_code:
                 try:
-                    from referral_system import process_referral_code, complete_referral
+                    from referral_system import process_referral_code, complete_referral, check_and_process_registration_referral
                     
                     # Log that we're about to process the referral
-                    logger.info(f"Processing referral code {referral_code} for user {user_id}")
+                    logger.info(f"Processing referral code {referral_code} for user {new_user.id}")
                     
-                    # Process the referral
-                    success, result = process_referral_code(user_id, referral_code)
+                    # CRITICAL FIX: Use multiple methods to ensure referral is processed
+                    
+                    # Method 1: Process the referral using process_referral_code
+                    success, result = process_referral_code(new_user.id, referral_code)
                     
                     if success and result and hasattr(result, 'id'):
                         # Log success that we've found the referrer
@@ -1593,11 +1595,65 @@ def handle_admin_decision(call):
                         complete_success, reward = complete_referral(result.id)
                         
                         if complete_success:
-                            logger.info(f"✅ Successfully awarded {reward} points to referrer {result.id} for referring user {user_id}")
+                            logger.info(f"✅ Successfully awarded {reward} points to referrer {result.id} for referring user {new_user.id}")
                         else:
                             logger.warning(f"❌ Failed to complete referral: {reward}")
                     else:
-                        logger.warning(f"❌ Failed to process referral code {referral_code} for user {user_id}")
+                        logger.warning(f"❌ Method 1 failed to process referral code {referral_code} for user {new_user.id}")
+                    
+                    # Method 2: Direct process using check_and_process_registration_referral
+                    # This is a more direct approach that will update points directly
+                    try:
+                        direct_success = check_and_process_registration_referral(new_user.id, referral_code)
+                        if direct_success:
+                            logger.info(f"✅ Method 2: Successfully processed referral for user {new_user.id} with code {referral_code}")
+                        else:
+                            logger.warning(f"❌ Method 2 failed to process referral for user {new_user.id} with code {referral_code}")
+                    except Exception as direct_err:
+                        logger.error(f"❌ Error in direct referral processing: {direct_err}")
+                    
+                    # Method 3: Last-resort direct SQL update
+                    try:
+                        # Find referrer directly 
+                        referrer = session.query(User).filter_by(referral_code=referral_code).first()
+                        if referrer:
+                            # Update points directly with safety checks
+                            current_points = referrer.referral_points or 0
+                            referrer.referral_points = current_points + 50  # Add registration points
+                            session.commit()
+                            logger.info(f"✅ Method 3: Direct SQL update added 50 points to user {referrer.id}")
+                            
+                            # Try to create referral record if needed
+                            try:
+                                from sqlalchemy import and_
+                                from models import Referral
+                                
+                                # Check if referral record exists
+                                existing = session.query(Referral).filter(
+                                    and_(
+                                        Referral.referrer_id == referrer.id,
+                                        Referral.referred_id == new_user.id
+                                    )
+                                ).first()
+                                
+                                if not existing:
+                                    # Create record
+                                    new_referral = Referral(
+                                        referrer_id=referrer.id,
+                                        referred_id=new_user.id,
+                                        referral_code=referral_code,
+                                        status='completed',
+                                        completed_at=datetime.utcnow()
+                                    )
+                                    session.add(new_referral)
+                                    session.commit()
+                                    logger.info(f"✅ Created missing referral record for {referrer.id} → {new_user.id}")
+                            except Exception as rec_err:
+                                logger.error(f"❌ Failed to create referral record: {rec_err}")
+                        else:
+                            logger.warning(f"❌ Method 3: Could not find referrer with code {referral_code}")
+                    except Exception as sql_err:
+                        logger.error(f"❌ Error in direct SQL update: {sql_err}")
                         
                 except Exception as ref_err:
                     logger.error(f"Error processing referral: {ref_err}")
@@ -3522,13 +3578,41 @@ def process_order_details(message, order_id, user_telegram_id):
         if not order:
             bot.reply_to(message, "Order not found.")
             return
+        
+        # Get the user to deduct the balance
+        user = session.query(User).filter_by(telegram_id=int(user_telegram_id)).first()
+        if not user:
+            bot.reply_to(message, "User not found.")
+            return
+            
+        # Store the original balance for notification
+        original_balance = user.balance
+        
+        # Deduct the order amount from user's balance
+        if price > 0:
+            user.balance -= price
+            logger.info(f"Deducted ${price:.2f} from user {user_telegram_id} balance for order #{order.order_number}")
+            
+            # Create transaction record
+            transaction = Transaction(
+                user_id=user.id,
+                amount=-price,  # Negative for deduction
+                transaction_type="order_payment",
+                description=f"Payment for order #{order.order_number}",
+                reference=aliexpress_id,
+                status="completed"
+            )
+            session.add(transaction)
 
         # Update order with the details
         order.order_id = aliexpress_id
         order.tracking_number = tracking if tracking else None
         order.amount = price
         order.status = "Shipped" if tracking else "Processing"
+        order.carrier = "Standard AliExpress Shipping"  # Default carrier
         order.updated_at = datetime.utcnow()
+        
+        # Commit all changes
         session.commit()
 
         # Notify user with beautiful formatting
@@ -3544,8 +3628,22 @@ def process_order_details(message, order_id, user_telegram_id):
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
 • Tracking Number: <code>{tracking}</code>
+• Carrier: <b>{order.carrier}</b>
 • <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
 • <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
+"""
+
+        # Calculate balance in birr
+        new_balance = user.balance
+        birr_balance = int(new_balance * 160)  # Convert to birr (1 USD = 160 ETB)
+        
+        # Add balance info only if price was deducted
+        balance_info = ""
+        if price > 0:
+            balance_info = f"""
+<b>💰 ACCOUNT UPDATE:</b>
+• Amount charged: <b>${price:.2f}</b> ({int(price * 160)} birr)
+• New balance: <b>${new_balance:.2f}</b> ({birr_balance} birr)
 """
 
         bot.send_message(
@@ -3562,7 +3660,7 @@ Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status
 • AliExpress Order ID: <code>{aliexpress_id}</code>
 • Amount: <b>${price:.2f}</b>
 • Updated: <b>{datetime.utcnow().strftime('%d %b %Y')}</b>
-
+{balance_info}
 {tracking_info if tracking else "Your tracking information will be added soon."}
 
 <i>💫 Having issues with your order? Contact our support at @alipay_help_center for assistance 💫</i>
@@ -3580,6 +3678,7 @@ Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status
 • Tracking: {tracking if tracking else "None yet"}
 • Price: ${price:.2f}
 • Status: {order.status}
+• User balance: ${original_balance:.2f} → ${user.balance:.2f} (-${price:.2f})
 """,
             parse_mode='HTML'
         )
