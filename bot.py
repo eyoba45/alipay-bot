@@ -2672,19 +2672,40 @@ def process_order_link(message):
         parse_mode='HTML'
     )
 
-    # Basic validation of the link
+    # Pre-process AliExpress shared links which might be in the format:
+    # "3.54|product name https://aliexpress.com/..."
+    # Check for AliExpress link pattern in the message
+    if 'aliexpress' in link.lower():
+        # If it contains aliexpress but doesn't start with http,
+        # try to extract the URL from the shared format
+        if not link.startswith('http'):
+            import re
+            # Pattern to match URLs
+            url_pattern = r'https?://[^\s]+'
+            urls = re.findall(url_pattern, link)
+            if urls:
+                # Extract the actual URL from the message
+                link = urls[0]
+                logger.info(f"Extracted AliExpress URL from shared message: {link}")
+            else:
+                # Handle cases where URL might be formatted differently
+                parts = link.split('http')
+                if len(parts) > 1:
+                    link = 'http' + parts[1]
+                    logger.info(f"Extracted URL by splitting: {link}")
+    
+    # Fallback validation - still check if it's a valid link
     if not link.startswith('http') or 'aliexpress' not in link.lower():
         bot.edit_message_text(
             """
 ❌ <b>INVALID LINK DETECTED</b>
 
-Please provide a valid AliExpress product link that:
-• Starts with 'http' or 'https'
-• Contains 'aliexpress' in the URL
+Please provide a valid AliExpress product link. 
+I can process links in these formats:
+• Standard URL: <code>https://www.aliexpress.com/item/...</code>
+• AliExpress share format: <code>3.54|Product Name https://aliexpress.com/...</code>
 
-<b>Example:</b>
-<code>https://www.aliexpress.com/item/1005006383458726.html</code>
-
+The link must contain 'aliexpress' in the URL.
 Please try again or press 'Back to Main Menu' to cancel.
 """,
             chat_id=chat_id,
