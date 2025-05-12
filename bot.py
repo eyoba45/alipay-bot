@@ -704,7 +704,11 @@ def get_phone(message):
 • Address: <i>{registration_data[chat_id]['address']}</i>
 
 <b>💎 REGISTRATION FEE:</b>
-• ETB: <code>150</code> birr
+• One-time fee: <code>200</code> birr
+• First month subscription: <code>150</code> birr
+• Total payment: <code>350</code> birr
+• Secure payment via Chapa
+• Instant activation after payment
 
 <b>✨ EASY PAYMENT OPTIONS ✨</b>
 
@@ -1580,54 +1584,54 @@ def handle_admin_decision(call):
             # Handle referral code processing
             if referral_code:
                 try:
-                    from referral_system import process_referral_code, complete_referral, check_and_process_registration_referral
+                    from referral_system import check_and_process_registration_referral
                     
                     # Log that we're about to process the referral
                     logger.info(f"Processing referral code {referral_code} for user {new_user.id}")
                     
-                    # CRITICAL FIX: Use multiple methods to ensure referral is processed
+                    # Use our simplified and fixed referral processing function
+                    referral_success = check_and_process_registration_referral(new_user.id, referral_code)
                     
-                    # Method 1: Process the referral using process_referral_code
-                    success, result = process_referral_code(new_user.id, referral_code)
-                    
-                    if success and result and hasattr(result, 'id'):
-                        # Log success that we've found the referrer
-                        logger.info(f"✅ Found referrer with ID {result.id} for code {referral_code}")
+                    if referral_success:
+                        logger.info(f"✅ REFERRAL SUCCESS: Successfully processed referral for user {new_user.id} with code {referral_code}")
                         
-                        # Complete the referral and award points
-                        complete_success, reward = complete_referral(result.id)
-                        
-                        if complete_success:
-                            logger.info(f"✅ Successfully awarded {reward} points to referrer {result.id} for referring user {new_user.id}")
-                        else:
-                            logger.warning(f"❌ Failed to complete referral: {reward}")
+                        # Also update the user's referred_by_id field to maintain the referral chain
+                        try:
+                            # Find the referrer directly
+                            referrer = session.query(User).filter_by(referral_code=referral_code).first()
+                            if referrer and referrer.id != new_user.id:  # Prevent self-referrals
+                                new_user.referred_by_id = referrer.id
+                                session.commit()
+                                logger.info(f"✅ Updated user {new_user.id} with referred_by_id={referrer.id}")
+                        except Exception as update_err:
+                            logger.error(f"❌ Error updating referred_by_id: {update_err}")
+                            # This is not critical, so we continue
                     else:
-                        logger.warning(f"❌ Method 1 failed to process referral code {referral_code} for user {new_user.id}")
-                    
-                    # Method 2: Direct process using check_and_process_registration_referral
-                    # This is a more direct approach that will update points directly
-                    try:
-                        direct_success = check_and_process_registration_referral(new_user.id, referral_code)
-                        if direct_success:
-                            logger.info(f"✅ Method 2: Successfully processed referral for user {new_user.id} with code {referral_code}")
-                        else:
-                            logger.warning(f"❌ Method 2 failed to process referral for user {new_user.id} with code {referral_code}")
-                    except Exception as direct_err:
-                        logger.error(f"❌ Error in direct referral processing: {direct_err}")
-                    
-                    # Method 3: Last-resort direct SQL update
-                    try:
-                        # Find referrer directly 
-                        referrer = session.query(User).filter_by(referral_code=referral_code).first()
-                        if referrer:
-                            # Update points directly with safety checks
-                            current_points = referrer.referral_points or 0
-                            referrer.referral_points = current_points + 50  # Add registration points
-                            session.commit()
-                            logger.info(f"✅ Method 3: Direct SQL update added 50 points to user {referrer.id}")
-                            
-                            # Try to create referral record if needed
-                            try:
+                        logger.warning(f"❌ Failed to process referral for user {new_user.id} with code {referral_code}")
+                        
+                        # Fallback method as a last resort
+                        try:
+                            # Find referrer directly 
+                            referrer = session.query(User).filter_by(referral_code=referral_code).first()
+                            if referrer and referrer.id != new_user.id:  # Prevent self-referrals
+                                # Update points directly with safety checks
+                                current_points = referrer.referral_points or 0
+                                referrer.referral_points = current_points + 50  # Add registration points
+                                
+                                # Also update referred_by_id
+                                new_user.referred_by_id = referrer.id
+                                
+                                # Create ReferralReward record
+                                from models import ReferralReward
+                                new_reward = ReferralReward(
+                                    user_id=referrer.id,
+                                    points=50,
+                                    reward_type='registration',
+                                    description=f"Received 50 points for referring a new user"
+                                )
+                                session.add(new_reward)
+                                
+                                # Create Referral record
                                 from sqlalchemy import and_
                                 from models import Referral
                                 
@@ -1649,17 +1653,17 @@ def handle_admin_decision(call):
                                         completed_at=datetime.utcnow()
                                     )
                                     session.add(new_referral)
-                                    session.commit()
-                                    logger.info(f"✅ Created missing referral record for {referrer.id} → {new_user.id}")
-                            except Exception as rec_err:
-                                logger.error(f"❌ Failed to create referral record: {rec_err}")
-                        else:
-                            logger.warning(f"❌ Method 3: Could not find referrer with code {referral_code}")
-                    except Exception as sql_err:
-                        logger.error(f"❌ Error in direct SQL update: {sql_err}")
+                                
+                                # Commit all changes
+                                session.commit()
+                                logger.info(f"✅ FALLBACK: Successfully added 50 points to referrer {referrer.id}")
+                            else:
+                                logger.warning(f"❌ Could not find valid referrer with code {referral_code}")
+                        except Exception as fallback_err:
+                            logger.error(f"❌ Error in fallback referral processing: {fallback_err}")
                         
                 except Exception as ref_err:
-                    logger.error(f"Error processing referral: {ref_err}")
+                    logger.error(f"❌ Error processing referral: {ref_err}")
                     logger.error(f"Full error details: {str(ref_err)}")
 
             logger.info(f"User {user_id} approved and added to database")
