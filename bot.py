@@ -704,11 +704,7 @@ def get_phone(message):
 • Address: <i>{registration_data[chat_id]['address']}</i>
 
 <b>💎 REGISTRATION FEE:</b>
-• One-time fee: <code>200</code> birr
-• First month subscription: <code>150</code> birr
-• Total payment: <code>350</code> birr
-• Secure payment via Chapa
-• Instant activation after payment
+• ETB: <code>150</code> birr
 
 <b>✨ EASY PAYMENT OPTIONS ✨</b>
 
@@ -2296,6 +2292,28 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges with hover effects and statistics"""
     chat_id = message.chat.id
+    
+    # Display "Coming Soon" message as requested for immediate launch
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔜 <b>COMING SOON</b> 🔜
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Referral Badges Feature</b>
+
+This exciting feature is currently being optimized and will be available in the next update!
+
+<i>Check back soon to earn rewards by referring friends.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=create_main_menu(is_registered=True)
+    )
+    return
+    
+    # Original code commented out for future use
+    """
     session = None
     try:
         session = get_session()
@@ -2304,24 +2322,21 @@ def referral_badges(message):
         if not user:
             bot.send_message(
                 chat_id, 
-                """
-⚠️ <b>Registration Required</b>
-
-You need to register first to view referral badges.
-Click 🔑 Register to create your account.
-""", 
+                '⚠️ <b>Registration Required</b>\n\nYou need to register first to view referral badges.\nClick 🔑 Register to create your account.', 
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=False)
             )
             return
-        
-        # Get all badge HTML with hover effects
+            
         badge_html = ""
         try:
             from referral_system import REFERRAL_BADGES, get_user_badge, generate_badge_html
-            
-            # Get user's top badge
-            user_badge = get_user_badge(user.id)
+    """
+
+# Commented out code - do not use
+"""            
+# Get user's top badge
+user_badge = get_user_badge(user.id)
             
             # Count user's referrals
             from sqlalchemy import text
@@ -2418,6 +2433,28 @@ Click 🔑 Register to create your account.
 def my_referral_link(message):
     """Handle My Referral Link button to display and share referral link"""
     chat_id = message.chat.id
+    
+    # Display "Coming Soon" message as requested for immediate launch
+    bot.send_message(
+        chat_id,
+        """
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔜 <b>COMING SOON</b> 🔜
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+<b>Referral Link Feature</b>
+
+This exciting feature is currently being optimized and will be available in the next update!
+
+<i>Check back soon to start referring friends and earning rewards.</i>
+""",
+        parse_mode='HTML',
+        reply_markup=create_main_menu(is_registered=True)
+    )
+    return
+    
+    # Original code commented out for future use
+    """
     session = None
     try:
         session = get_session()
@@ -2426,12 +2463,12 @@ def my_referral_link(message):
         if not user:
             bot.send_message(
                 chat_id, 
-                """
+                '''
 ⚠️ <b>Registration Required</b>
 
 You need to register first to get your referral link.
 Click 🔑 Register to create your account.
-""", 
+''', 
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=False)
             )
