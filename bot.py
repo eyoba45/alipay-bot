@@ -66,16 +66,16 @@ def subscription_required(func):
             bot.send_message(
                 chat_id,
                 """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔒 <b>FEATURE LOCKED</b> 🔒  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>FEATURE LOCKED</b> _  
+_________________________
 
 This feature requires an active subscription.
 
 Your subscription has expired. Please deposit funds to your account 
 to automatically renew your subscription ($1.00 will be deducted).
 
-Use the 💰 Deposit button to add funds to your account.
+Use the _ Deposit button to add funds to your account.
 """,
                 parse_mode='HTML'
             )
@@ -121,7 +121,7 @@ TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 ADMIN_ID_STR = os.environ.get('ADMIN_CHAT_ID', '')
 
 if not TOKEN:
-    logger.error("❌ TELEGRAM_BOT_TOKEN not found!")
+    logger.error("_ TELEGRAM_BOT_TOKEN not found!")
     sys.exit(1)
 
 # Support for multiple admin IDs, comma-separated
@@ -137,11 +137,11 @@ try:
     ADMIN_ID = ADMIN_IDS[0] if ADMIN_IDS else None
 
     if ADMIN_IDS:
-        logger.info(f"✅ Configured {len(ADMIN_IDS)} admin IDs")
+        logger.info(f"_ Configured {len(ADMIN_IDS)} admin IDs")
     else:
-        logger.warning("⚠️ No valid admin IDs found. Admin features will be disabled.")
+        logger.warning("__ No valid admin IDs found. Admin features will be disabled.")
 except (ValueError, TypeError, IndexError):
-    logger.warning("⚠️ ADMIN_CHAT_ID is not valid. Admin notifications will be skipped.")
+    logger.warning("__ ADMIN_CHAT_ID is not valid. Admin notifications will be skipped.")
     ADMIN_ID = None
     ADMIN_IDS = []
 
@@ -202,15 +202,15 @@ def has_valid_subscription(user_id):
                 bot.send_message(
                     user_id,
                     f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>SUBSCRIPTION RENEWED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SUBSCRIPTION RENEWED</b> _  
+_________________________
 
 Your subscription has been automatically renewed for 30 days.
 
-💰 <b>Previous balance:</b> ${previous_balance:.2f}
-💵 <b>Subscription fee:</b> $1.00
-💼 <b>New balance:</b> ${user.balance:.2f}
+_ <b>Previous balance:</b> ${previous_balance:.2f}
+_ <b>Subscription fee:</b> $1.00
+_ <b>New balance:</b> ${user.balance:.2f}
 
 Your subscription will expire on {(datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d")}.
 """,
@@ -223,21 +223,21 @@ Your subscription will expire on {(datetime.utcnow() + timedelta(days=30)).strft
                         bot.send_message(
                             admin_id,
                             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💲 <b>SUBSCRIPTION AUTO-RENEWED</b>  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SUBSCRIPTION AUTO-RENEWED</b>  
+_________________________
 
 Subscription auto-renewed for user:
-👤 <b>{user.name}</b> [ID: <code>{user_id}</code>]
-💰 Previous balance: ${previous_balance:.2f}
-💰 New balance: ${user.balance:.2f}
+_ <b>{user.name}</b> [ID: <code>{user_id}</code>]
+_ Previous balance: ${previous_balance:.2f}
+_ New balance: ${user.balance:.2f}
 """,
                             parse_mode='HTML'
                         )
                     except Exception as e:
                         logger.error(f"Error notifying admin {admin_id} about auto-renewal: {e}")
                 
-                logger.info(f"✅ Auto-renewed subscription for user {user_id} from balance")
+                logger.info(f"_ Auto-renewed subscription for user {user_id} from balance")
                 
                 # Remove from expired dict if present
                 if user_id in expired_subscriptions:
@@ -257,15 +257,15 @@ Subscription auto-renewed for user:
                 bot.send_message(
                     user_id,
                     f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔒 <b>SUBSCRIPTION LOCKED</b> 🔒  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SUBSCRIPTION LOCKED</b> _  
+_________________________
 
 Your subscription has expired and your balance is too low for automatic renewal.
 
 To continue using all bot features, please:
 
-1. Use the 💰 <b>Deposit</b> button in the main menu to add funds to your account
+1. Use the _ <b>Deposit</b> button in the main menu to add funds to your account
 2. When you have at least $1.00 balance, your subscription will be automatically renewed
 
 Subscription fee: $1.00 (150 birr)
@@ -301,47 +301,47 @@ def create_main_menu(is_registered=False, chat_id=None):
 
     if is_registered:
         menu.add(
-            KeyboardButton('💰 Deposit'),
-            KeyboardButton('📦 Submit Order')
+            KeyboardButton('_ Deposit'),
+            KeyboardButton('_ Submit Order')
         )
         menu.add(
-            KeyboardButton('📊 Order Status'),
-            KeyboardButton('🔍 Track Order')
+            KeyboardButton('_ Order Status'),
+            KeyboardButton('_ Track Order')
         )
         menu.add(
-            KeyboardButton('💳 Balance'),
-            KeyboardButton('📅 Subscription')
+            KeyboardButton('_ Balance'),
+            KeyboardButton('_ Subscription')
         )
         menu.add(
-            KeyboardButton('🏆 Referral Badges'),
-            KeyboardButton('🔗 My Referral Link')
+            KeyboardButton('_ Referral Badges'),
+            KeyboardButton('_ My Referral Link')
         )
         menu.add(
-            KeyboardButton('👥 Join Community'),
-            KeyboardButton('❓ Help Center')
+            KeyboardButton('_ Join Community'),
+            KeyboardButton('_ Help Center')
         )
 
         # Add AI Assistant button if enabled
         if COMPANION_ENABLED:
-            menu.add(KeyboardButton('🤖 AI Assistant'))
+            menu.add(KeyboardButton('_ AI Assistant'))
 
         # Add admin buttons for admin users
         if is_admin_user:
-            menu.add(KeyboardButton('🔐 Admin Dashboard'))
+            menu.add(KeyboardButton('_ Admin Dashboard'))
     else:
-        menu.add(KeyboardButton('🔑 Register'))
+        menu.add(KeyboardButton('_ Register'))
         menu.add(
-            KeyboardButton('👥 Join Community'),
-            KeyboardButton('❓ Help Center')
+            KeyboardButton('_ Join Community'),
+            KeyboardButton('_ Help Center')
         )
 
         # Add AI Assistant button for unregistered users too
         if COMPANION_ENABLED:
-            menu.add(KeyboardButton('🤖 AI Assistant'))
+            menu.add(KeyboardButton('_ AI Assistant'))
 
         # Add admin buttons for admin users, even if not registered
         if is_admin_user:
-            menu.add(KeyboardButton('🔐 Admin Dashboard'))
+            menu.add(KeyboardButton('_ Admin Dashboard'))
 
     return menu
 
@@ -354,7 +354,7 @@ def admin_command(message):
     if not is_admin(chat_id):
         bot.send_message(
             chat_id,
-            "⚠️ You don't have permission to access the admin dashboard.",
+            "__ You don't have permission to access the admin dashboard.",
             reply_markup=create_main_menu(False, chat_id)
         )
         return
@@ -404,9 +404,9 @@ def start_message(message):
         # Import and use the enhanced welcome animation module
         try:
             from welcome_animation import send_personalized_welcome
-            logger.info(f"✅ Successfully imported welcome animation module for user {chat_id}")
+            logger.info(f"_ Successfully imported welcome animation module for user {chat_id}")
         except ImportError as e:
-            logger.error(f"❌ Failed to import welcome animation module: {e}")
+            logger.error(f"_ Failed to import welcome animation module: {e}")
             logger.warning("Enhanced welcome animation module not found, using fallback welcome")
             
             # Define fallback welcome animation function
@@ -418,7 +418,7 @@ def start_message(message):
                     
                 return bot.send_message(
                     chat_id,
-                    f"<b>Hello {name}!</b>\n\n✨ Welcome to AliPay_ETH! ✨\n\nYour Ethiopian gateway to AliExpress shopping.",
+                    f"<b>Hello {name}!</b>\n\n_ Welcome to AliPay_ETH! _\n\nYour Ethiopian gateway to AliExpress shopping.",
                     parse_mode='HTML'
                 )
 
@@ -429,60 +429,60 @@ def start_message(message):
             import os
             welcome_path = os.path.join(os.getcwd(), 'welcome_animation.py')
             if os.path.exists(welcome_path):
-                logger.info(f"✅ welcome_animation.py file exists at {welcome_path}")
+                logger.info(f"_ welcome_animation.py file exists at {welcome_path}")
                 with open(welcome_path, 'r') as f:
                     content_length = len(f.read())
-                    logger.info(f"✅ welcome_animation.py file size: {content_length} bytes")
+                    logger.info(f"_ welcome_animation.py file size: {content_length} bytes")
             else:
-                logger.error(f"❌ welcome_animation.py file DOES NOT EXIST at {welcome_path}")
+                logger.error(f"_ welcome_animation.py file DOES NOT EXIST at {welcome_path}")
             
             # Call the welcome animation function with appropriate error handling
             welcome_message = send_personalized_welcome(bot, chat_id, {'name': user_name})
-            logger.info(f"✅ Successfully sent welcome animation to user {chat_id}")
+            logger.info(f"_ Successfully sent welcome animation to user {chat_id}")
         except Exception as e:
-            logger.error(f"❌ Error sending welcome animation: {str(e)}")
-            logger.error(f"❌ Error type: {type(e).__name__}")
+            logger.error(f"_ Error sending welcome animation: {str(e)}")
+            logger.error(f"_ Error type: {type(e).__name__}")
             # Send fallback message directly if animation fails
             return bot.send_message(
                 chat_id,
-                f"<b>Hello {user_name or 'there'}!</b>\n\n✨ Welcome to AliPay_ETH! ✨\n\nYour Ethiopian gateway to AliExpress shopping.",
+                f"<b>Hello {user_name or 'there'}!</b>\n\n_ Welcome to AliPay_ETH! _\n\nYour Ethiopian gateway to AliExpress shopping.",
                 parse_mode='HTML'
             )
 
         # Different welcome message for admins
         if is_admin_user:
             welcome_msg = """
-✨ <b>Welcome to AliPay_ETH Admin Panel!</b> ✨
+_ <b>Welcome to AliPay_ETH Admin Panel!</b> _
 
 You are logged in as an administrator. You have access to all regular user functions plus admin features.
 
-🔐 <b>ADMIN FEATURES:</b>
-• User management
-• Order management
-• Deposit management
-• System statistics
-• Subscription management
+_ <b>ADMIN FEATURES:</b>
+_ User management
+_ Order management
+_ Deposit management
+_ System statistics
+_ Subscription management
 
-Click '🔐 Admin Dashboard' to access admin features.
+Click '_ Admin Dashboard' to access admin features.
 """
         else:
             welcome_msg = """
-✨ <b>Welcome to AliPay_ETH!</b> ✨
+_ <b>Welcome to AliPay_ETH!</b> _
 
 Your trusted Ethiopian payment solution for AliExpress shopping!
 
-🛍️ <b>What We Offer:</b>
-• Shop on AliExpress with Ethiopian Birr
-• Fast order processing & tracking
-• Reliable customer support
-• Secure payment handling
+__ <b>What We Offer:</b>
+_ Shop on AliExpress with Ethiopian Birr
+_ Fast order processing & tracking
+_ Reliable customer support
+_ Secure payment handling
 
-💫 <b>Monthly Subscription:</b>
-• Just $1 subscription per month
-• Access to all features and support
-• Automatic renewal monthly
+_ <b>Monthly Subscription:</b>
+_ Just $1 subscription per month
+_ Access to all features and support
+_ Automatic renewal monthly
 
-🌟 Ready to start shopping? Click '<b>🔑 Register</b>' below to begin your journey! 🌟
+_ Ready to start shopping? Click '<b>_ Register</b>' below to begin your journey! _
 """
         # Slight delay to allow animation to complete
         time.sleep(1.5)
@@ -496,12 +496,12 @@ Your trusted Ethiopian payment solution for AliExpress shopping!
         )
         logger.info(f"Sent welcome message to user {chat_id}")
     except Exception as e:
-        logger.error(f"❌ Error in start command: {traceback.format_exc()}")
+        logger.error(f"_ Error in start command: {traceback.format_exc()}")
         bot.send_message(chat_id, "Welcome to AliPay_ETH!", reply_markup=create_main_menu(False, chat_id))
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🔑 Register')
+@bot.message_handler(func=lambda msg: msg.text == '_ Register')
 def register_user(message):
     """Start the registration process"""
     chat_id = message.chat.id
@@ -514,7 +514,7 @@ def register_user(message):
             bot.send_message(
                 chat_id,
                 """
-✅ <b>You are already registered!</b>
+_ <b>You are already registered!</b>
 
 Your account is active and ready to use.
 """,
@@ -541,7 +541,7 @@ Your account is active and ready to use.
                             bot.send_message(
                                 chat_id,
                                 """
-✅ <b>Registration Successful!</b>
+_ <b>Registration Successful!</b>
 
 Your account is now active and ready to use.
 """,
@@ -557,7 +557,7 @@ Your account is now active and ready to use.
                 bot.send_message(
                     chat_id,
                     """
-🔸 <b>Complete Your Registration</b>
+_ <b>Complete Your Registration</b>
 
 Please complete your payment to activate your account.
 """,
@@ -568,7 +568,7 @@ Please complete your payment to activate your account.
                 bot.send_message(
                     chat_id,
                     """
-🔸 <b>Complete Your Registration</b>
+_ <b>Complete Your Registration</b>
 
 Please complete your registration by making the payment.
 """,
@@ -621,7 +621,7 @@ def get_phone(message):
             is_valid = True
 
         if not is_valid:
-            bot.send_message(chat_id, "❌ Invalid phone number! Please enter a valid Ethiopian number (e.g., 0912345678 or +251912345678)")
+            bot.send_message(chat_id, "_ Invalid phone number! Please enter a valid Ethiopian number (e.g., 0912345678 or +251912345678)")
             return
 
         registration_data[chat_id]['phone'] = phone
@@ -655,33 +655,33 @@ def get_phone(message):
         if not payment_link or 'checkout_url' not in payment_link:
             # Fall back to manual payment if Chapa integration fails
             payment_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🌟 <b>REGISTRATION DETAILS</b> 🌟  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>REGISTRATION DETAILS</b> _  
+_________________________
 
-<b>👤 YOUR INFORMATION:</b>
-• Name: <b>{registration_data[chat_id]['name']}</b>
-• Phone: <code>{registration_data[chat_id]['phone']}</code>
-• Address: <i>{registration_data[chat_id]['address']}</i>
+<b>_ YOUR INFORMATION:</b>
+_ Name: <b>{registration_data[chat_id]['name']}</b>
+_ Phone: <code>{registration_data[chat_id]['phone']}</code>
+_ Address: <i>{registration_data[chat_id]['address']}</i>
 
-<b>💎 REGISTRATION FEE:</b>
-• ETB: <code>150</code> birr
+<b>_ REGISTRATION FEE:</b>
+_ ETB: <code>150</code> birr
 
-<b>💳 SELECT PAYMENT METHOD:</b>
+<b>_ SELECT PAYMENT METHOD:</b>
 
-<b>🏦 Commercial Bank (CBE)</b>
-• Account: <code>1000547241316</code>
-• Name: <code>Eyob Mulugeta</code>
+<b>_ Commercial Bank (CBE)</b>
+_ Account: <code>1000547241316</code>
+_ Name: <code>Eyob Mulugeta</code>
 
-<b>📱 TeleBirr Mobile Money</b>
-• Number: <code>0986693062</code>
-• Name: <code>Eyob Mulugeta</code>
+<b>_ TeleBirr Mobile Money</b>
+_ Number: <code>0986693062</code>
+_ Name: <code>Eyob Mulugeta</code>
 
-<b>📱 HOW TO COMPLETE:</b>
-1️⃣ Select your preferred payment option
-2️⃣ Transfer exactly <code>150 ETB</code>
-3️⃣ Capture a clear screenshot of confirmation
-4️⃣ Send the screenshot below ⬇️
+<b>_ HOW TO COMPLETE:</b>
+1__ Select your preferred payment option
+2__ Transfer exactly <code>150 ETB</code>
+3__ Capture a clear screenshot of confirmation
+4__ Send the screenshot below __
 
 <i>Join thousands of satisfied members shopping on AliExpress with ETB!</i>
 """
@@ -691,29 +691,29 @@ def get_phone(message):
             from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("💳 Pay Now", url=payment_link['checkout_url']))
+            markup.add(InlineKeyboardButton("_ Pay Now", url=payment_link['checkout_url']))
 
             payment_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🌟 <b>REGISTRATION DETAILS</b> 🌟  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>REGISTRATION DETAILS</b> _  
+_________________________
 
-<b>👤 YOUR INFORMATION:</b>
-• Name: <b>{registration_data[chat_id]['name']}</b>
-• Phone: <code>{registration_data[chat_id]['phone']}</code>
-• Address: <i>{registration_data[chat_id]['address']}</i>
+<b>_ YOUR INFORMATION:</b>
+_ Name: <b>{registration_data[chat_id]['name']}</b>
+_ Phone: <code>{registration_data[chat_id]['phone']}</code>
+_ Address: <i>{registration_data[chat_id]['address']}</i>
 
-<b>💎 REGISTRATION FEE:</b>
-• ETB: <code>150</code> birr
+<b>_ REGISTRATION FEE:</b>
+_ ETB: <code>150</code> birr
 
-<b>✨ EASY PAYMENT OPTIONS ✨</b>
+<b>_ EASY PAYMENT OPTIONS _</b>
 
 Click the button below to pay securely with:
-• Credit/Debit Card
-• TeleBirr
-• CBE Birr
-• HelloCash
-• And more payment options!
+_ Credit/Debit Card
+_ TeleBirr
+_ CBE Birr
+_ HelloCash
+_ And more payment options!
 
 <i>Your account will be automatically activated after payment!</i>
 """
@@ -751,7 +751,7 @@ def handle_payment_registration(message):
             logger.warning(f"User {chat_id} attempted re-registration but is already registered")
             bot.send_message(
                 chat_id,
-                "✅ You're already registered! No need to register again.",
+                "_ You're already registered! No need to register again.",
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
@@ -761,7 +761,7 @@ def handle_payment_registration(message):
             logger.error("CHAPA_SECRET_KEY not found in environment - payment system unavailable")
             bot.send_message(
                 chat_id,
-                "❌ Our payment system is currently unavailable. Please try again later or contact support.",
+                "_ Our payment system is currently unavailable. Please try again later or contact support.",
                 parse_mode='HTML'
             )
             return
@@ -810,7 +810,7 @@ def handle_payment_registration(message):
             # Fall back to error message
             bot.send_message(
                 chat_id,
-                "❌ Error generating payment link. Please try again or contact support.",
+                "_ Error generating payment link. Please try again or contact support.",
                 parse_mode='HTML'
             )
             return
@@ -830,26 +830,26 @@ def handle_payment_registration(message):
 
         # Send payment link with inline button
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("💳 Pay Registration Fee", url=payment_link['checkout_url']))
+        markup.add(InlineKeyboardButton("_ Pay Registration Fee", url=payment_link['checkout_url']))
 
         payment_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💫 <b>COMPLETE REGISTRATION</b> 💫  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>COMPLETE REGISTRATION</b> _  
+_________________________
 
 Click the button below to securely pay the registration fee:
-• One-time fee: <code>200</code> birr
-• First month subscription: <code>150</code> birr
-• Total payment: <code>350</code> birr
-• Secure payment via Chapa
-• Instant activation after payment
+_ One-time fee: <code>200</code> birr
+_ First month subscription: <code>150</code> birr
+_ Total payment: <code>350</code> birr
+_ Secure payment via Chapa
+_ Instant activation after payment
 
 <b>Available Payment Methods:</b>
-• TeleBirr
-• CBE Birr
-• HelloCash
-• Amole
-• Credit/Debit Cards
+_ TeleBirr
+_ CBE Birr
+_ HelloCash
+_ Amole
+_ Credit/Debit Cards
 
 <i>Your account will be automatically activated after successful payment verification!</i>
 
@@ -873,12 +873,12 @@ Click the button below to securely pay the registration fee:
         bot.send_message(
             chat_id,
             """
-<b>⚠️ IMPORTANT PAYMENT INFORMATION:</b>
+<b>__ IMPORTANT PAYMENT INFORMATION:</b>
 
 After completing your payment:
-• Wait for automatic verification (1-2 minutes)
-• Do NOT close the payment page until you see "Payment Successful"
-• Your account will be activated once payment is verified
+_ Wait for automatic verification (1-2 minutes)
+_ Do NOT close the payment page until you see "Payment Successful"
+_ Your account will be activated once payment is verified
 
 If you don't receive confirmation within 5 minutes, please contact support.
 """,
@@ -908,7 +908,7 @@ If you don't receive confirmation within 5 minutes, please contact support.
         30.0, 
         lambda: bot.send_message(
             chat_id, 
-            "⏱️ Registration is taking longer than expected. We're still processing your request."
+            "__ Registration is taking longer than expected. We're still processing your request."
         )
     )
     registration_timeout.start()
@@ -921,7 +921,7 @@ If you don't receive confirmation within 5 minutes, please contact support.
         # First send immediate acknowledgement to user
         immediate_ack = bot.send_message(
             chat_id,
-            "📸 Screenshot received! Processing your registration...",
+            "_ Screenshot received! Processing your registration...",
             parse_mode='HTML'
         )
 
@@ -937,7 +937,7 @@ If you don't receive confirmation within 5 minutes, please contact support.
                     bot.send_message(
                         chat_id,
                         f"""
-✅ <b>You are already registered!</b>
+_ <b>You are already registered!</b>
 
 Your account is active and ready to use.
 """,
@@ -991,7 +991,7 @@ Your account is active and ready to use.
                     # Send manual verification notice to admin
                     if ADMIN_ID:
                         admin_msg = f"""
-⏳ <b>REGISTRATION NEEDS VERIFICATION</b>
+_ <b>REGISTRATION NEEDS VERIFICATION</b>
 
 User Information:
 Name: <b>{registration_data[chat_id].get('name', '')}</b>
@@ -1003,18 +1003,18 @@ Registration Fee: 350 ETB (200 ETB one-time + 150 ETB first month)
 Payment screenshot attached below
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-⚠️ Automatic payment verification is enabled, but user submitted screenshot.
+__ Automatic payment verification is enabled, but user submitted screenshot.
 This payment requires MANUAL VERIFICATION in the Admin Dashboard.
 """
                         try:
                             admin_sent = bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
-                            bot.send_photo(ADMIN_ID, file_id, caption="📸 Registration Payment Screenshot")
+                            bot.send_photo(ADMIN_ID, file_id, caption="_ Registration Payment Screenshot")
                             
                             # Send inline buttons for admin to approve/reject
                             approve_markup = InlineKeyboardMarkup()
                             approve_markup.row(
-                                InlineKeyboardButton("✅ Approve", callback_data=f"approve_user_{chat_id}"),
-                                InlineKeyboardButton("❌ Reject", callback_data=f"reject_user_{chat_id}")
+                                InlineKeyboardButton("_ Approve", callback_data=f"approve_user_{chat_id}"),
+                                InlineKeyboardButton("_ Reject", callback_data=f"reject_user_{chat_id}")
                             )
                             
                             bot.send_message(
@@ -1034,7 +1034,7 @@ This payment requires MANUAL VERIFICATION in the Admin Dashboard.
                     # Send admin notification
                     if ADMIN_ID:
                         admin_msg = f"""
-⏳ <b>REGISTRATION UPDATE (PENDING)</b>
+_ <b>REGISTRATION UPDATE (PENDING)</b>
 
 User Information:
 Name: <b>{existing_pending.name}</b>
@@ -1046,17 +1046,17 @@ The user has submitted a payment screenshot.
 Transaction Reference: <code>{existing_pending.tx_ref or 'None'}</code>
 Status: Manual Verification Needed
 
-⚠️ Please verify if the payment has been completed.
+__ Please verify if the payment has been completed.
 """
                         try:
                             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
-                            bot.send_photo(ADMIN_ID, file_id, caption="📸 Registration Payment Screenshot (Update)")
+                            bot.send_photo(ADMIN_ID, file_id, caption="_ Registration Payment Screenshot (Update)")
                             
                             # Send inline buttons for admin to approve/reject
                             approve_markup = InlineKeyboardMarkup()
                             approve_markup.row(
-                                InlineKeyboardButton("✅ Approve", callback_data=f"approve_user_{chat_id}"),
-                                InlineKeyboardButton("❌ Reject", callback_data=f"reject_user_{chat_id}")
+                                InlineKeyboardButton("_ Approve", callback_data=f"approve_user_{chat_id}"),
+                                InlineKeyboardButton("_ Reject", callback_data=f"reject_user_{chat_id}")
                             )
                             
                             bot.send_message(
@@ -1071,7 +1071,7 @@ Status: Manual Verification Needed
                 bot.send_message(
                     chat_id,
                     """
-⏳ <b>REGISTRATION BEING VERIFIED</b>
+_ <b>REGISTRATION BEING VERIFIED</b>
 
 Thank you for submitting your payment information!
 
@@ -1079,9 +1079,9 @@ Your registration is now pending verification. This typically takes 5-15 minutes
 You'll receive a notification once your account is activated.
 
 For faster verification:
-• Make sure you've completed the payment
-• Keep your Telegram app open
-• Contact support if not approved within 30 minutes
+_ Make sure you've completed the payment
+_ Keep your Telegram app open
+_ Contact support if not approved within 30 minutes
 """,
                     parse_mode='HTML'
                 )
@@ -1100,19 +1100,19 @@ For faster verification:
         try:
             bot.edit_message_text(
                 f"""
-✅ <b>Registration Approved!</b>
+_ <b>Registration Approved!</b>
 
-🎉 <b>Welcome to AliPay_ETH!</b> 🎉
+_ <b>Welcome to AliPay_ETH!</b> _
 
 Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
 
-<b>📱 Your Services:</b>
-• 💰 <b>Deposit</b> - Add funds to your account
-• 📦 <b>Submit Order</b> - Place AliExpress orders
-• 📊 <b>Order Status</b> - Track your orders
-• 💳 <b>Balance</b> - Check your current balance
+<b>_ Your Services:</b>
+_ _ <b>Deposit</b> - Add funds to your account
+_ _ <b>Submit Order</b> - Place AliExpress orders
+_ _ <b>Order Status</b> - Track your orders
+_ _ <b>Balance</b> - Check your current balance
 
-Need assistance? Use ❓ <b>Help Center</b> anytime!
+Need assistance? Use _ <b>Help Center</b> anytime!
 """,
                 chat_id=chat_id,
                 message_id=immediate_ack.message_id,
@@ -1122,7 +1122,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
             # Also send the main menu
             bot.send_message(
                 chat_id,
-                "🏠 Welcome to your new account! What would you like to do?",
+                "_ Welcome to your new account! What would you like to do?",
                 reply_markup=create_main_menu(is_registered=True)
             )
         except Exception as edit_error:
@@ -1131,19 +1131,19 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
             bot.send_message(
                 chat_id,
                 """
-✅ <b>Registration Approved!</b>
+_ <b>Registration Approved!</b>
 
-🎉 <b>Welcome to AliPay_ETH!</b> 🎉
+_ <b>Welcome to AliPay_ETH!</b> _
 
 Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
 
-<b>📱 Your Services:</b>
-• 💰 <b>Deposit</b> - Add funds to your account
-• 📦 <b>Submit Order</b> - Place AliExpress orders
-• 📊 <b>Order Status</b> - Track your orders
-• 💳 <b>Balance</b> - Check your current balance
+<b>_ Your Services:</b>
+_ _ <b>Deposit</b> - Add funds to your account
+_ _ <b>Submit Order</b> - Place AliExpress orders
+_ _ <b>Order Status</b> - Track your orders
+_ _ <b>Balance</b> - Check your current balance
 
-Need assistance? Use ❓ <b>Help Center</b> anytime!
+Need assistance? Use _ <b>Help Center</b> anytime!
 """,
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
@@ -1175,7 +1175,7 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
             bot.send_message(
                 chat_id, 
                 """
-❌ <b>There was an error processing your registration.</b>
+_ <b>There was an error processing your registration.</b>
 
 Don't worry! We've saved your information. Please try again in a few moments or contact support if this persists.
 """, 
@@ -1200,29 +1200,29 @@ def handle_info_buttons(call):
     try:
         if call.data == "tutorials":
             tutorials_msg = """
-✨ <b>HOW TO USE ALIPAY_ETH BOT</b> ✨
+_ <b>HOW TO USE ALIPAY_ETH BOT</b> _
 
-<b>🔹 STEP 1: REGISTER</b>
-• Click 🔑 Register
-• Follow the prompts to create your account
-• Pay the 350 birr registration fee (200 birr one-time + 150 birr first month)
+<b>_ STEP 1: REGISTER</b>
+_ Click _ Register
+_ Follow the prompts to create your account
+_ Pay the 350 birr registration fee (200 birr one-time + 150 birr first month)
 
-<b>🔹 STEP 2: DEPOSIT FUNDS</b>
-• Click 💰 Deposit
-• Choose your deposit amount
-• Send payment via CBE or TeleBirr
-• Submit screenshot for verification
+<b>_ STEP 2: DEPOSIT FUNDS</b>
+_ Click _ Deposit
+_ Choose your deposit amount
+_ Send payment via CBE or TeleBirr
+_ Submit screenshot for verification
 
-<b>🔹 STEP 3: PLACE ORDERS</b>
-• Find products on AliExpress
-• Copy the product link
-• Click 📦 Submit Order
-• Paste the link and confirm
+<b>_ STEP 3: PLACE ORDERS</b>
+_ Find products on AliExpress
+_ Copy the product link
+_ Click _ Submit Order
+_ Paste the link and confirm
 
-<b>🔹 STEP 4: TRACK SHIPMENTS</b>
-• Click 🔍 Track Order
-• Enter your order number
-• View status and tracking information
+<b>_ STEP 4: TRACK SHIPMENTS</b>
+_ Click _ Track Order
+_ Enter your order number
+_ View status and tracking information
 
 <i>Our system makes shopping on AliExpress simple and hassle-free!</i>
 """
@@ -1235,25 +1235,25 @@ def handle_info_buttons(call):
 
         elif call.data == "faqs":
             faqs_msg = """
-✨ <b>FREQUENTLY ASKED QUESTIONS</b> ✨
+_ <b>FREQUENTLY ASKED QUESTIONS</b> _
 
-<b>❓ How do I place an order?</b>
-Simply click "📦 Submit Order" and paste your AliExpress product link.
+<b>_ How do I place an order?</b>
+Simply click "_ Submit Order" and paste your AliExpress product link.
 
-<b>❓ How long does shipping take?</b>
+<b>_ How long does shipping take?</b>
 Delivery usually takes 15-30 days depending on the product and location.
 
-<b>❓ How do I track my order?</b>
-Use the "🔍 Track Order" button and enter your order number.
+<b>_ How do I track my order?</b>
+Use the "_ Track Order" button and enter your order number.
 
-<b>❓ What payment methods are accepted?</b>
+<b>_ What payment methods are accepted?</b>
 We accept Commercial Bank (CBE) and TeleBirr for deposits.
 
-<b>❓ Is there a minimum order amount?</b>
+<b>_ Is there a minimum order amount?</b>
 No, you can order products of any value as long as you have sufficient balance.
 
-<b>❓ How do I renew my subscription?</b>
-Click on "📅 Subscription" and use the renewal button.
+<b>_ How do I renew my subscription?</b>
+Click on "_ Subscription" and use the renewal button.
 
 <i>More questions? Contact our support team!</i>
 """
@@ -1266,26 +1266,26 @@ Click on "📅 Subscription" and use the renewal button.
 
         elif call.data == "sub_benefits":
             benefits_msg = """
-✨ <b>PREMIUM MEMBERSHIP BENEFITS</b> ✨
+_ <b>PREMIUM MEMBERSHIP BENEFITS</b> _
 
-<b>🌟 Enjoy these exclusive perks:</b>
+<b>_ Enjoy these exclusive perks:</b>
 
-• 🛍️ <b>Unlimited Shopping</b>
+_ __ <b>Unlimited Shopping</b>
   Access to thousands of AliExpress products
 
-• 🚚 <b>Priority Shipping</b>
+_ _ <b>Priority Shipping</b>
   Faster order processing & delivery
 
-• 💰 <b>Special Discounts</b>
+_ _ <b>Special Discounts</b>
   Member-only deals and promotions
 
-• 🔔 <b>Order Notifications</b>
+_ _ <b>Order Notifications</b>
   Real-time updates on your packages
 
-• 👨‍💼 <b>Dedicated Support</b>
+_ ___ <b>Dedicated Support</b>
   Premium customer service access
 
-• 🎁 <b>Referral Bonuses</b>
+_ _ <b>Referral Bonuses</b>
   Earn 50 points (50 birr) for each registration referral
 
 <i>All this for just $1/month!</i>
@@ -1310,7 +1310,7 @@ def handle_deposit_approval_callback(call):
 
     # Check if user is admin
     if not is_admin(chat_id):
-        bot.answer_callback_query(call.id, "⛔ You don't have permission to manage deposits")
+        bot.answer_callback_query(call.id, "_ You don't have permission to manage deposits")
         return
 
     try:
@@ -1326,7 +1326,7 @@ def handle_deposit_approval_callback(call):
         ).first()
         
         if not deposit_info:
-            bot.answer_callback_query(call.id, "⚠️ Deposit not found or already processed")
+            bot.answer_callback_query(call.id, "__ Deposit not found or already processed")
             try:
                 bot.edit_message_text(
                     "This deposit has already been processed or was not found.",
@@ -1341,7 +1341,7 @@ def handle_deposit_approval_callback(call):
         
         # Check if deposit is already processed
         if deposit.status in ['Approved', 'Rejected']:
-            bot.answer_callback_query(call.id, f"⚠️ This deposit was already {deposit.status.lower()}")
+            bot.answer_callback_query(call.id, f"__ This deposit was already {deposit.status.lower()}")
             try:
                 bot.edit_message_text(
                     f"This deposit has already been {deposit.status.lower()}.",
@@ -1374,9 +1374,9 @@ def handle_deposit_approval_callback(call):
                     subscription_updated = True
 
                     if user.subscription_date:
-                        subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                        subscription_renewal_msg = f"\n<b>_ SUBSCRIPTION RENEWED:</b>\n_ Monthly fee: $1.00 (150 birr) deducted\n_ New expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
                     else:
-                        subscription_renewal_msg = f"\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
+                        subscription_renewal_msg = f"\n<b>_ SUBSCRIPTION ACTIVATED:</b>\n_ Monthly fee: $1.00 (150 birr) deducted\n_ Expiry date: {(now + timedelta(days=30)).strftime('%Y-%m-%d')}"
 
                     logger.info(f"Subscription {'renewed' if user.subscription_date else 'activated'} for user {user_telegram_id}")
                 else:
@@ -1399,20 +1399,20 @@ def handle_deposit_approval_callback(call):
             
             # Send enhanced fancy confirmation to user
             deposit_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT APPROVED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT APPROVED</b> _  
+_________________________
 
-<b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{birr_amount:,}</code> birr
-• USD Value: ${deposit.amount:.2f}
-{f"• Amount after subscription fee: ${deposit.amount - 1.0:.2f}" if subscription_updated else ""}
+<b>_ DEPOSIT DETAILS:</b>
+_ Amount: <code>{birr_amount:,}</code> birr
+_ USD Value: ${deposit.amount:.2f}
+{f"_ Amount after subscription fee: ${deposit.amount - 1.0:.2f}" if subscription_updated else ""}
 {subscription_renewal_msg}
 
-<b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 160):,}</code> birr
+<b>_ ACCOUNT UPDATED:</b>
+_ New Balance: <code>{int(user.balance * 160):,}</code> birr
 
-✨ <b>You're ready to start shopping!</b> ✨
+_ <b>You're ready to start shopping!</b> _
 
 <i>Browse AliExpress and submit your orders now!</i>
 """
@@ -1430,13 +1430,13 @@ def handle_deposit_approval_callback(call):
             try:
                 bot.edit_message_text(
                     f"""
-<b>Deposit #{deposit.id}</b> - ✅ APPROVED
+<b>Deposit #{deposit.id}</b> - _ APPROVED
 
-👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
-💰 <b>Amount:</b> ${deposit.amount:.2f} ({birr_amount:,} birr)
-💳 <b>New Balance:</b> ${user.balance:.2f} ({int(user.balance * 160):,} birr)
-{f"📅 <b>Subscription:</b> Renewed until {(now + timedelta(days=30)).strftime('%Y-%m-%d')}" if subscription_updated else ""}
-⏰ <b>Approved at:</b> {now.strftime("%Y-%m-%d %H:%M")}
+_ <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+_ <b>Amount:</b> ${deposit.amount:.2f} ({birr_amount:,} birr)
+_ <b>New Balance:</b> ${user.balance:.2f} ({int(user.balance * 160):,} birr)
+{f"_ <b>Subscription:</b> Renewed until {(now + timedelta(days=30)).strftime('%Y-%m-%d')}" if subscription_updated else ""}
+_ <b>Approved at:</b> {now.strftime("%Y-%m-%d %H:%M")}
 
 <i>User has been notified of the approval.</i>
 """,
@@ -1447,7 +1447,7 @@ def handle_deposit_approval_callback(call):
             except Exception as edit_error:
                 logger.error(f"Error updating admin message: {edit_error}")
                 
-            bot.answer_callback_query(call.id, f"✅ Deposit of ${deposit.amount:.2f} approved")
+            bot.answer_callback_query(call.id, f"_ Deposit of ${deposit.amount:.2f} approved")
             
             # Clear user state if necessary
             if user_telegram_id in user_states and isinstance(user_states[user_telegram_id], dict):
@@ -1469,21 +1469,21 @@ def handle_deposit_approval_callback(call):
                 bot.send_message(
                     user.telegram_id,
                     f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ❌ <b>DEPOSIT REJECTED</b> ❌  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT REJECTED</b> _  
+_________________________
 
 Your deposit of <b>${deposit.amount:.2f}</b> has been rejected.
 
 <b>Possible reasons:</b>
-• Payment screenshot not clear
-• Payment amount doesn't match
-• Payment not found in our records
-• Incorrect payment method used
+_ Payment screenshot not clear
+_ Payment amount doesn't match
+_ Payment not found in our records
+_ Incorrect payment method used
 
 Please try again with a valid payment or contact support if you believe this is an error.
 
-<i>For help, use the "❓ Help Center" option in the main menu</i>
+<i>For help, use the "_ Help Center" option in the main menu</i>
 """,
                     parse_mode='HTML'
                 )
@@ -1494,11 +1494,11 @@ Please try again with a valid payment or contact support if you believe this is 
             try:
                 bot.edit_message_text(
                     f"""
-<b>Deposit #{deposit.id}</b> - ❌ REJECTED
+<b>Deposit #{deposit.id}</b> - _ REJECTED
 
-👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
-💰 <b>Amount:</b> ${deposit.amount:.2f} ({int(deposit.amount * 160):,} birr)
-⏰ <b>Rejected at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+_ <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+_ <b>Amount:</b> ${deposit.amount:.2f} ({int(deposit.amount * 160):,} birr)
+_ <b>Rejected at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 <i>User has been notified of the rejection.</i>
 """,
@@ -1509,7 +1509,7 @@ Please try again with a valid payment or contact support if you believe this is 
             except Exception as edit_error:
                 logger.error(f"Error updating admin message: {edit_error}")
                 
-            bot.answer_callback_query(call.id, f"❌ Deposit of ${deposit.amount:.2f} rejected")
+            bot.answer_callback_query(call.id, f"_ Deposit of ${deposit.amount:.2f} rejected")
             
             # Clear user state if necessary
             if user.telegram_id in user_states and isinstance(user_states[user.telegram_id], dict):
@@ -1521,7 +1521,7 @@ Please try again with a valid payment or contact support if you believe this is 
     except Exception as e:
         logger.error(f"Error handling deposit approval callback: {e}")
         logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "⚠️ Error processing deposit")
+        bot.answer_callback_query(call.id, "__ Error processing deposit")
     finally:
         safe_close_session(session)
 
@@ -1569,7 +1569,7 @@ def handle_admin_decision(call):
             try:
                 from referral_system import assign_referral_code
                 user_referral_code = assign_referral_code(new_user.id)
-                logger.info(f"✅ Generated referral code {user_referral_code} for user {user_id}")
+                logger.info(f"_ Generated referral code {user_referral_code} for user {user_id}")
                 
                 # Refresh to make sure we have the updated record
                 session.refresh(new_user)
@@ -1589,7 +1589,7 @@ def handle_admin_decision(call):
                     referral_success = check_and_process_registration_referral(new_user.id, referral_code)
                     
                     if referral_success:
-                        logger.info(f"✅ REFERRAL SUCCESS: Successfully processed referral for user {new_user.id} with code {referral_code}")
+                        logger.info(f"_ REFERRAL SUCCESS: Successfully processed referral for user {new_user.id} with code {referral_code}")
                         
                         # Also update the user's referred_by_id field to maintain the referral chain
                         try:
@@ -1598,12 +1598,12 @@ def handle_admin_decision(call):
                             if referrer and referrer.id != new_user.id:  # Prevent self-referrals
                                 new_user.referred_by_id = referrer.id
                                 session.commit()
-                                logger.info(f"✅ Updated user {new_user.id} with referred_by_id={referrer.id}")
+                                logger.info(f"_ Updated user {new_user.id} with referred_by_id={referrer.id}")
                         except Exception as update_err:
-                            logger.error(f"❌ Error updating referred_by_id: {update_err}")
+                            logger.error(f"_ Error updating referred_by_id: {update_err}")
                             # This is not critical, so we continue
                     else:
-                        logger.warning(f"❌ Failed to process referral for user {new_user.id} with code {referral_code}")
+                        logger.warning(f"_ Failed to process referral for user {new_user.id} with code {referral_code}")
                         
                         # Fallback method as a last resort
                         try:
@@ -1652,34 +1652,34 @@ def handle_admin_decision(call):
                                 
                                 # Commit all changes
                                 session.commit()
-                                logger.info(f"✅ FALLBACK: Successfully added 50 points to referrer {referrer.id}")
+                                logger.info(f"_ FALLBACK: Successfully added 50 points to referrer {referrer.id}")
                             else:
-                                logger.warning(f"❌ Could not find valid referrer with code {referral_code}")
+                                logger.warning(f"_ Could not find valid referrer with code {referral_code}")
                         except Exception as fallback_err:
-                            logger.error(f"❌ Error in fallback referral processing: {fallback_err}")
+                            logger.error(f"_ Error in fallback referral processing: {fallback_err}")
                         
                 except Exception as ref_err:
-                    logger.error(f"❌ Error processing referral: {ref_err}")
+                    logger.error(f"_ Error processing referral: {ref_err}")
                     logger.error(f"Full error details: {str(ref_err)}")
 
             logger.info(f"User {user_id} approved and added to database")
 
             # Send confirmation to user with enhanced welcome message
             welcome_message = """
-✅ <b>Registration Approved!</b>
+_ <b>Registration Approved!</b>
 
-🎉 <b>Welcome to AliPay_ETH!</b> 🎉
+_ <b>Welcome to AliPay_ETH!</b> _
 
 Your account has been successfully activated and you're all set to start shopping on AliExpress using Ethiopian Birr!
 
-<b>📱 Your Services:</b>
-• 💰 <b>Deposit</b> - Add funds to your account
-• 📦 <b>Submit Order</b> - Place AliExpress orders
-• 📊 <b>Order Status</b> - Track your orders
-• 💳 <b>Balance</b> - Check your current balance
-• 🎁 <b>Refer Friends</b> - Earn points and rewards
+<b>_ Your Services:</b>
+_ _ <b>Deposit</b> - Add funds to your account
+_ _ <b>Submit Order</b> - Place AliExpress orders
+_ _ <b>Order Status</b> - Track your orders
+_ _ <b>Balance</b> - Check your current balance
+_ _ <b>Refer Friends</b> - Earn points and rewards
 
-Need assistance? Use ❓ <b>Help Center</b> anytime!
+Need assistance? Use _ <b>Help Center</b> anytime!
 """
 
             # Add referral info if available
@@ -1691,9 +1691,9 @@ Need assistance? Use ❓ <b>Help Center</b> anytime!
                     referral_url = get_referral_url(referral_code)
                     welcome_message += f"""
 
-<b>🎁 YOUR REFERRAL PROGRAM:</b>
-• Your referral code: <code>{referral_code}</code>
-• Your referral link: <code>{referral_url}</code>
+<b>_ YOUR REFERRAL PROGRAM:</b>
+_ Your referral code: <code>{referral_code}</code>
+_ Your referral link: <code>{referral_url}</code>
 
 Share your code or link with friends and earn 50 points for each successful registration!
 Each successful referral earns you 50 points that can be converted to account balance (1 point = 1 birr).
@@ -1709,11 +1709,11 @@ Each successful referral earns you 50 points that can be converted to account ba
             )
             
             # Tutorial functionality has been completely removed
-            logger.info(f"✅ Registration complete for user {user_id} - not offering tutorial (disabled)")
+            logger.info(f"_ Registration complete for user {user_id} - not offering tutorial (disabled)")
 
             # Update admin message
             bot.edit_message_text(
-                f"✅ Registration for {pending.name} approved successfully!",
+                f"_ Registration for {pending.name} approved successfully!",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
@@ -1726,12 +1726,12 @@ Each successful referral earns you 50 points that can be converted to account ba
             bot.send_message(
                 user_id,
                 """
-❌ <b>Registration Declined</b>
+_ <b>Registration Declined</b>
 
 We could not verify your payment. Please ensure:
-• You sent the correct amount
-• The screenshot is clear
-• Payment was to correct account
+_ You sent the correct amount
+_ The screenshot is clear
+_ Payment was to correct account
 
 Please try registering again.
 """,
@@ -1740,7 +1740,7 @@ Please try registering again.
             )
 
             bot.edit_message_text(
-                f"❌ Registration for {pending.name} rejected!",
+                f"_ Registration for {pending.name} rejected!",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
@@ -1755,7 +1755,7 @@ Please try registering again.
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '💰 Deposit')
+@bot.message_handler(func=lambda msg: msg.text == '_ Deposit')
 @subscription_required
 def deposit_funds(message):
     """Handle deposit button"""
@@ -1772,9 +1772,9 @@ def deposit_funds_internal(message, for_subscription=False):
             user_states[chat_id] = {}
         user_states[chat_id]['for_subscription'] = True
     deposit_msg = """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>CHOOSE DEPOSIT AMOUNT</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>CHOOSE DEPOSIT AMOUNT</b> _  
+_________________________
 
 Select how much you'd like to deposit:
 """
@@ -1808,7 +1808,7 @@ def handle_deposit_amount(message):
             # Return to main menu
             bot.send_message(
                 chat_id,
-                "🏠 Returning to main menu...",
+                "_ Returning to main menu...",
                 reply_markup=create_main_menu(is_registered=is_registered)
             )
 
@@ -1817,7 +1817,7 @@ def handle_deposit_amount(message):
                 del user_states[chat_id]
         except Exception as e:
             logger.error(f"Error returning to main menu: {e}")
-            bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
+            bot.send_message(chat_id, "_ Back to main menu", reply_markup=create_main_menu(is_registered=True))
         finally:
             safe_close_session(session)
         return
@@ -1826,14 +1826,14 @@ def handle_deposit_amount(message):
         bot.send_message(
             chat_id,
             """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>CUSTOM DEPOSIT</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>CUSTOM DEPOSIT</b> _  
+_________________________
 
 Enter amount in <b>USD</b> or <b>birr</b>.
 Examples:
-• Enter <code>$10</code> for $10 (1,600 birr)
-• Enter <code>1600</code> for 1,600 birr ($10)
+_ Enter <code>$10</code> for $10 (1,600 birr)
+_ Enter <code>1600</code> for 1,600 birr ($10)
 
 <i>You can optionally include $ or "usd" for dollar amounts.</i>
 """,
@@ -1873,7 +1873,7 @@ def payment_details(message, amount, for_subscription=False):
         if not user:
             bot.send_message(
                 chat_id, 
-                "❌ You need to register first before making a deposit.", 
+                "_ You need to register first before making a deposit.", 
                 reply_markup=create_main_menu(is_registered=False)
             )
             return
@@ -1904,31 +1904,31 @@ def payment_details(message, amount, for_subscription=False):
             }
 
             payment_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💸 <b>DEPOSIT DETAILS</b> 💸  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT DETAILS</b> _  
+_________________________
 
-<b>💵 AMOUNT TO PAY:</b>
-• <code>{birr_amount:,}</code> birr
-• (${amount:.2f} USD)
+<b>_ AMOUNT TO PAY:</b>
+_ <code>{birr_amount:,}</code> birr
+_ (${amount:.2f} USD)
 
-<b>💳 PAYMENT METHODS 💳</b>
+<b>_ PAYMENT METHODS _</b>
 
-<b>🏦 COMMERCIAL BANK (CBE)</b>
-• Account: <code>1000547241316</code>
-• Name: <code>Eyob Mulugeta</code>
+<b>_ COMMERCIAL BANK (CBE)</b>
+_ Account: <code>1000547241316</code>
+_ Name: <code>Eyob Mulugeta</code>
 
-<b>📱 TELEBIRR</b>
-• Number: <code>0986693062</code>
-• Name: <code>Eyob Mulugeta</code>
+<b>_ TELEBIRR</b>
+_ Number: <code>0986693062</code>
+_ Name: <code>Eyob Mulugeta</code>
 
-<b>📸 HOW TO PROCEED 📸</b>
-1️⃣ Choose your preferred payment method
-2️⃣ Transfer <b>exactly</b> <code>{birr_amount:,} birr</code>
-3️⃣ Take a clear screenshot of payment confirmation
-4️⃣ Send the screenshot below ⬇️
+<b>_ HOW TO PROCEED _</b>
+1__ Choose your preferred payment method
+2__ Transfer <b>exactly</b> <code>{birr_amount:,} birr</code>
+3__ Take a clear screenshot of payment confirmation
+4__ Send the screenshot below __
 
-<i>✨ Your balance will be updated immediately after verification! ✨</i>
+<i>_ Your balance will be updated immediately after verification! _</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML')
         else:
@@ -1936,28 +1936,28 @@ def payment_details(message, amount, for_subscription=False):
             from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("💳 PAY NOW 💳", url=payment_link['checkout_url']))
+            markup.add(InlineKeyboardButton("_ PAY NOW _", url=payment_link['checkout_url']))
 
             payment_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💸 <b>SECURE DEPOSIT</b> 💸  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SECURE DEPOSIT</b> _  
+_________________________
 
-<b>💰 PAYMENT AMOUNT:</b>
-• <code>{birr_amount:,}</code> birr
-• (${amount:.2f} USD)
+<b>_ PAYMENT AMOUNT:</b>
+_ <code>{birr_amount:,}</code> birr
+_ (${amount:.2f} USD)
 
-<b>✨ INSTANT PAYMENT OPTIONS ✨</b>
+<b>_ INSTANT PAYMENT OPTIONS _</b>
 
 <b>Click the button below to pay securely with:</b>
-• TeleBirr
-• CBE Birr
-• HelloCash
-• Amole
-• Credit/Debit Cards
-• And more!
+_ TeleBirr
+_ CBE Birr
+_ HelloCash
+_ Amole
+_ Credit/Debit Cards
+_ And more!
 
-<i>✅ AUTO-APPROVAL: Your balance will update automatically within 1 minute of successful payment!</i>
+<i>_ AUTO-APPROVAL: Your balance will update automatically within 1 minute of successful payment!</i>
 <i>No manual approval needed - no screenshots required</i>
 """
             bot.send_message(chat_id, payment_msg, parse_mode='HTML', reply_markup=markup)
@@ -1974,8 +1974,8 @@ def payment_details(message, amount, for_subscription=False):
             session.add(pending_deposit)
             session.commit()
             
-            logger.info(f"✅ Created deposit record with tx_ref: {payment_link['tx_ref']} for user {chat_id}")
-            logger.info(f"👍 Deposit will be auto-approved by system within 1 minute of successful payment")
+            logger.info(f"_ Created deposit record with tx_ref: {payment_link['tx_ref']} for user {chat_id}")
+            logger.info(f"_ Deposit will be auto-approved by system within 1 minute of successful payment")
 
             # Update user state
             user_states[chat_id] = {
@@ -2018,7 +2018,7 @@ def process_custom_amount(message):
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Amount Too Small</b>
+_ <b>Amount Too Small</b>
 
 Please enter an amount of at least 100 birr.
 """,
@@ -2030,7 +2030,7 @@ Please enter an amount of at least 100 birr.
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Amount Too Large</b>
+_ <b>Amount Too Large</b>
 
 Please enter an amount less than 100,000 birr.
 For larger deposits, please contact support.
@@ -2051,7 +2051,7 @@ For larger deposits, please contact support.
         bot.send_message(
             chat_id,
             """
-❌ <b>Invalid Amount</b>
+_ <b>Invalid Amount</b>
 
 Please enter a valid number (birr amount).
 Example: <code>2000</code> for 2,000 birr
@@ -2099,7 +2099,7 @@ def handle_deposit_screenshot(message):
         # First acknowledge receipt of screenshot
         immediate_ack = bot.send_message(
             chat_id,
-            "📸 Screenshot received! Processing your deposit...",
+            "_ Screenshot received! Processing your deposit...",
             parse_mode='HTML'
         )
 
@@ -2121,7 +2121,7 @@ def handle_deposit_screenshot(message):
 
         # Notify admin about deposit that needs approval
         admin_msg = f"""
-⏳ <b>DEPOSIT NEEDS VERIFICATION</b>
+_ <b>DEPOSIT NEEDS VERIFICATION</b>
 
 User Details:
 Name: <b>{user.name}</b>
@@ -2142,13 +2142,13 @@ Screenshot attached below
         if ADMIN_ID:
             try:
                 bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML')
-                bot.send_photo(ADMIN_ID, file_id, caption="📸 Deposit Screenshot For Verification")
+                bot.send_photo(ADMIN_ID, file_id, caption="_ Deposit Screenshot For Verification")
                 
                 # Send approval buttons to admin
                 approve_markup = InlineKeyboardMarkup()
                 approve_markup.row(
-                    InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{deposit_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{deposit_id}")
+                    InlineKeyboardButton("_ Approve", callback_data=f"approve_deposit_{deposit_id}"),
+                    InlineKeyboardButton("_ Reject", callback_data=f"reject_deposit_{deposit_id}")
                 )
                 
                 bot.send_message(
@@ -2164,22 +2164,22 @@ Screenshot attached below
         try:
             bot.edit_message_text(
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ⏳ <b>DEPOSIT PENDING</b> ⏳  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT PENDING</b> _  
+_________________________
 
-<b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{birr_amount:,}</code> birr
-• USD Value: ${deposit_amount:.2f}
-{f"• This will also renew your subscription" if is_for_subscription else ""}
+<b>_ DEPOSIT DETAILS:</b>
+_ Amount: <code>{birr_amount:,}</code> birr
+_ USD Value: ${deposit_amount:.2f}
+{f"_ This will also renew your subscription" if is_for_subscription else ""}
 
-<b>📋 VERIFICATION STATUS:</b>
-• Your deposit is currently pending verification
-• Typically verified within 10-15 minutes
-• You'll receive notification once approved
+<b>_ VERIFICATION STATUS:</b>
+_ Your deposit is currently pending verification
+_ Typically verified within 10-15 minutes
+_ You'll receive notification once approved
 
-<b>📞 NEED ASSISTANCE?</b>
-• Contact our support team if not verified within 30 minutes
+<b>_ NEED ASSISTANCE?</b>
+_ Contact our support team if not verified within 30 minutes
 
 <i>Thank you for your patience!</i>
 """,
@@ -2193,14 +2193,14 @@ Screenshot attached below
             bot.send_message(
                 chat_id,
                 """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ⏳ <b>DEPOSIT PENDING</b> ⏳  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT PENDING</b> _  
+_________________________
 
-<b>💰 DEPOSIT DETAILS:</b>
-• Your deposit is being processed
-• Typically verified within 10-15 minutes
-• You'll receive a notification once approved
+<b>_ DEPOSIT DETAILS:</b>
+_ Your deposit is being processed
+_ Typically verified within 10-15 minutes
+_ You'll receive a notification once approved
 
 <i>Thank you for your patience!</i>
 """,
@@ -2219,7 +2219,7 @@ Screenshot attached below
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '💳 Balance')
+@bot.message_handler(func=lambda msg: msg.text == '_ Balance')
 @subscription_required
 def check_balance(message):
     """Check user balance with referral badges and hover effects"""
@@ -2249,11 +2249,7 @@ def check_balance(message):
             referral_count = 0
             try:
                 from sqlalchemy import text
-                query = text("""
-                SELECT COUNT(*) as count
-                FROM referrals
-                WHERE referrer_id = :user_id
-                """)
+                query = text("SELECT COUNT(*) as count FROM referrals WHERE referrer_id = :user_id")
                 result = session.execute(query, {'user_id': user.id}).fetchone()
                 referral_count = result.count if result else 0
             except Exception as ref_err:
@@ -2263,20 +2259,20 @@ def check_balance(message):
             bot.send_message(
                 chat_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>YOUR ACCOUNT</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>YOUR ACCOUNT</b> _  
+_________________________
 
 <b>Available Balance:</b> <code>{birr_balance:,}</code> birr
-≈ $<code>{balance:,.2f}</code> USD
+_ $<code>{balance:,.2f}</code> USD
 
-<b>🎁 Referral Points:</b> <code>{points_balance}</code> points
-• Worth <code>{points_balance}</code> birr
-• <code>{referral_count}</code> successful referrals
+<b>_ Referral Points:</b> <code>{points_balance}</code> points
+_ Worth <code>{points_balance}</code> birr
+_ <code>{referral_count}</code> successful referrals
 
-<b>🏆 Your Referral Badge:</b> {badge_html}
+<b>_ Your Referral Badge:</b> {badge_html}
 
-<i>Need more balance? Click 💰 Deposit</i>
+<i>Need more balance? Click _ Deposit</i>
 <i>Want more points? Invite friends with your referral code!</i>
 """,
                 parse_mode='HTML'
@@ -2287,7 +2283,7 @@ def check_balance(message):
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges')
+@bot.message_handler(func=lambda msg: msg.text == '_ Referral Badges')
 @subscription_required
 def referral_badges(message):
     """Display referral badges with hover effects and statistics"""
@@ -2297,9 +2293,9 @@ def referral_badges(message):
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔜 <b>COMING SOON</b> 🔜
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>COMING SOON</b> _
+_________________________
 
 <b>Referral Badges Feature</b>
 
@@ -2322,7 +2318,7 @@ This exciting feature is currently being optimized and will be available in the 
         if not user:
             bot.send_message(
                 chat_id, 
-                '⚠️ <b>Registration Required</b>\n\nYou need to register first to view referral badges.\nClick 🔑 Register to create your account.', 
+                '__ <b>Registration Required</b>\n\nYou need to register first to view referral badges.\nClick _ Register to create your account.', 
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=False)
             )
@@ -2340,11 +2336,7 @@ user_badge = get_user_badge(user.id)
             
             # Count user's referrals
             from sqlalchemy import text
-            query = text("""
-            SELECT COUNT(*) as count
-            FROM referrals
-            WHERE referrer_id = :user_id
-            """)
+            query = text("SELECT COUNT(*) as count FROM referrals WHERE referrer_id = :user_id")
             result = session.execute(query, {'user_id': user.id}).fetchone()
             referral_count = result.count if result else 0
             
@@ -2357,13 +2349,13 @@ user_badge = get_user_badge(user.id)
                 # Determine if badge is earned, locked, or next target
                 if referral_count >= badge['referrals_required']:
                     # Earned badge
-                    badge_html = f"<b>{badge['icon']}</b> <i>{badge['name']} ✅</i>\n"
+                    badge_html = f"<b>{badge['icon']}</b> <i>{badge['name']} _</i>\n"
                 elif referral_count + 1 == badge['referrals_required']:
                     # Next target badge
-                    badge_html = f"{badge['icon']} 🔜 <i>{badge['name']} (1 more to earn!)</i>\n"
+                    badge_html = f"{badge['icon']} _ <i>{badge['name']} (1 more to earn!)</i>\n"
                 else:
                     # Locked badge
-                    badge_html = f"{badge['icon']} 🔒 <i>{badge['name']} ({badge['referrals_required'] - referral_count} more to unlock)</i>\n"
+                    badge_html = f"{badge['icon']} _ <i>{badge['name']} ({badge['referrals_required'] - referral_count} more to unlock)</i>\n"
                 
                 all_badges_html += badge_html
                 
@@ -2372,9 +2364,9 @@ user_badge = get_user_badge(user.id)
             
             # Create inline keyboard for referral actions
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("📊 View My Referrals", callback_data=f"view_referrals"))
-            markup.add(InlineKeyboardButton("💰 Redeem Points", callback_data=f"redeem_points"))
-            markup.add(InlineKeyboardButton("ℹ️ How Referrals Work", callback_data=f"referral_help"))
+            markup.add(InlineKeyboardButton("_ View My Referrals", callback_data=f"view_referrals"))
+            markup.add(InlineKeyboardButton("_ Redeem Points", callback_data=f"redeem_points"))
+            markup.add(InlineKeyboardButton("__ How Referrals Work", callback_data=f"referral_help"))
             
             from referral_system import get_referral_url
             
@@ -2386,29 +2378,23 @@ user_badge = get_user_badge(user.id)
                 referral_url = "Referral code not set"
             
             # Send beautiful message with all badges and hover effects
+            message_text = "_________________________\n"
+            message_text += "<b>YOUR REFERRAL BADGES</b>\n"
+            message_text += "_________________________\n\n"
+            message_text += f"<b>Current Achievement:</b> {current_badge_html}\n\n"
+            message_text += f"<b>All Badges:</b>\n{all_badges_html}\n\n"
+            message_text += "<b>Your Referral Stats:</b>\n"
+            message_text += f"<code>{referral_count}</code> successful referrals\n"
+            message_text += f"<code>{points}</code> points earned (worth {points} birr)\n\n"
+            message_text += "<b>Your Referral Info:</b>\n"
+            message_text += f"Code: <code>{referral_code}</code>\n"
+            message_text += f"Link: <code>{referral_url}</code>\n\n"
+            message_text += "<i>Invite friends and earn 50 points for each successful registration!</i>\n"
+            message_text += "<i>Points can be redeemed for account balance (1 point = 1 birr)</i>"
+            
             bot.send_message(
                 chat_id,
-                f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🏆 <b>YOUR REFERRAL BADGES</b> 🏆  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>Current Achievement:</b> {current_badge_html}
-
-<b>🌟 All Badges:</b>
-{all_badges_html}
-
-<b>📊 Your Referral Stats:</b>
-• <code>{referral_count}</code> successful referrals
-• <code>{points}</code> points earned (worth {points} birr)
-
-<b>🔗 Your Referral Info:</b>
-• Code: <code>{referral_code}</code>
-• Link: <code>{referral_url}</code>
-
-<i>Invite friends and earn 50 points for each successful registration!</i>
-<i>Points can be redeemed for account balance (1 point = 1 birr)</i>
-""",
+                message_text,
                 parse_mode='HTML',
                 reply_markup=markup
             )
@@ -2428,87 +2414,80 @@ user_badge = get_user_badge(user.id)
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link')
+@bot.message_handler(func=lambda msg: msg.text == '_ My Referral Link')
 @subscription_required
 def my_referral_link(message):
-    """Handle My Referral Link button to display and share referral link"""
+    # Handle My Referral Link button to display and share referral link
     chat_id = message.chat.id
     
     # Display "Coming Soon" message as requested for immediate launch
+    message_text = "_________________________\n"
+    message_text += "<b>COMING SOON</b>\n"
+    message_text += "_________________________\n\n"
+    message_text += "<b>Referral Link Feature</b>\n\n"
+    message_text += "This exciting feature is currently being optimized and will be available in the next update!\n\n"
+    message_text += "<i>Check back soon to start referring friends and earning rewards.</i>"
+    
     bot.send_message(
         chat_id,
-        """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔜 <b>COMING SOON</b> 🔜
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>Referral Link Feature</b>
-
-This exciting feature is currently being optimized and will be available in the next update!
-
-<i>Check back soon to start referring friends and earning rewards.</i>
-""",
+        message_text,
         parse_mode='HTML',
         reply_markup=create_main_menu(is_registered=True)
     )
     return
     
     # Original code commented out for future use
-    """
-    session = None
-    try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-        
-        if not user:
-            bot.send_message(
-                chat_id, 
-                '''
-⚠️ <b>Registration Required</b>
-
-You need to register first to get your referral link.
-Click 🔑 Register to create your account.
-''', 
-                parse_mode='HTML',
-                reply_markup=create_main_menu(is_registered=False)
-            )
-            return
-            
-        # Get or generate referral code
-        referral_code = user.referral_code
-        if not referral_code:
-            try:
-                from referral_system import assign_referral_code
-                referral_code = assign_referral_code(user.id)
-                logger.info(f"Generated new referral code {referral_code} for user {chat_id}")
-                # Refresh user to get updated code
-                session.refresh(user)
-                referral_code = user.referral_code
-            except Exception as ref_err:
-                logger.error(f"Error generating referral code: {ref_err}")
-                
-        if not referral_code:
-            bot.send_message(
-                chat_id,
-                "Sorry, there was an error generating your referral code. Please try again later.",
-                reply_markup=create_main_menu(is_registered=True)
-            )
-            return
-            
-        # Get referral URL
-        from referral_system import get_referral_url
-        referral_url = get_referral_url(referral_code)
-        
-        # Count user's successful referrals
-        from sqlalchemy import text
-        query = text("""
-        SELECT COUNT(*) as count
-        FROM referrals
-        WHERE referrer_id = :user_id
-        """)
-        result = session.execute(query, {'user_id': user.id}).fetchone()
-        referral_count = result.count if result else 0
-        
+    # COMMENTED CODE:
+#     session = None
+#     try:
+#         session = get_session()
+#         user = session.query(User).filter_by(telegram_id=chat_id).first()
+#         
+#         if not user:
+#             bot.send_message(
+#                 chat_id, 
+#                 '''
+# __ <b>Registration Required</b>
+# 
+# You need to register first to get your referral link.
+# Click _ Register to create your account.
+# ''', 
+#                 parse_mode='HTML',
+#                 reply_markup=create_main_menu(is_registered=False)
+#             )
+#             return
+#             
+#         # Get or generate referral code
+#         referral_code = user.referral_code
+#         if not referral_code:
+#             try:
+#                 from referral_system import assign_referral_code
+#                 referral_code = assign_referral_code(user.id)
+#                 logger.info(f"Generated new referral code {referral_code} for user {chat_id}")
+#                 # Refresh user to get updated code
+#                 session.refresh(user)
+#                 referral_code = user.referral_code
+#             except Exception as ref_err:
+#                 logger.error(f"Error generating referral code: {ref_err}")
+#                 
+#         if not referral_code:
+#             bot.send_message(
+#                 chat_id,
+#                 "Sorry, there was an error generating your referral code. Please try again later.",
+#                 reply_markup=create_main_menu(is_registered=True)
+#             )
+#             return
+#             
+#         # Get referral URL
+#         from referral_system import get_referral_url
+#         referral_url = get_referral_url(referral_code)
+#         
+#         # Count user's successful referrals
+#         from sqlalchemy import text
+#         query = text("SELECT COUNT(*) as count FROM referrals WHERE referrer_id = :user_id")
+#         result = session.execute(query, {'user_id': user.id}).fetchone()
+#         referral_count = result.count if result else 0
+#         
         # Get user's current points
         points = user.referral_points or 0
         
@@ -2518,41 +2497,35 @@ Click 🔑 Register to create your account.
         
         # Direct share buttons for common platforms
         markup.row(
-            InlineKeyboardButton("📱 Share via Telegram", url=f"https://t.me/share/url?url={referral_url}&text=Join%20AliPay%20ETH%20shopping%20service%20and%20we%20both%20get%20rewards!%20Use%20my%20referral%20link:")
+            InlineKeyboardButton("_ Share via Telegram", url=f"https://t.me/share/url?url={referral_url}&text=Join%20AliPay%20ETH%20shopping%20service%20and%20we%20both%20get%20rewards!%20Use%20my%20referral%20link:")
         )
         
         markup.row(
-            InlineKeyboardButton("📊 View My Referrals", callback_data="view_referrals"),
-            InlineKeyboardButton("🏆 View Badges", callback_data="view_badges")
+            InlineKeyboardButton("_ View My Referrals", callback_data="view_referrals"),
+            InlineKeyboardButton("_ View Badges", callback_data="view_badges")
         )
         
         # Send message with QR code and referral details
+        message_text = "_________________________\n"
+        message_text += "   <b>YOUR REFERRAL LINK</b>\n"
+        message_text += "_________________________\n\n"
+        message_text += "<b>Share your link and earn rewards!</b>\n\n"
+        message_text += "<b>Your Referral Code:</b>\n"
+        message_text += f"<code>{referral_code}</code>\n\n"
+        message_text += "<b>Your Referral Link:</b>\n"
+        message_text += f"<code>{referral_url}</code>\n\n"
+        message_text += "<b>Stats:</b>\n"
+        message_text += f"<code>{referral_count}</code> successful referrals\n"
+        message_text += f"<code>{points}</code> points earned (worth {points} birr)\n\n"
+        message_text += "<b>How it works:</b>\n"
+        message_text += "Share your link with friends\n"
+        message_text += "When they register, you earn 50 points\n"
+        message_text += "Redeem points for account balance (1 point = 1 birr)\n\n"
+        message_text += "<i>Copy the link above and share it with friends!</i>"
+        
         bot.send_message(
             chat_id,
-            f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔗 <b>YOUR REFERRAL LINK</b> 🔗  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>Share your link and earn rewards!</b>
-
-<b>🔢 Your Referral Code:</b> 
-<code>{referral_code}</code>
-
-<b>🔗 Your Referral Link:</b>
-<code>{referral_url}</code>
-
-<b>📊 Stats:</b>
-• <code>{referral_count}</code> successful referrals
-• <code>{points}</code> points earned (worth {points} birr)
-
-<b>💰 How it works:</b>
-• Share your link with friends
-• When they register, you earn 50 points
-• Redeem points for account balance (1 point = 1 birr)
-
-<i>Copy the link above and share it with friends!</i>
-""",
+            message_text,
             parse_mode='HTML',
             reply_markup=markup
         )
@@ -2564,36 +2537,33 @@ Click 🔑 Register to create your account.
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '👥 Join Community')
+@bot.message_handler(func=lambda msg: msg.text == '_ Join Community')
 def join_community(message):
-    """Join community button"""
+    # Join community button
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("📢 Our Channel", url="https://t.me/alipay_eth"))
-    markup.add(InlineKeyboardButton("👥 Our Group", url="https://t.me/aliexpresstax"))
+    markup.add(InlineKeyboardButton("_ Our Channel", url="https://t.me/alipay_eth"))
+    markup.add(InlineKeyboardButton("_ Our Group", url="https://t.me/aliexpresstax"))
 
+    # Construct message with string concatenation
+    message_text = "_________________________\n"
+    message_text += "   <b>JOIN OUR COMMUNITY!</b>\n"
+    message_text += "_________________________\n\n"
+    message_text += "<b>Stay Connected With Us!</b>\n\n"
+    message_text += "<b>Our Channel:</b> Get the latest updates, promotions, and announcements directly from our team.\n\n"
+    message_text += "<b>Our Group:</b> Connect with other users, share experiences, and get community support.\n\n"
+    message_text += "<i>Join both for the complete AliPay_ETH experience!</i>"
+    
     bot.send_message(
         message.chat.id,
-        """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   👥 <b>JOIN OUR COMMUNITY!</b> 👥  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>Stay Connected With Us!</b>
-
-📢 <b>Our Channel:</b> Get the latest updates, promotions, and announcements directly from our team.
-
-👥 <b>Our Group:</b> Connect with other users, share experiences, and get community support.
-
-<i>Join both for the complete AliPay_ETH experience!</i>
-""",
+        message_text,
         parse_mode='HTML',
         reply_markup=markup
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '📦 Submit Order')
+@bot.message_handler(func=lambda msg: msg.text == '_ Submit Order')
 @subscription_required
 def submit_order(message):
-    """Handle submit order button with enhanced UI"""
+    # Handle submit order button with enhanced UI
     chat_id = message.chat.id
     session = None
     try:
@@ -2601,14 +2571,14 @@ def submit_order(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
+            # Create registration required message
+            message_text = "<b>Registration Required</b>\n\n"
+            message_text += "You need to register first before placing orders.\n"
+            message_text += "Click Register to create your account."
+            
             bot.send_message(
                 chat_id, 
-                """
-⚠️ <b>Registration Required</b>
-
-You need to register first before placing orders.
-Click 🔑 Register to create your account.
-""", 
+                message_text, 
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=False)
             )
@@ -2616,20 +2586,18 @@ Click 🔑 Register to create your account.
 
         # Check if user has enough balance
         if user.balance is None or user.balance <= 0:
+            # Create insufficient balance message
+            message_text = "_________________________\n"
+            message_text += "   <b>INSUFFICIENT BALANCE</b>\n"
+            message_text += "_________________________\n\n"
+            message_text += "<b>Your current balance:</b> $0.00\n\n"
+            message_text += "You need to add funds to your account before placing an order.\n"
+            message_text += "Click <b>Deposit</b> to add funds and start shopping!\n\n"
+            message_text += "<i>Our payment options include CBE and TeleBirr for your convenience.</i>"
+            
             bot.send_message(
                 chat_id,
-                """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ❌ <b>INSUFFICIENT BALANCE</b> ❌  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>💰 Your current balance:</b> $0.00
-
-You need to add funds to your account before placing an order. 
-Click 💰 <b>Deposit</b> to add funds and start shopping!
-
-<i>Our payment options include CBE and TeleBirr for your convenience.</i>
-""",
+                message_text,
                 parse_mode='HTML'
             )
             return
@@ -2641,31 +2609,24 @@ Click 💰 <b>Deposit</b> to add funds and start shopping!
         back_markup = ReplyKeyboardMarkup(resize_keyboard=True)
         back_markup.add(KeyboardButton('Back to Main Menu'))
 
+        message_text = "_________________________\n"
+        message_text += "   <b>NEW ALIEXPRESS ORDER</b>\n"
+        message_text += "_________________________\n\n"
+        message_text += f"<b>Your current balance:</b> $<code>{user.balance:.2f}</code>\n\n"
+        message_text += "<b>HOW TO ORDER:</b>\n\n"
+        message_text += "1. Go to AliExpress and find your product\n"
+        message_text += "2. Copy the complete product URL\n"
+        message_text += "3. Paste the link below\n"
+        message_text += "4. Our team will process your order immediately\n\n"
+        message_text += "<b>PASTE YOUR LINK BELOW:</b>\n\n"
+        message_text += "Example:\n"
+        message_text += "<code>https://www.aliexpress.com/item/12345.html</code>\n\n"
+        message_text += "<i>We handle everything for you - payment, shipping, and tracking!</i>\n\n"
+        message_text += "Press 'Back to Main Menu' to cancel your order."
+        
         bot.send_message(
             chat_id,
-            """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🛍️ <b>NEW ALIEXPRESS ORDER</b> 🛍️  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>💰 Your current balance:</b> $<code>{:.2f}</code>
-
-<b>🔍 HOW TO ORDER:</b>
-
-1️⃣ Go to AliExpress and find your product
-2️⃣ Copy the complete product URL
-3️⃣ Paste the link below
-4️⃣ Our team will process your order immediately
-
-<b>✨ PASTE YOUR LINK BELOW:</b>
-
-Example:
-<code>https://www.aliexpress.com/item/12345.html</code>
-
-<i>💫 We handle everything for you - payment, shipping, and tracking! 💫</i>
-
-Press 'Back to Main Menu' to cancel your order.
-""".format(user.balance),
+            message_text,
             parse_mode='HTML',
             reply_markup=back_markup
         )
@@ -2678,7 +2639,7 @@ Press 'Back to Main Menu' to cancel your order.
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_link')
 def process_order_link(message):
-    """Process the order link with enhanced UI and reliability"""
+    # Process the order link with enhanced UI and reliability
     chat_id = message.chat.id
     link = message.text.strip()
     session = None
@@ -2696,7 +2657,7 @@ def process_order_link(message):
 
             bot.send_message(
                 chat_id,
-                "🏠 Order cancelled. Returning to main menu...",
+                "_ Order cancelled. Returning to main menu...",
                 reply_markup=create_main_menu(is_registered=is_registered)
             )
             return
@@ -2704,7 +2665,7 @@ def process_order_link(message):
             logger.error(f"Error returning to main menu: {e}")
             if chat_id in user_states:
                 del user_states[chat_id]
-            bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
+            bot.send_message(chat_id, "_ Back to main menu", reply_markup=create_main_menu(is_registered=True))
             return
         finally:
             safe_close_session(session)
@@ -2712,7 +2673,7 @@ def process_order_link(message):
     # First, send immediate acknowledgement
     processing_msg = bot.send_message(
         chat_id,
-        "⏳ <b>Processing your order...</b>",
+        "_ <b>Processing your order...</b>",
         parse_mode='HTML'
     )
 
@@ -2740,18 +2701,17 @@ def process_order_link(message):
     
     # Fallback validation - still check if it's a valid link
     if not link.startswith('http') or 'aliexpress' not in link.lower():
+        # Create invalid link message with proper formatting
+        message_text = "<b>INVALID LINK DETECTED</b>\n\n"
+        message_text += "Please provide a valid AliExpress product link.\n"
+        message_text += "I can process links in these formats:\n"
+        message_text += "Standard URL: <code>https://www.aliexpress.com/item/...</code>\n"
+        message_text += "AliExpress share format: <code>3.54|Product Name https://aliexpress.com/...</code>\n\n"
+        message_text += "The link must contain 'aliexpress' in the URL.\n"
+        message_text += "Please try again or press 'Back to Main Menu' to cancel."
+        
         bot.edit_message_text(
-            """
-❌ <b>INVALID LINK DETECTED</b>
-
-Please provide a valid AliExpress product link. 
-I can process links in these formats:
-• Standard URL: <code>https://www.aliexpress.com/item/...</code>
-• AliExpress share format: <code>3.54|Product Name https://aliexpress.com/...</code>
-
-The link must contain 'aliexpress' in the URL.
-Please try again or press 'Back to Main Menu' to cancel.
-""",
+            message_text,
             chat_id=chat_id,
             message_id=processing_msg.message_id,
             parse_mode='HTML'
@@ -2783,35 +2743,28 @@ Please try again or press 'Back to Main Menu' to cancel.
         # Notify admin about the new order with improved formatting
         admin_markup = InlineKeyboardMarkup()
         admin_markup.row(
-            InlineKeyboardButton("✅ Process", callback_data=f"process_order_{new_order.id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_order_{new_order.id}")
+            InlineKeyboardButton("_ Process", callback_data=f"process_order_{new_order.id}"),
+            InlineKeyboardButton("_ Reject", callback_data=f"reject_order_{new_order.id}")
         )
         admin_markup.row(
-            InlineKeyboardButton("🔗 View Product", url=link)
+            InlineKeyboardButton("_ View Product", url=link)
         )
 
-        admin_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🛍️ <b>NEW ORDER RECEIVED</b> 🛍️  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>📋 CUSTOMER DETAILS:</b>
-• Name: <b>{user.name}</b>
-• Phone: <code>{user.phone}</code>
-• Address: {user.address}
-• User ID: <code>{chat_id}</code>
-
-<b>💰 FINANCIAL DETAILS:</b>
-• Balance: $<code>{user.balance:.2f}</code>
-• Order #: <code>{new_order_number}</code>
-
-<b>🔗 PRODUCT LINK:</b>
-<a href="{link}">{link}</a>
-
-<b>⏰ TIME:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-<i>Please review and process this order</i>
-"""
+        admin_msg = "_________________________\n"
+        admin_msg += "   <b>NEW ORDER RECEIVED</b>\n"
+        admin_msg += "_________________________\n\n"
+        admin_msg += "<b>CUSTOMER DETAILS:</b>\n"
+        admin_msg += f"Name: <b>{user.name}</b>\n"
+        admin_msg += f"Phone: <code>{user.phone}</code>\n"
+        admin_msg += f"Address: {user.address}\n"
+        admin_msg += f"User ID: <code>{chat_id}</code>\n\n"
+        admin_msg += "<b>FINANCIAL DETAILS:</b>\n"
+        admin_msg += f"Balance: $<code>{user.balance:.2f}</code>\n"
+        admin_msg += f"Order #: <code>{new_order_number}</code>\n\n"
+        admin_msg += "<b>PRODUCT LINK:</b>\n"
+        admin_msg += f"<a href=\"{link}\">{link}</a>\n\n"
+        admin_msg += f"<b>TIME:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        admin_msg += "<i>Please review and process this order</i>"
         if ADMIN_ID:
             bot.send_message(ADMIN_ID, admin_msg, parse_mode='HTML', reply_markup=admin_markup)
 
@@ -2820,38 +2773,30 @@ Please try again or press 'Back to Main Menu' to cancel.
         birr_balance = int(remaining_balance * 160.0)  # Convert to birr (1 USD = 160 ETB)
 
         # Notify user about order submission with enhanced beautiful design
+        success_msg = "_________________________\n"
+        success_msg += "   <b>ORDER PLACED SUCCESSFULLY!</b>\n"
+        success_msg += "_________________________\n\n"
+        success_msg += "Your AliExpress order request has been received!\n\n"
+        success_msg += "<b>ORDER DETAILS:</b>\n"
+        success_msg += f"Order Number: <code>{new_order_number}</code>\n"
+        success_msg += "Status: <b>Processing</b>\n"
+        success_msg += f"Time: {datetime.now().strftime('%I:%M %p, %d %b %Y')}\n\n"
+        success_msg += "<b>ACCOUNT BALANCE:</b>\n"
+        success_msg += f"Remaining: <code>{birr_balance:,}</code> birr (${remaining_balance:.2f})\n\n"
+        success_msg += "<b>TRACK YOUR ORDER:</b>\n"
+        success_msg += "1. Click \"<b>Track Order</b>\" in menu\n"
+        success_msg += f"2. Enter Order #: <code>{new_order_number}</code>\n\n"
+        success_msg += "<b>ORDER UPDATES:</b>\n"
+        success_msg += "Processing\n"
+        success_msg += "Confirmation\n"
+        success_msg += "Shipping\n"
+        success_msg += "Delivery\n\n"
+        success_msg += "<i>We'll notify you of all status changes!</i>\n\n"
+        success_msg += "<b>Need help?</b> Use Help Center anytime!\n\n"
+        success_msg += "<i>Thank you for shopping with AliPay_ETH!</i>"
+        
         bot.edit_message_text(
-            f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🎉 <b>ORDER PLACED SUCCESSFULLY!</b> 🎉  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-✨ Your AliExpress order request has been received! ✨
-
-<b>📦 ORDER DETAILS:</b>
-• Order Number: <code>{new_order_number}</code>
-• Status: <b>Processing</b>
-• Time: {datetime.now().strftime('%I:%M %p, %d %b %Y')}
-
-<b>💰 ACCOUNT BALANCE:</b>
-• Remaining: <code>{birr_balance:,}</code> birr (${remaining_balance:.2f})
-
-<b>🔍 TRACK YOUR ORDER:</b>
-1️⃣ Click "<b>🔍 Track Order</b>" in menu
-2️⃣ Enter Order #: <code>{new_order_number}</code>
-
-<b>📱 ORDER UPDATES:</b>
-• Processing ⏳
-• Confirmation ✅
-• Shipping 🚚
-• Delivery 📦
-
-<i>We'll notify you of all status changes!</i>
-
-<b>Need help?</b> Use ❓ Help Center anytime!
-
-<i>Thank you for shopping with AliPay_ETH!</i>
-""",
+            success_msg,
             chat_id=chat_id,
             message_id=processing_msg.message_id,
             parse_mode='HTML'
@@ -2871,15 +2816,14 @@ Please try again or press 'Back to Main Menu' to cancel.
         logger.error(f"Error processing order link: {e}")
         logger.error(traceback.format_exc())
         try:
+            # Create error message with proper formatting
+            message_text = "<b>ERROR PROCESSING ORDER</b>\n\n"
+            message_text += "Sorry, we encountered an error while processing your order.\n"
+            message_text += "Please try again in a few moments.\n\n"
+            message_text += "If the issue persists, please contact our support team."
+            
             bot.edit_message_text(
-                """
-❌ <b>ERROR PROCESSING ORDER</b>
-
-Sorry, we encountered an error while processing your order. 
-Please try again in a few moments.
-
-If the issue persists, please contact our support team.
-""",
+                message_text,
                 chat_id=chat_id,
                 message_id=processing_msg.message_id,
                 parse_mode='HTML'
@@ -2899,7 +2843,7 @@ If the issue persists, please contact our support team.
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
 def handle_deposit_admin_decision(call):
-    """Handle admin approval/rejection for deposits"""
+    # Handle admin approval/rejection for deposits
     session = None
     try:
         parts = call.data.split('_')
@@ -2941,7 +2885,7 @@ def handle_deposit_admin_decision(call):
                         user.balance += amount_after_sub
                         user.subscription_date = now  # Set new subscription date
                         subscription_deducted = True
-                        subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
+                        subscription_renewal_msg = "\n<b>_ SUBSCRIPTION RENEWED:</b>\n_ Monthly fee: $1.00 (150 birr) deducted\n_ New expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
                     else:
                         # If deposit is less than $1, just add to balance without renewing
                         user.balance += amount
@@ -2955,7 +2899,7 @@ def handle_deposit_admin_decision(call):
                     user.balance += amount_after_sub
                     user.subscription_date = now  # Set initial subscription date
                     subscription_deducted = True
-                    subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
+                    subscription_renewal_msg = "\n<b>_ SUBSCRIPTION ACTIVATED:</b>\n_ Monthly fee: $1.00 (150 birr) deducted\n_ Expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
                 else:
                     # If deposit is less than $1, just add to balance without subscription
                     user.balance += amount
@@ -2964,24 +2908,23 @@ def handle_deposit_admin_decision(call):
             session.commit()
 
             # Notify user
-            message_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT APPROVED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{int(amount * 160.0):,}</code> birr
-• USD Value: ${amount:.2f}
-{f"• Amount after subscription fee: ${amount - 1.0:.2f}" if subscription_deducted else ""}
-{subscription_renewal_msg}
-
-<b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 160):,}</code> birr
-
-✨ <b>You're ready to start shopping!</b> ✨
-
-<i>Browse AliExpress and submit your orders now!</i>
-"""
+            message_text = "_________________________\n"
+            message_text += "   <b>DEPOSIT APPROVED</b>\n"
+            message_text += "_________________________\n\n"
+            message_text += "<b>DEPOSIT DETAILS:</b>\n"
+            message_text += f"Amount: <code>{int(amount * 160.0):,}</code> birr\n"
+            message_text += f"USD Value: ${amount:.2f}\n"
+            
+            if subscription_deducted:
+                message_text += f"Amount after subscription fee: ${amount - 1.0:.2f}\n"
+                
+            if subscription_renewal_msg:
+                message_text += subscription_renewal_msg + "\n"
+                
+            message_text += "\n<b>ACCOUNT UPDATED:</b>\n"
+            message_text += f"New Balance: <code>{int(user.balance * 160):,}</code> birr\n\n"
+            message_text += "<b>You're ready to start shopping!</b>\n\n"
+            message_text += "<i>Browse AliExpress and submit your orders now!</i>"
 
             bot.send_message(
                 chat_id,
@@ -2991,7 +2934,7 @@ def handle_deposit_admin_decision(call):
 
             # Update admin message
             bot.edit_message_text(
-                f"✅ Deposit of ${amount:.2f} approved for {user.name}",
+                f"_ Deposit of ${amount:.2f} approved for {user.name}",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
@@ -3007,26 +2950,23 @@ def handle_deposit_admin_decision(call):
                 raise
 
             # Notify user
+            rejection_msg = "DEPOSIT REJECTED\n\n"
+            rejection_msg += f"Your deposit of ${amount:.2f} was rejected.\n\n"
+            rejection_msg += "Possible reasons:\n"
+            rejection_msg += "- Payment amount didn't match\n"
+            rejection_msg += "- Payment screenshot unclear\n"
+            rejection_msg += "- Payment not received\n\n"
+            rejection_msg += "Please try again or contact support."
+            
             bot.send_message(
                 chat_id,
-                f"""
-❌ DEPOSIT REJECTED ❌
-
-Your deposit of ${amount:.2f} was rejected.
-
-Possible reasons:
-• Payment amount didn't match
-• Payment screenshot unclear
-• Payment not received
-
-Please try again or contact support.
-""",
+                rejection_msg,
                 parse_mode='HTML'
             )
 
             # Update admin message
             bot.edit_message_text(
-                f"❌ Deposit of ${amount:.2f} rejected for {user.name}",
+                f"_ Deposit of ${amount:.2f} rejected for {user.name}",
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
@@ -3040,10 +2980,10 @@ Please try again or contact support.
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
+@bot.message_handler(func=lambda msg: msg.text == '_ Track Order')
 @subscription_required
 def track_order(message):
-    """Handle track order button with comprehensive tracking options"""
+    # Handle track order button with comprehensive tracking options
     chat_id = message.chat.id
     session = None
     try:
@@ -3051,48 +2991,43 @@ def track_order(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
+            # Create registration required message
+            message_text = "<b>REGISTRATION REQUIRED</b>\n\n"
+            message_text += "Please register first to track orders.\n"
+            message_text += "You can register by clicking Register on the main menu."
+            
             bot.send_message(
                 chat_id, 
-                """
-⚠️ <b>REGISTRATION REQUIRED</b>
-
-Please register first to track orders.
-You can register by clicking 🔑 Register on the main menu.
-""",
+                message_text,
                 parse_mode='HTML',
                 reply_markup=create_main_menu()
             )
             return
 
         # Ask for order number with better description of what they'll get
-        msg = """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔍 <b>DETAILED ORDER TRACKING</b> 🔍  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Enter your order number to see:
-• 📊 Comprehensive order details
-• 📦 Real-time shipping status
-• 🚚 Estimated delivery dates
-• 🛍️ Product information
-• 📬 Tracking links and updates
-
-Please enter the order number you want to track:
-Example: <code>12345</code>
-"""
+        msg = "_________________________\n"
+        msg += "   <b>DETAILED ORDER TRACKING</b>\n"
+        msg += "_________________________\n\n"
+        msg += "Enter your order number to see:\n"
+        msg += "_ Comprehensive order details\n"
+        msg += "_ Real-time shipping status\n"
+        msg += "_ Estimated delivery dates\n"
+        msg += "_ Product information\n"
+        msg += "_ Tracking links and updates\n\n"
+        msg += "Please enter the order number you want to track:\n"
+        msg += "Example: <code>12345</code>"
         bot.send_message(chat_id, msg, parse_mode='HTML')
         user_states[chat_id] = 'waiting_for_order_number'
     except Exception as e:
         logger.error(f"Error in track order: {e}")
         logger.error(traceback.format_exc())
+        error_msg = "We're sorry, but there was a technical issue processing your request.\n"
+        error_msg += "Please try again or contact support if the problem persists.\n\n"
+        error_msg += "You can use <b>Order Status</b> to view all your orders instead."
+        
         bot.send_message(
             chat_id, 
-            """
-We're sorry, but there was a technical issue processing your request.
-Please try again or contact support if the problem persists.
-
-You can use 📊 <b>Order Status</b> to view all your orders instead.
-""",
+            error_msg,
             parse_mode='HTML',
             reply_markup=create_main_menu(is_registered=True)
         )
@@ -3102,7 +3037,7 @@ You can use 📊 <b>Order Status</b> to view all your orders instead.
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
 def process_order_number(message):
-    """Process order number for detailed tracking with comprehensive information"""
+    # Process order number for detailed tracking with comprehensive information
     chat_id = message.chat.id
     session = None
     try:
@@ -3113,13 +3048,13 @@ def process_order_number(message):
 
         # Check if order number is valid
         if not order_number.isdigit():
+            # Invalid order number message
+            message_text = "<b>INVALID ORDER NUMBER</b>\n\n"
+            message_text += "Please enter a valid order number (digits only)."
+            
             bot.send_message(
                 chat_id,
-                """
-❌ <b>INVALID ORDER NUMBER</b>
-
-Please enter a valid order number (digits only).
-""",
+                message_text,
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
@@ -3130,34 +3065,33 @@ Please enter a valid order number (digits only).
         order = session.query(Order).filter_by(user_id=user.id, order_number=int(order_number)).first()
 
         if not order:
+            not_found_msg = "<b>ORDER NOT FOUND</b>\n\n"
+            not_found_msg += f"We couldn't find order #{order_number} in your account.\n"
+            not_found_msg += "Please check the order number and try again."
+            
             bot.send_message(
                 chat_id,
-                f"""
-❌ <b>ORDER NOT FOUND</b>
-
-We couldn't find order #{order_number} in your account.
-Please check the order number and try again.
-""",
+                not_found_msg,
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
 
         # Format status with emoji
-        status_emoji = "⏳"
-        status_color = "🟡"
+        status_emoji = "_"
+        status_color = "_"
         if order.status == "Completed":
-            status_emoji = "✅"
-            status_color = "🟢"
+            status_emoji = "_"
+            status_color = "_"
         elif order.status == "Cancelled":
-            status_emoji = "❌"
-            status_color = "🔴"
+            status_emoji = "_"
+            status_color = "_"
         elif order.status == "Processing":
-            status_emoji = "🔄"
-            status_color = "🔵"
+            status_emoji = "_"
+            status_color = "_"
         elif order.status == "Shipped":
-            status_emoji = "🚚"
-            status_color = "🟢"
+            status_emoji = "_"
+            status_color = "_"
 
         # Create comprehensive tracking information if tracking number exists
         tracking_info = ""
@@ -3165,15 +3099,14 @@ Please check the order number and try again.
         if order.tracking_number:
             parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
             aliexpress_tracking_link = f"https://aliexpress.com/trackOrder.htm"
-            tracking_info = f"""
-<b>📬 TRACKING INFORMATION:</b>
-• Tracking Number: <code>{order.tracking_number}</code>
-• Carrier: <b>{"Standard AliExpress Shipping" if not order.carrier else order.carrier}</b>
-
-<b>📱 TRACKING LINKS:</b>
-• <a href="{parcels_app_link}">🌎 Track Package on ParcelsApp</a> (Real-time global updates)
-• <a href="{aliexpress_tracking_link}">🛒 Track on AliExpress</a> (Official tracking)
-"""
+            
+            # Create tracking information message
+            tracking_info = "<b>TRACKING INFORMATION:</b>\n"
+            tracking_info += f"Tracking Number: <code>{order.tracking_number}</code>\n"
+            tracking_info += f"Carrier: <b>{"Standard AliExpress Shipping" if not order.carrier else order.carrier}</b>\n\n"
+            tracking_info += "<b>TRACKING LINKS:</b>\n"
+            tracking_info += f"<a href=\"{parcels_app_link}\">Track Package on ParcelsApp</a> (Real-time global updates)\n"
+            tracking_info += f"<a href=\"{aliexpress_tracking_link}\">Track on AliExpress</a> (Official tracking)"
             # Calculate estimated delivery date (between 15-30 days from order date for shipped orders)
             if order.status == "Shipped":
                 min_delivery_date = order.created_at + timedelta(days=15)
@@ -3181,40 +3114,32 @@ Please check the order number and try again.
                 today = datetime.utcnow()
                 
                 if today > max_delivery_date:
-                    delivery_estimate = f"""
-<b>📅 DELIVERY STATUS:</b>
-• Package may be delayed
-• Expected to arrive soon
-• Contact support if not received within 5 days
-"""
+                    # Create delay message
+                    delivery_estimate = "<b>DELIVERY STATUS:</b>\n"
+                    delivery_estimate += "Package may be delayed\n"
+                    delivery_estimate += "Expected to arrive soon\n"
+                    delivery_estimate += "Contact support if not received within 5 days"
                 else:
-                    delivery_estimate = f"""
-<b>📅 ESTIMATED DELIVERY:</b>
-• Earliest: <b>{min_delivery_date.strftime('%d %b %Y')}</b>
-• Latest: <b>{max_delivery_date.strftime('%d %b %Y')}</b>
-• Status updates may take 1-2 days to appear
-"""
+                    delivery_estimate = "<b>ESTIMATED DELIVERY:</b>\n"
+                    delivery_estimate += f"Earliest: <b>{min_delivery_date.strftime('%d %b %Y')}</b>\n"
+                    delivery_estimate += f"Latest: <b>{max_delivery_date.strftime('%d %b %Y')}</b>\n"
+                    delivery_estimate += "Status updates may take 1-2 days to appear"
 
         # Create order message with enhanced design and more detailed information
-        order_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔍 <b>DETAILED ORDER TRACKING</b> 🔍  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>📋 ORDER INFORMATION:</b>
-• Order: <b>#{order.order_number}</b>
-• Status: {status_emoji} <b>{order.status}</b> {status_color}
-• Amount: <b>${order.amount:.2f}</b>
-• Date Ordered: <b>{order.created_at.strftime('%d %b %Y')}</b>
-"""
+        order_msg = "_________________________\n"
+        order_msg += "   <b>DETAILED ORDER TRACKING</b>\n"
+        order_msg += "_________________________\n\n"
+        order_msg += "<b>ORDER INFORMATION:</b>\n"
+        order_msg += f"Order: <b>#{order.order_number}</b>\n"
+        order_msg += f"Status: {status_emoji} <b>{order.status}</b> {status_color}\n"
+        order_msg += f"Amount: <b>${order.amount:.2f}</b>\n"
+        order_msg += f"Date Ordered: <b>{order.created_at.strftime('%d %b %Y')}</b>"
 
         if order.order_id:
-            order_msg += f"""
-<b>🔖 ALIEXPRESS DETAILS:</b>
-• Order ID: <code>{order.order_id}</code>
-• Seller: <b>AliExpress Merchant</b>
-• Payment Method: <b>Processed by AliPay_ETH</b>
-"""
+            order_msg += "\n\n<b>ALIEXPRESS DETAILS:</b>\n"
+            order_msg += f"Order ID: <code>{order.order_id}</code>\n"
+            order_msg += "Seller: <b>AliExpress Merchant</b>\n"
+            order_msg += "Payment Method: <b>Processed by AliPay_ETH</b>"
 
         # Add tracking info if available
         if tracking_info:
@@ -3225,53 +3150,47 @@ Please check the order number and try again.
             order_msg += f"\n{delivery_estimate}"
             
         # Add shipping status timeline
-        shipping_timeline = f"""
-<b>📦 SHIPPING STATUS TIMELINE:</b>
-• <b>Order Placed:</b> {order.created_at.strftime('%d %b %Y')}
-"""
+        shipping_timeline = "\n\n<b>SHIPPING STATUS TIMELINE:</b>\n"
+        shipping_timeline += f"<b>Order Placed:</b> {order.created_at.strftime('%d %b %Y')}"
         if order.status == "Processing" or order.status == "Shipped" or order.status == "Completed":
-            shipping_timeline += f"• <b>Processing Started:</b> {(order.created_at + timedelta(days=1)).strftime('%d %b %Y')}\n"
+            shipping_timeline += f"\n<b>Processing Started:</b> {(order.created_at + timedelta(days=1)).strftime('%d %b %Y')}"
             
         if order.status == "Shipped" or order.status == "Completed":
             shipping_date = order.created_at + timedelta(days=3)
-            shipping_timeline += f"• <b>Package Shipped:</b> {shipping_date.strftime('%d %b %Y')}\n"
+            shipping_timeline += f"\n<b>Package Shipped:</b> {shipping_date.strftime('%d %b %Y')}"
             
         if order.status == "Completed":
             completion_date = order.created_at + timedelta(days=25)
-            shipping_timeline += f"• <b>Delivered:</b> {completion_date.strftime('%d %b %Y')}\n"
+            shipping_timeline += f"\n<b>Delivered:</b> {completion_date.strftime('%d %b %Y')}"
             
         order_msg += f"\n{shipping_timeline}"
 
         # Add detailed product information
         if order.product_link:
             product_name = "AliExpress Product"
-            order_msg += f"""
-<b>🛍️ PRODUCT INFORMATION:</b>
-• Name: <b>{product_name}</b>
-• <a href="{order.product_link}">View Product on AliExpress</a>
-• Quantity: <b>1</b> item(s)
-"""
+            
+            # Product information
+            order_msg += "<b>PRODUCT INFORMATION:</b>\n"
+            order_msg += f"Name: <b>{product_name}</b>\n"
+            order_msg += f"<a href=\"{order.product_link}\">View Product on AliExpress</a>\n"
+            order_msg += "Quantity: <b>1</b> item(s)"
 
         # Add shipping address information if available
         session2 = get_session()
         try:
             user_with_address = session2.query(User).filter_by(id=order.user_id).first()
             if user_with_address and user_with_address.address:
-                order_msg += f"""
-<b>🏠 SHIPPING ADDRESS:</b>
-• Destination: <b>{user_with_address.address}</b>
-"""
+                # Add shipping address
+                order_msg += "\n\n<b>SHIPPING ADDRESS:</b>\n"
+                order_msg += f"Destination: <b>{user_with_address.address}</b>"
         finally:
             safe_close_session(session2)
 
         # Add support information
-        order_msg += f"""
-<b>📞 NEED HELP?</b>
-• For delivery issues: Contact us after {(order.created_at + timedelta(days=35)).strftime('%d %b %Y')}
-• For urgent assistance: Contact @alipay_help_center
-
-<i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
-"""
+        order_msg += "\n\n<b>NEED HELP?</b>\n"
+        order_msg += f"For delivery issues: Contact us after {(order.created_at + timedelta(days=35)).strftime('%d %b %Y')}\n"
+        order_msg += "For urgent assistance: Contact @alipay_help_center\n\n"
+        order_msg += "<i>Thank you for shopping with AliPay_ETH!</i>"
 
         bot.send_message(
             chat_id,
@@ -3285,10 +3204,8 @@ Please check the order number and try again.
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            """
-We're sorry, but there was a technical issue processing your request.
-Please try again or contact support if the problem persists.
-""",
+            "We're sorry, but there was a technical issue processing your request.\n"
+            "Please try again or contact support if the problem persists.",
             parse_mode='HTML',
             reply_markup=create_main_menu(is_registered=True)
         )
@@ -3296,24 +3213,23 @@ Please try again or contact support if the problem persists.
         if session:
             safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
+@bot.message_handler(func=lambda msg: msg.text == '_ Order Status')
 @subscription_required
 def order_status(message):
-    """Handle order status button with simplified overview"""
+    # Handle order status button with simplified overview
     chat_id = message.chat.id
     session = None
     try:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if not user:
+            # User not registered
+            registration_msg = "<b>REGISTRATION REQUIRED</b>\n\n"
+            registration_msg += "Please register first to check order status.\n"
+            registration_msg += "You can register by clicking _ Register on the main menu."
             bot.send_message(
                 chat_id, 
-                """
-⚠️ <b>REGISTRATION REQUIRED</b>
-
-Please register first to check order status.
-You can register by clicking 🔑 Register on the main menu.
-""",
+                registration_msg,
                 parse_mode='HTML',
                 reply_markup=create_main_menu()
             )
@@ -3325,25 +3241,19 @@ You can register by clicking 🔑 Register on the main menu.
         if not orders:
             bot.send_message(
                 chat_id,
-                """
-📊 <b>ORDER STATUS</b>
-
-You don't have any orders yet.
-To place an order, click 📦 <b>Submit Order</b> from the main menu.
-""",
+                "<b>ORDER STATUS</b>\n\n"
+                "You don't have any orders yet.\n"
+                "To place an order, click <b>Submit Order</b> from the main menu.",
                 parse_mode='HTML',
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
 
         # Show all orders with simplified formatting - BASIC INFORMATION ONLY
-        orders_text = """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>ORDER STATUS OVERVIEW</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>Your orders at a glance:</b>
-"""
+        orders_text = "_________________________\n"
+        orders_text += "   <b>ORDER STATUS OVERVIEW</b>\n"
+        orders_text += "_________________________\n\n"
+        orders_text += "<b>Your orders at a glance:</b>"
         # Counters for different statuses
         pending_count = 0
         processing_count = 0
@@ -3365,42 +3275,36 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
                 cancelled_count += 1
         
         # Status summary section
-        orders_text += f"""
-<b>📈 SUMMARY:</b>
-• ⏳ Pending: {pending_count}
-• 🔄 Processing: {processing_count}
-• 🚚 Shipped: {shipped_count}
-• ✅ Completed: {completed_count}
-• ❌ Cancelled: {cancelled_count}
-
-<b>📋 RECENT ORDERS:</b>
-"""
+        orders_text += "\n\n<b>SUMMARY:</b>\n"
+        orders_text += f"Pending: {pending_count}\n"
+        orders_text += f"Processing: {processing_count}\n"
+        orders_text += f"Shipped: {shipped_count}\n"
+        orders_text += f"Completed: {completed_count}\n"
+        orders_text += f"Cancelled: {cancelled_count}\n\n"
+        orders_text += "<b>RECENT ORDERS:</b>"
 
         # Only show basic details for the 5 most recent orders
         recent_orders = orders[:5]
         for order in recent_orders:
-            status_emoji = "⏳"
+            status_emoji = "_"
             if order.status == "Completed":
-                status_emoji = "✅"
+                status_emoji = "_"
             elif order.status == "Cancelled":
-                status_emoji = "❌"
+                status_emoji = "_"
             elif order.status == "Processing":
-                status_emoji = "🔄"
+                status_emoji = "_"
             elif order.status == "Shipped":
-                status_emoji = "🚚"
+                status_emoji = "_"
 
             # Simple, concise order entry
-            order_details = f"""• #{order.order_number} - {status_emoji} {order.status} - {order.created_at.strftime('%d %b %Y')}"""
+            order_details = f"#{order.order_number} - {status_emoji} {order.status} - {order.created_at.strftime('%d %b %Y')}"
             orders_text += f"\n{order_details}"
 
-        orders_text += """
-
-<b>🔍 FOR DETAILED TRACKING:</b>
-• Use 🔍 <b>Track Order</b> button and enter your order number
-• This will show detailed product info and shipping status
-
-<i>💫 Thank you for shopping with AliPay_ETH! 💫</i>
-"""
+        # Add detailed tracking instructions
+        orders_text += "\n\n<b>FOR DETAILED TRACKING:</b>\n"
+        orders_text += "Use <b>Track Order</b> button and enter your order number\n"
+        orders_text += "This will show detailed product info and shipping status\n\n"
+        orders_text += "<i>Thank you for shopping with AliPay_ETH!</i>"
 
         bot.send_message(
             chat_id,
@@ -3422,7 +3326,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
 def handle_order_admin_decision(call):
-    """Handle admin approval/rejection for orders with enhanced user notifications"""
+    # Handle admin approval/rejection for orders with enhanced user notifications
     session = None
     try:
         parts = call.data.split('_order_')
@@ -3445,20 +3349,19 @@ def handle_order_admin_decision(call):
 
             # Ask for order details
             bot.answer_callback_query(call.id, "Please provide order details")
+            
+            # Format the message in a clear format
+            order_details_msg = "Please provide the following order details:\n\n"
+            order_details_msg += "1. AliExpress Order ID\n"
+            order_details_msg += "2. Tracking Number (if available)\n"
+            order_details_msg += "3. Product Price (in USD)\n\n"
+            order_details_msg += "Format: orderid|tracking|price\n"
+            order_details_msg += "Example: 8675309|LY123456789CN|25.99\n\n"
+            order_details_msg += "Enter 'cancel' to cancel processing."
+            
             msg = bot.send_message(
                 call.message.chat.id,
-                """
-Please provide the following order details:
-
-1. AliExpress Order ID
-2. Tracking Number (if available)
-3. Product Price (in USD)
-
-Format: orderid|tracking|price
-Example: 8675309|LY123456789CN|25.99
-
-Enter 'cancel' to cancel processing.
-""",
+                order_details_msg,
                 parse_mode='HTML'
             )
             bot.register_next_step_handler(msg, process_order_details, order.id, user.telegram_id)
@@ -3470,9 +3373,9 @@ Enter 'cancel' to cancel processing.
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
+@bot.message_handler(func=lambda msg: msg.text == '_ Subscription')
 def check_subscription(message):
-    """Handle subscription button press with enhanced UI"""
+    # Handle subscription button press with enhanced UI
     chat_id = message.chat.id
     session = None
     try:
@@ -3480,14 +3383,14 @@ def check_subscription(message):
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
+            # Create registration required message
+            reg_required_msg = "<b>REGISTRATION REQUIRED</b>\n\n"
+            reg_required_msg += "Please register first to check your subscription status.\n"
+            reg_required_msg += "You can register by clicking Register on the main menu."
+            
             bot.send_message(
                 chat_id, 
-                """
-⚠️ <b>REGISTRATION REQUIRED</b>
-
-Please register first to check your subscription status.
-You can register by clicking 🔑 Register on the main menu.
-""",
+                reg_required_msg,
                 parse_mode='HTML',
                 reply_markup=create_main_menu()
             )
@@ -3506,30 +3409,28 @@ You can register by clicking 🔑 Register on the main menu.
 
             if days_remaining > 0:
                 subscription_active = True
-                subscription_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>ACTIVE SUBSCRIPTION</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+                
+                # Format the active subscription message
+                subscription_msg = "_________________________\n"
+                subscription_msg += "   <b>ACTIVE SUBSCRIPTION</b>   \n"
+                subscription_msg += "_________________________\n\n"
+                subscription_msg += "<b>SUBSCRIPTION DETAILS:</b>\n"
+                subscription_msg += "Status: <b>Active</b>\n"
+                subscription_msg += f"Expires in: <b>{days_remaining} days</b>\n"
+                subscription_msg += f"Renewal date: <b>{(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}</b>\n"
+                subscription_msg += "Monthly fee: <b>$1.00</b> (150 birr)\n\n"
+                subscription_msg += "<i>Your subscription will automatically renew when you make your next deposit.</i>\n\n"
+                subscription_msg += "<b>PREMIUM BENEFITS:</b>\n"
+                subscription_msg += "Unlimited order processing\n"
+                subscription_msg += "Priority customer support\n"
+                subscription_msg += "Real-time tracking updates\n"
+                subscription_msg += "Special promotions & discounts"
 
-<b>📅 SUBSCRIPTION DETAILS:</b>
-• Status: <b>Active</b> 🟢
-• Expires in: <b>{days_remaining} days</b>
-• Renewal date: <b>{(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}</b>
-• Monthly fee: <b>$1.00</b> (150 birr)
-
-<i>Your subscription will automatically renew when you make your next deposit.</i>
-
-<b>✨ PREMIUM BENEFITS:</b>
-• Unlimited order processing
-• Priority customer support
-• Real-time tracking updates
-• Special promotions & discounts
-"""
                 # If expiring soon, add inline buttons for renewal
                 if days_remaining <= 5:
                     renewal_markup = InlineKeyboardMarkup()
-                    renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
-                    renewal_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
+                    renewal_markup.add(InlineKeyboardButton("Renew Now", callback_data="deposit_renew"))
+                    renewal_markup.add(InlineKeyboardButton("View Benefits", callback_data="sub_benefits"))
 
                     bot.send_message(
                         chat_id,
@@ -3543,27 +3444,23 @@ You can register by clicking 🔑 Register on the main menu.
                 days_expired = abs(days_remaining)
                 expired_text = "today" if days_expired == 0 else f"{days_expired} days ago"
 
-                subscription_msg = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🚫 <b>SUBSCRIPTION EXPIRED</b> 🚫  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>📅 SUBSCRIPTION DETAILS:</b>
-• Status: <b>Expired</b> 🔴
-• Expired: <b>{expired_text}</b>
-• Monthly fee: <b>$1.00</b> (150 birr)
-
-<i>Please renew your subscription to continue enjoying our premium services.</i>
-
-<b>🔄 HOW TO RENEW:</b>
-1. Make a deposit of at least $1
-2. Your subscription will automatically renew
-3. Enjoy uninterrupted service for another 30 days
-"""
+                # Format the expired subscription message
+                subscription_msg = "_________________________\n"
+                subscription_msg += "   <b>SUBSCRIPTION EXPIRED</b>   \n"
+                subscription_msg += "_________________________\n\n"
+                subscription_msg += "<b>SUBSCRIPTION DETAILS:</b>\n"
+                subscription_msg += "Status: <b>Expired</b>\n"
+                subscription_msg += f"Expired: <b>{expired_text}</b>\n"
+                subscription_msg += "Monthly fee: <b>$1.00</b> (150 birr)\n\n"
+                subscription_msg += "<i>Please renew your subscription to continue enjoying our premium services.</i>\n\n"
+                subscription_msg += "<b>HOW TO RENEW:</b>\n"
+                subscription_msg += "1. Make a deposit of at least $1\n"
+                subscription_msg += "2. Your subscription will automatically renew\n"
+                subscription_msg += "3. Enjoy uninterrupted service for another 30 days"
                 # Add renewal buttons
                 renewal_markup = InlineKeyboardMarkup()
-                renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
-                renewal_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
+                renewal_markup.add(InlineKeyboardButton("Renew Now", callback_data="deposit_renew"))
+                renewal_markup.add(InlineKeyboardButton("View Benefits", callback_data="sub_benefits"))
 
                 bot.send_message(
                     chat_id,
@@ -3574,30 +3471,24 @@ You can register by clicking 🔑 Register on the main menu.
                 return
         else:
             # No subscription yet
-            subscription_msg = """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ℹ️ <b>NO SUBSCRIPTION</b> ℹ️  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>📅 SUBSCRIPTION DETAILS:</b>
-• Status: <b>Not Active</b> ⚪
-• Monthly fee: <b>$1.00</b> (150 birr)
-
-<i>You don't have an active subscription yet. Subscribe now to access premium features!</i>
-
-<b>✨ PREMIUM BENEFITS:</b>
-• Unlimited order processing
-• Priority customer support
-• Real-time tracking updates
-• Special promotions & discounts
-
-<b>💡 HOW TO SUBSCRIBE:</b>
-Make a deposit of at least $1 to automatically activate your subscription.
-"""
+            subscription_msg = "_________________________\n"
+            subscription_msg += "   <b>NO SUBSCRIPTION</b>   \n"
+            subscription_msg += "_________________________\n\n"
+            subscription_msg += "<b>SUBSCRIPTION DETAILS:</b>\n"
+            subscription_msg += "Status: <b>Not Active</b>\n"
+            subscription_msg += "Monthly fee: <b>$1.00</b> (150 birr)\n\n"
+            subscription_msg += "<i>You don't have an active subscription yet. Subscribe now to access premium features!</i>\n\n"
+            subscription_msg += "<b>PREMIUM BENEFITS:</b>\n"
+            subscription_msg += "Unlimited order processing\n"
+            subscription_msg += "Priority customer support\n"
+            subscription_msg += "Real-time tracking updates\n"
+            subscription_msg += "Special promotions & discounts\n\n"
+            subscription_msg += "<b>HOW TO SUBSCRIBE:</b>\n"
+            subscription_msg += "Make a deposit of at least $1 to automatically activate your subscription."
             # Add subscription buttons
             subscription_markup = InlineKeyboardMarkup()
-            subscription_markup.add(InlineKeyboardButton("💰 Subscribe Now", callback_data="deposit_renew"))
-            subscription_markup.add(InlineKeyboardButton("📋 View Benefits", callback_data="sub_benefits"))
+            subscription_markup.add(InlineKeyboardButton("_ Subscribe Now", callback_data="deposit_renew"))
+            subscription_markup.add(InlineKeyboardButton("_ View Benefits", callback_data="sub_benefits"))
 
             bot.send_message(
                 chat_id,
@@ -3615,7 +3506,7 @@ Make a deposit of at least $1 to automatically activate your subscription.
         logger.error(traceback.format_exc())  # Add traceback for better debugging
         bot.send_message(
             chat_id, 
-            "⚠️ <b>Oops!</b> We encountered a temporary glitch. Please try again in a moment. ⚠️",
+            "__ <b>Oops!</b> We encountered a temporary glitch. Please try again in a moment. __",
             parse_mode='HTML'
         )
     finally:
@@ -3623,7 +3514,7 @@ Make a deposit of at least $1 to automatically activate your subscription.
             safe_close_session(session)
 
 def process_order_details(message, order_id, user_telegram_id):
-    """Process order details provided by admin"""
+    # Process order details provided by admin
     session = None
     try:
         if message.text.lower() == 'cancel':
@@ -3686,22 +3577,22 @@ def process_order_details(message, order_id, user_telegram_id):
         session.commit()
 
         # Notify user with beautiful formatting
-        status_emoji = "🔄"
-        status_color = "🔵"
+        status_emoji = "_"
+        status_color = "_"
         if order.status == "Shipped":
-            status_emoji = "🚚"
-            status_color = "🟢"
+            status_emoji = "_"
+            status_color = "_"
 
         tracking_info = ""
         if tracking:
             parcels_app_link = f"https://parcelsapp.com/en/tracking/{tracking}"
-            tracking_info = f"""
-<b>📬 TRACKING INFORMATION:</b>
-• Tracking Number: <code>{tracking}</code>
-• Carrier: <b>{order.carrier}</b>
-• <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
-• <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
-"""
+            
+            # Format tracking information nicely
+            tracking_info = "<b>TRACKING INFORMATION:</b>\n"
+            tracking_info += f"Tracking Number: <code>{tracking}</code>\n"
+            tracking_info += f"Carrier: <b>{order.carrier}</b>\n"
+            tracking_info += f"<a href=\"{parcels_app_link}\">Track Package on ParcelsApp</a> (Real-time updates)\n"
+            tracking_info += "<a href=\"https://aliexpress.com/trackOrder.htm\">Check on AliExpress</a>"
 
         # Calculate balance in birr
         new_balance = user.balance
@@ -3710,46 +3601,53 @@ def process_order_details(message, order_id, user_telegram_id):
         # Add balance info only if price was deducted
         balance_info = ""
         if price > 0:
-            balance_info = f"""
-<b>💰 ACCOUNT UPDATE:</b>
-• Amount charged: <b>${price:.2f}</b> ({int(price * 160)} birr)
-• New balance: <b>${new_balance:.2f}</b> ({birr_balance} birr)
-"""
+            # Format price and balance with proper formatting
+            balance_info = "\n<b>ACCOUNT UPDATE:</b>\n"
+            balance_info += f"Amount charged: <b>${price:.2f}</b> ({int(price * 160)} birr)\n"
+            balance_info += f"New balance: <b>${new_balance:.2f}</b> ({birr_balance} birr)"
 
+        # Create order update message
+        # Format customer notification message
+        order_update_msg = "_________________________\n"
+        order_update_msg += "   <b>ORDER UPDATE</b>   \n"
+        order_update_msg += "_________________________\n\n"
+        order_update_msg += f"Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status.lower()}</b>!\n\n"
+        order_update_msg += "<b>ORDER INFORMATION:</b>\n"
+        order_update_msg += f"Status: {status_emoji} <b>{order.status}</b> {status_color}\n"
+        order_update_msg += f"AliExpress Order ID: <code>{aliexpress_id}</code>\n"
+        order_update_msg += f"Amount: <b>${price:.2f}</b>\n"
+        order_update_msg += f"Updated: <b>{datetime.utcnow().strftime('%d %b %Y')}</b>\n"
+        order_update_msg += balance_info
+        
+        # Add tracking info if available
+        if tracking:
+            order_update_msg += tracking_info
+        else:
+            order_update_msg += "Your tracking information will be added soon."
+        
+        order_update_msg += "\n\n<i>Having issues with your order? Contact our support at @alipay_help_center for assistance</i>"
+        
+        # Send the complete message to user
         bot.send_message(
             user_telegram_id,
-            f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🎉 <b>ORDER UPDATE</b> 🎉  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status.lower()}</b>!
-
-<b>📋 ORDER INFORMATION:</b>
-• Status: {status_emoji} <b>{order.status}</b> {status_color}
-• AliExpress Order ID: <code>{aliexpress_id}</code>
-• Amount: <b>${price:.2f}</b>
-• Updated: <b>{datetime.utcnow().strftime('%d %b %Y')}</b>
-{balance_info}
-{tracking_info if tracking else "Your tracking information will be added soon."}
-
-<i>💫 Having issues with your order? Contact our support at @alipay_help_center for assistance 💫</i>
-""",
+            order_update_msg,
             parse_mode='HTML',
             disable_web_page_preview=True
         )
 
+        # Create admin notification message
+        admin_reply = "Order details added and user notified:\n"
+        admin_reply += f"Order #{order.order_number}\n"
+        admin_reply += f"Order ID: {aliexpress_id}\n"
+        admin_reply += f"Tracking: {tracking if tracking else 'None yet'}\n"
+        admin_reply += f"Price: ${price:.2f}\n"
+        admin_reply += f"Status: {order.status}\n"
+        admin_reply += f"User balance: ${original_balance:.2f} → ${user.balance:.2f} (-${price:.2f})"
+        
+        # Send confirmation to admin
         bot.reply_to(
             message,
-            f"""
-✅ Order details added and user notified:
-• Order #{order.order_number}
-• Order ID: {aliexpress_id}
-• Tracking: {tracking if tracking else "None yet"}
-• Price: ${price:.2f}
-• Status: {order.status}
-• User balance: ${original_balance:.2f} → ${user.balance:.2f} (-${price:.2f})
-""",
+            admin_reply,
             parse_mode='HTML'
         )
 
@@ -3805,28 +3703,26 @@ def check_subscription_status():
                         
                         # Send expiration warning with renewal button
                         renewal_markup = InlineKeyboardMarkup()
-                        renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                        renewal_markup.add(InlineKeyboardButton("Renew Now", callback_data="deposit_renew"))
                         
+                        # Format expiration message
+                        expiration_msg = "_________________________\n"
+                        expiration_msg += "   <b>SUBSCRIPTION EXPIRING SOON</b>   \n"
+                        expiration_msg += "_________________________\n\n"
+                        expiration_msg += f"Your subscription will expire in <b>{days_remaining} day{'s' if days_remaining > 1 else ''}</b>.\n\n"
+                        expiration_msg += "<b>SUBSCRIPTION DETAILS:</b>\n"
+                        expiration_msg += f"Expiry date: <b>{(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}</b>\n"
+                        expiration_msg += "Monthly fee: <b>$1.00</b> (150 birr)\n\n"
+                        expiration_msg += "<b>RENEWAL OPTIONS:</b>\n"
+                        expiration_msg += "Auto-renewal: Your subscription will auto-renew if your balance is at least $1.00\n"
+                        expiration_msg += f"Current balance: <b>${user.balance:.2f}</b>\n"
+                        expiration_msg += "Manual renewal: Click 'Renew Now' to add funds\n\n"
+                        expiration_msg += "<i>Renew now to maintain uninterrupted access!</i>"
+                        
+                        # Send the message with renewal button
                         bot.send_message(
                             user.telegram_id,
-                            f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ⚠️ <b>SUBSCRIPTION EXPIRING SOON</b> ⚠️  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Your subscription will expire in <b>{days_remaining} day{'s' if days_remaining > 1 else ''}</b>.
-
-<b>📅 SUBSCRIPTION DETAILS:</b>
-• Expiry date: <b>{(user.subscription_date + timedelta(days=30)).strftime('%Y-%m-%d')}</b>
-• Monthly fee: <b>$1.00</b> (150 birr)
-
-<b>💰 RENEWAL OPTIONS:</b>
-• Auto-renewal: Your subscription will auto-renew if your balance is at least $1.00
-• Current balance: <b>${user.balance:.2f}</b>
-• Manual renewal: Click 'Renew Now' to add funds
-
-<i>Renew now to maintain uninterrupted access!</i>
-""",
+                            expiration_msg,
                             parse_mode='HTML',
                             reply_markup=renewal_markup
                         )
@@ -3852,46 +3748,44 @@ Your subscription will expire in <b>{days_remaining} day{'s' if days_remaining >
                             if user.telegram_id in expired_subscriptions:
                                 del expired_subscriptions[user.telegram_id]
                                 
-                            # Send notification
+                            # Format auto-renewal message
+                            renewal_msg = "_________________________\n"
+                            renewal_msg += "   <b>SUBSCRIPTION AUTO-RENEWED</b>   \n"
+                            renewal_msg += "_________________________\n\n"
+                            renewal_msg += "Your subscription has been automatically renewed for 30 days.\n\n"
+                            renewal_msg += "<b>PAYMENT DETAILS:</b>\n"
+                            renewal_msg += f"Previous balance: <b>${previous_balance:.2f}</b>\n"
+                            renewal_msg += "Renewal fee: <b>$1.00</b>\n"
+                            renewal_msg += f"New balance: <b>${user.balance:.2f}</b>\n\n"
+                            renewal_msg += "<b>NEW EXPIRY DATE:</b>\n"
+                            renewal_msg += f"{(now + timedelta(days=30)).strftime('%Y-%m-%d')}\n\n"
+                            renewal_msg += "<i>Thank you for your continued subscription!</i>"
+                            
+                            # Send notification to user
                             bot.send_message(
                                 user.telegram_id,
-                                f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>SUBSCRIPTION AUTO-RENEWED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Your subscription has been automatically renewed for 30 days.
-
-<b>💰 PAYMENT DETAILS:</b>
-• Previous balance: <b>${previous_balance:.2f}</b>
-• Renewal fee: <b>$1.00</b>
-• New balance: <b>${user.balance:.2f}</b>
-
-<b>📅 NEW EXPIRY DATE:</b>
-• {(now + timedelta(days=30)).strftime('%Y-%m-%d')}
-
-<i>Thank you for your continued subscription!</i>
-""",
+                                renewal_msg,
                                 parse_mode='HTML'
                             )
                             auto_renewed += 1
-                            logger.info(f"✅ Auto-renewed subscription for user {user.telegram_id} from balance ${previous_balance:.2f} -> ${user.balance:.2f}")
+                            logger.info(f"_ Auto-renewed subscription for user {user.telegram_id} from balance ${previous_balance:.2f} -> ${user.balance:.2f}")
                             
                             # Notify admin about renewal
                             for admin_id in ADMIN_IDS:
                                 try:
+                                    # Format admin notification
+                                    admin_msg = "_________________________\n"
+                                    admin_msg += "   <b>SUBSCRIPTION AUTO-RENEWED</b>   \n"
+                                    admin_msg += "_________________________\n\n"
+                                    admin_msg += "Subscription auto-renewed for user:\n"
+                                    admin_msg += f"<b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]\n"
+                                    admin_msg += f"Previous balance: ${previous_balance:.2f}\n"
+                                    admin_msg += f"New balance: ${user.balance:.2f}"
+                                    
+                                    # Send notification to admin
                                     bot.send_message(
                                         admin_id,
-                                        f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💲 <b>SUBSCRIPTION AUTO-RENEWED</b>  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Subscription auto-renewed for user:
-👤 <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
-💰 Previous balance: ${previous_balance:.2f}
-💰 New balance: ${user.balance:.2f}
-""",
+                                        admin_msg,
                                         parse_mode='HTML'
                                     )
                                 except Exception as e:
@@ -3907,28 +3801,27 @@ Subscription auto-renewed for user:
                             
                             # Create renewal link and notification
                             renewal_markup = InlineKeyboardMarkup()
-                            renewal_markup.add(InlineKeyboardButton("💰 Renew Now", callback_data="deposit_renew"))
+                            renewal_markup.add(InlineKeyboardButton("Renew Now", callback_data="deposit_renew"))
                             
                             days_expired = abs(days_remaining)
+                            
+                            # Format the expired message
+                            expired_msg = "_________________________\n"
+                            expired_msg += "   <b>SUBSCRIPTION EXPIRED</b>   \n"
+                            expired_msg += "_________________________\n\n"
+                            expired_msg += f"Your subscription has expired {days_expired} day{'s' if days_expired != 1 else ''} ago.\n\n"
+                            expired_msg += "<b>FEATURE RESTRICTIONS:</b>\n"
+                            expired_msg += "Some features are now locked\n"
+                            expired_msg += "Deposit funds to restore full access\n\n"
+                            expired_msg += "<b>RENEWAL OPTIONS:</b>\n"
+                            expired_msg += f"Your balance: <b>${user.balance:.2f}</b>\n"
+                            expired_msg += "Required: <b>$1.00</b> (150 birr)\n\n"
+                            expired_msg += "<i>Click 'Renew Now' to regain immediate access to all features!</i>"
+                            
+                            # Send the expired notification
                             bot.send_message(
                                 user.telegram_id,
-                                f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🚫 <b>SUBSCRIPTION EXPIRED</b> 🚫  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Your subscription has expired {days_expired} day{'s' if days_expired != 1 else ''} ago.
-
-<b>❗ FEATURE RESTRICTIONS:</b>
-• Some features are now locked
-• Deposit funds to restore full access
-
-<b>💰 RENEWAL OPTIONS:</b>
-• Your balance: <b>${user.balance:.2f}</b>
-• Required: <b>$1.00</b> (150 birr)
-
-<i>Click 'Renew Now' to regain immediate access to all features!</i>
-""",
+                                expired_msg,
                                 parse_mode='HTML',
                                 reply_markup=renewal_markup
                             )
@@ -3962,7 +3855,7 @@ def run_subscription_checker():
         time.sleep(24 * 60 * 60)
 
 # Admin Dashboard Function Handlers
-@bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')
+@bot.message_handler(func=lambda msg: msg.text == '_ Admin Dashboard')
 def admin_dashboard(message):
     """Show admin dashboard with all admin features"""
     chat_id = message.chat.id
@@ -3971,7 +3864,7 @@ def admin_dashboard(message):
     if not is_admin(chat_id):
         bot.send_message(
             chat_id,
-            "⚠️ You don't have permission to access the admin dashboard.",
+            "__ You don't have permission to access the admin dashboard.",
             reply_markup=create_main_menu(True, chat_id)
         )
         return
@@ -3979,37 +3872,37 @@ def admin_dashboard(message):
     # Create admin menu
     admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     admin_menu.add(
-        KeyboardButton('👥 User Management'),
-        KeyboardButton('📦 Order Management')
+        KeyboardButton('_ User Management'),
+        KeyboardButton('_ Order Management')
     )
     admin_menu.add(
-        KeyboardButton('💰 Deposit Management'),
-        KeyboardButton('📊 System Stats')
+        KeyboardButton('_ Deposit Management'),
+        KeyboardButton('_ System Stats')
     )
     admin_menu.add(
-        KeyboardButton('📅 Subscription Management'),
-        KeyboardButton('⚙️ Bot Settings')
+        KeyboardButton('_ Subscription Management'),
+        KeyboardButton('__ Bot Settings')
     )
     admin_menu.add(
-        KeyboardButton('🔙 Back to Main Menu')
+        KeyboardButton('_ Back to Main Menu')
     )
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔐 <b>ADMIN DASHBOARD</b> 🔐  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>ADMIN DASHBOARD</b> _  
+_________________________
 
 Welcome to the Admin Dashboard! Select a management option:
 
 <b>Available Admin Features:</b>
-• 👥 <b>User Management</b> - View and manage users
-• 📦 <b>Order Management</b> - View and manage orders
-• 💰 <b>Deposit Management</b> - View and manage deposits
-• 📊 <b>System Stats</b> - View system statistics
-• 📅 <b>Subscription Management</b> - Manage user subscriptions
-• ⚙️ <b>Bot Settings</b> - Configure bot settings
+_ _ <b>User Management</b> - View and manage users
+_ _ <b>Order Management</b> - View and manage orders
+_ _ <b>Deposit Management</b> - View and manage deposits
+_ _ <b>System Stats</b> - View system statistics
+_ _ <b>Subscription Management</b> - Manage user subscriptions
+_ __ <b>Bot Settings</b> - Configure bot settings
 
 <i>Select any option to continue or go back to the main menu.</i>
 """,
@@ -4017,7 +3910,7 @@ Welcome to the Admin Dashboard! Select a management option:
         reply_markup=admin_menu
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Main Menu')
+@bot.message_handler(func=lambda msg: msg.text == '_ Back to Main Menu')
 def back_to_main_menu(message):
     """Return to main menu from admin dashboard"""
     chat_id = message.chat.id
@@ -4030,20 +3923,20 @@ def back_to_main_menu(message):
 
         bot.send_message(
             chat_id,
-            "🏠 Returning to main menu...",
+            "_ Returning to main menu...",
             reply_markup=create_main_menu(is_registered, chat_id)
         )
     except Exception as e:
         logger.error(f"Error returning to main menu: {e}")
         bot.send_message(
             chat_id,
-            "🏠 Returning to main menu...",
+            "_ Returning to main menu...",
             reply_markup=create_main_menu(True, chat_id)
         )
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '👥 User Management')
+@bot.message_handler(func=lambda msg: msg.text == '_ User Management')
 def user_management(message):
     """Show user management options"""
     chat_id = message.chat.id
@@ -4055,33 +3948,33 @@ def user_management(message):
     # Create user management menu
     user_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     user_mgmt_menu.add(
-        KeyboardButton('📋 List All Users'),
-        KeyboardButton('🔍 Find User')
+        KeyboardButton('_ List All Users'),
+        KeyboardButton('_ Find User')
     )
     user_mgmt_menu.add(
-        KeyboardButton('➕ Add User'),
-        KeyboardButton('🚫 Block User')
+        KeyboardButton('_ Add User'),
+        KeyboardButton('_ Block User')
     )
     user_mgmt_menu.add(
-        KeyboardButton('✅ Pending Approvals'),
-        KeyboardButton('🔙 Back to Admin')
+        KeyboardButton('_ Pending Approvals'),
+        KeyboardButton('_ Back to Admin')
     )
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   👥 <b>USER MANAGEMENT</b> 👥  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>USER MANAGEMENT</b> _  
+_________________________
 
 Manage all user accounts from this panel.
 
 <b>Available Actions:</b>
-• 📋 <b>List All Users</b> - View all registered users
-• 🔍 <b>Find User</b> - Search for a specific user
-• ➕ <b>Add User</b> - Manually add a new user
-• 🚫 <b>Block User</b> - Block a user from using the bot
-• ✅ <b>Pending Approvals</b> - View pending registration approvals
+_ _ <b>List All Users</b> - View all registered users
+_ _ <b>Find User</b> - Search for a specific user
+_ _ <b>Add User</b> - Manually add a new user
+_ _ <b>Block User</b> - Block a user from using the bot
+_ _ <b>Pending Approvals</b> - View pending registration approvals
 
 <i>Select an action or go back to the admin dashboard.</i>
 """,
@@ -4089,7 +3982,7 @@ Manage all user accounts from this panel.
         reply_markup=user_mgmt_menu
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Admin')
+@bot.message_handler(func=lambda msg: msg.text == '_ Back to Admin')
 def back_to_admin(message):
     """Return to admin dashboard"""
     chat_id = message.chat.id
@@ -4100,7 +3993,7 @@ def back_to_admin(message):
 
     admin_dashboard(message)
 
-@bot.message_handler(func=lambda msg: msg.text == '📋 List All Users')
+@bot.message_handler(func=lambda msg: msg.text == '_ List All Users')
 def list_all_users(message):
     """List all registered users with pagination"""
     chat_id = message.chat.id
@@ -4119,7 +4012,7 @@ def list_all_users(message):
             bot.send_message(
                 chat_id,
                 "No users are registered in the system yet.",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -4133,9 +4026,9 @@ def list_all_users(message):
 
         # Format user list with emojis and nice formatting
         users_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 <b>USER LIST</b> (Page {page})  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>USER LIST</b> (Page {page})  
+_________________________
 
 <b>Total Registered Users:</b> {total_users}
 
@@ -4143,11 +4036,11 @@ def list_all_users(message):
 
         for i, user in enumerate(users, 1):
             # Format subscription status
-            subscription_status = "❌ Inactive"
+            subscription_status = "_ Inactive"
             if user.subscription_date:
                 days_passed = (datetime.utcnow() - user.subscription_date).days
                 if days_passed < 30:
-                    subscription_status = f"✅ Active ({30 - days_passed} days left)"
+                    subscription_status = f"_ Active ({30 - days_passed} days left)"
 
             # Format balance
             balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
@@ -4157,10 +4050,10 @@ def list_all_users(message):
 
             users_text += f"""
 <b>{offset + i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
-📱 Phone: <code>{user.phone}</code>
-💰 Balance: <b>{balance}</b>
-📅 Subscription: {subscription_status}
-🗓️ Joined: {join_date}
+_ Phone: <code>{user.phone}</code>
+_ Balance: <b>{balance}</b>
+_ Subscription: {subscription_status}
+__ Joined: {join_date}
 """
 
         # Add pagination controls if needed
@@ -4169,16 +4062,16 @@ def list_all_users(message):
 
             # Only add Next button on first page
             if page == 1:
-                markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"users_page_{page+1}"))
+                markup.add(InlineKeyboardButton("__ Next Page", callback_data=f"users_page_{page+1}"))
             # Add navigation buttons for middle pages
             elif page * per_page < total_users:
                 markup.add(
-                    InlineKeyboardButton("⬅️ Previous", callback_data=f"users_page_{page-1}"),
-                    InlineKeyboardButton("➡️ Next", callback_data=f"users_page_{page+1}")
+                    InlineKeyboardButton("__ Previous", callback_data=f"users_page_{page-1}"),
+                    InlineKeyboardButton("__ Next", callback_data=f"users_page_{page+1}")
                 )
             # Only add Previous button on last page
             else:
-                markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"users_page_{page-1}"))
+                markup.add(InlineKeyboardButton("__ Previous Page", callback_data=f"users_page_{page-1}"))
 
             users_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
 
@@ -4200,8 +4093,8 @@ def list_all_users(message):
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error listing users. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error listing users. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
@@ -4232,9 +4125,9 @@ def handle_users_pagination(call):
 
         # Format user list with emojis and nice formatting
         users_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 <b>USER LIST</b> (Page {page})  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>USER LIST</b> (Page {page})  
+_________________________
 
 <b>Total Registered Users:</b> {total_users}
 
@@ -4242,11 +4135,11 @@ def handle_users_pagination(call):
 
         for i, user in enumerate(users, 1):
             # Format subscription status
-            subscription_status = "❌ Inactive"
+            subscription_status = "_ Inactive"
             if user.subscription_date:
                 days_passed = (datetime.utcnow() - user.subscription_date).days
                 if days_passed < 30:
-                    subscription_status = f"✅ Active ({30 - days_passed} days left)"
+                    subscription_status = f"_ Active ({30 - days_passed} days left)"
 
             # Format balance
             balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
@@ -4256,10 +4149,10 @@ def handle_users_pagination(call):
 
             users_text += f"""
 <b>{offset + i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
-📱 Phone: <code>{user.phone}</code>
-💰 Balance: <b>{balance}</b>
-📅 Subscription: {subscription_status}
-🗓️ Joined: {join_date}
+_ Phone: <code>{user.phone}</code>
+_ Balance: <b>{balance}</b>
+_ Subscription: {subscription_status}
+__ Joined: {join_date}
 """
 
         # Create pagination markup
@@ -4267,15 +4160,15 @@ def handle_users_pagination(call):
 
         # First page - only Next button
         if page == 1 and total_users > per_page:
-            markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"users_page_{page+1}"))
+            markup.add(InlineKeyboardButton("__ Next Page", callback_data=f"users_page_{page+1}"))
         # Last page - only Previous button
         elif page * per_page >= total_users:
-            markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"users_page_{page-1}"))
+            markup.add(InlineKeyboardButton("__ Previous Page", callback_data=f"users_page_{page-1}"))
         # Middle pages - both Previous and Next buttons
         else:
             markup.add(
-                InlineKeyboardButton("⬅️ Previous", callback_data=f"users_page_{page-1}"),
-                InlineKeyboardButton("➡️ Next", callback_data=f"users_page_{page+1}")
+                InlineKeyboardButton("__ Previous", callback_data=f"users_page_{page-1}"),
+                InlineKeyboardButton("__ Next", callback_data=f"users_page_{page+1}")
             )
 
         users_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
@@ -4299,7 +4192,7 @@ def handle_users_pagination(call):
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🔍 Find User')
+@bot.message_handler(func=lambda msg: msg.text == '_ Find User')
 def find_user_prompt(message):
     """Prompt admin to search for a user"""
     chat_id = message.chat.id
@@ -4313,19 +4206,19 @@ def find_user_prompt(message):
 
     # Create a cancel button
     cancel_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    cancel_markup.add(KeyboardButton('🔙 Back to Admin'))
+    cancel_markup.add(KeyboardButton('_ Back to Admin'))
 
     bot.send_message(
         chat_id,
         """
-🔍 <b>FIND USER</b>
+_ <b>FIND USER</b>
 
 Please enter any of the following to search for a user:
-• Telegram ID
-• Name (full or partial)
-• Phone number (full or partial)
+_ Telegram ID
+_ Name (full or partial)
+_ Phone number (full or partial)
 
-<i>Or click '🔙 Back to Admin' to cancel.</i>
+<i>Or click '_ Back to Admin' to cancel.</i>
 """,
         parse_mode='HTML',
         reply_markup=cancel_markup
@@ -4339,7 +4232,7 @@ def search_user(message):
     session = None
 
     # Check if user canceled the search
-    if search_query == '🔙 Back to Admin':
+    if search_query == '_ Back to Admin':
         del user_states[chat_id]
         back_to_admin(message)
         return
@@ -4372,16 +4265,16 @@ def search_user(message):
         if not users:
             bot.send_message(
                 chat_id,
-                f"❌ No users found matching '{search_query}'",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                f"_ No users found matching '{search_query}'",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
         # Display the search results
         results_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔍 <b>SEARCH RESULTS</b>  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SEARCH RESULTS</b>  
+_________________________
 
 Found <b>{len(users)}</b> user(s) matching '{search_query}':
 
@@ -4389,11 +4282,11 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
 
         for i, user in enumerate(users, 1):
             # Format subscription status
-            subscription_status = "❌ Inactive"
+            subscription_status = "_ Inactive"
             if user.subscription_date:
                 days_passed = (datetime.utcnow() - user.subscription_date).days
                 if days_passed < 30:
-                    subscription_status = f"✅ Active ({30 - days_passed} days left)"
+                    subscription_status = f"_ Active ({30 - days_passed} days left)"
 
             # Format balance
             balance = f"${user.balance:.2f}" if user.balance is not None else "$0.00"
@@ -4403,15 +4296,15 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
 
             # Add inline keyboard for each user for detailed actions
             user_markup = InlineKeyboardMarkup()
-            user_markup.add(InlineKeyboardButton(f"👤 Manage User #{i}", callback_data=f"manage_user_{user.telegram_id}"))
+            user_markup.add(InlineKeyboardButton(f"_ Manage User #{i}", callback_data=f"manage_user_{user.telegram_id}"))
 
             user_text = f"""
 <b>{i}. {user.name}</b> [ID: <code>{user.telegram_id}</code>]
-📱 Phone: <code>{user.phone}</code>
-🏠 Address: {user.address}
-💰 Balance: <b>{balance}</b>
-📅 Subscription: {subscription_status}
-🗓️ Joined: {join_date}
+_ Phone: <code>{user.phone}</code>
+_ Address: {user.address}
+_ Balance: <b>{balance}</b>
+_ Subscription: {subscription_status}
+__ Joined: {join_date}
 """
 
             # For first result, append to results text. For subsequent results, send as separate messages
@@ -4436,8 +4329,8 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error searching users. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error searching users. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
@@ -4465,23 +4358,23 @@ def handle_manage_user(call):
         # Create user management markup
         user_markup = InlineKeyboardMarkup(row_width=2)
         user_markup.add(
-            InlineKeyboardButton("💰 Edit Balance", callback_data=f"edit_balance_{user.telegram_id}"),
-            InlineKeyboardButton("📅 Update Subscription", callback_data=f"update_sub_{user.telegram_id}")
+            InlineKeyboardButton("_ Edit Balance", callback_data=f"edit_balance_{user.telegram_id}"),
+            InlineKeyboardButton("_ Update Subscription", callback_data=f"update_sub_{user.telegram_id}")
         )
         user_markup.add(
-            InlineKeyboardButton("📋 View Orders", callback_data=f"view_orders_{user.telegram_id}"),
-            InlineKeyboardButton("💬 Send Message", callback_data=f"send_msg_{user.telegram_id}")
+            InlineKeyboardButton("_ View Orders", callback_data=f"view_orders_{user.telegram_id}"),
+            InlineKeyboardButton("_ Send Message", callback_data=f"send_msg_{user.telegram_id}")
         )
         user_markup.add(
-            InlineKeyboardButton("🚫 Block User", callback_data=f"block_user_{user.telegram_id}")
+            InlineKeyboardButton("_ Block User", callback_data=f"block_user_{user.telegram_id}")
         )
 
         # Format subscription status
-        subscription_status = "❌ Inactive"
+        subscription_status = "_ Inactive"
         if user.subscription_date:
             days_passed = (datetime.utcnow() - user.subscription_date).days
             if days_passed < 30:
-                subscription_status = f"✅ Active ({30 - days_passed} days left)"
+                subscription_status = f"_ Active ({30 - days_passed} days left)"
 
         # Get user stats
         order_count = session.query(Order).filter_by(user_id=user.id).count()
@@ -4491,27 +4384,27 @@ def handle_manage_user(call):
         bot.send_message(
             chat_id,
             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   👤 <b>USER MANAGEMENT</b>  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>USER MANAGEMENT</b>  
+_________________________
 
 <b>User:</b> {user.name}
 <b>Telegram ID:</b> <code>{user.telegram_id}</code>
 <b>Phone:</b> <code>{user.phone}</code>
 <b>Address:</b> {user.address}
 
-<b>💰 FINANCIAL INFO:</b>
-• Balance: <b>${user.balance:.2f}</b>
-• Orders: {order_count}
-• Pending Deposits: {pending_deposits}
+<b>_ FINANCIAL INFO:</b>
+_ Balance: <b>${user.balance:.2f}</b>
+_ Orders: {order_count}
+_ Pending Deposits: {pending_deposits}
 
-<b>📅 SUBSCRIPTION:</b>
-• Status: {subscription_status}
-• Start Date: {user.subscription_date.strftime('%Y-%m-%d') if user.subscription_date else 'N/A'}
+<b>_ SUBSCRIPTION:</b>
+_ Status: {subscription_status}
+_ Start Date: {user.subscription_date.strftime('%Y-%m-%d') if user.subscription_date else 'N/A'}
 
-<b>📊 ACTIVITY:</b>
-• Joined: {user.created_at.strftime('%Y-%m-%d')}
-• Last Updated: {user.updated_at.strftime('%Y-%m-%d')}
+<b>_ ACTIVITY:</b>
+_ Joined: {user.created_at.strftime('%Y-%m-%d')}
+_ Last Updated: {user.updated_at.strftime('%Y-%m-%d')}
 
 <i>Select an action below to manage this user.</i>
 """,
@@ -4529,7 +4422,7 @@ def handle_manage_user(call):
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '📦 Order Management')
+@bot.message_handler(func=lambda msg: msg.text == '_ Order Management')
 def order_management(message):
     """Show order management options"""
     chat_id = message.chat.id
@@ -4541,33 +4434,33 @@ def order_management(message):
     # Create order management menu
     order_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     order_mgmt_menu.add(
-        KeyboardButton('📋 List All Orders'),
-        KeyboardButton('🔍 Find Order')
+        KeyboardButton('_ List All Orders'),
+        KeyboardButton('_ Find Order')
     )
     order_mgmt_menu.add(
-        KeyboardButton('⏳ Pending Orders'),
-        KeyboardButton('🚚 Shipping Orders')
+        KeyboardButton('_ Pending Orders'),
+        KeyboardButton('_ Shipping Orders')
     )
     order_mgmt_menu.add(
-        KeyboardButton('✅ Completed Orders'),
-        KeyboardButton('🔙 Back to Admin')
+        KeyboardButton('_ Completed Orders'),
+        KeyboardButton('_ Back to Admin')
     )
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📦 <b>ORDER MANAGEMENT</b> 📦  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>ORDER MANAGEMENT</b> _  
+_________________________
 
 Manage all customer orders from this panel.
 
 <b>Available Actions:</b>
-• 📋 <b>List All Orders</b> - View all orders in the system
-• 🔍 <b>Find Order</b> - Search for a specific order
-• ⏳ <b>Pending Orders</b> - View orders awaiting processing
-• 🚚 <b>Shipping Orders</b> - View orders in transit
-• ✅ <b>Completed Orders</b> - View delivered orders
+_ _ <b>List All Orders</b> - View all orders in the system
+_ _ <b>Find Order</b> - Search for a specific order
+_ _ <b>Pending Orders</b> - View orders awaiting processing
+_ _ <b>Shipping Orders</b> - View orders in transit
+_ _ <b>Completed Orders</b> - View delivered orders
 
 <i>Select an action or go back to the admin dashboard.</i>
 """,
@@ -4575,7 +4468,7 @@ Manage all customer orders from this panel.
         reply_markup=order_mgmt_menu
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '📋 List All Orders')
+@bot.message_handler(func=lambda msg: msg.text == '_ List All Orders')
 def list_all_orders(message):
     """List all orders with pagination"""
     chat_id = message.chat.id
@@ -4594,7 +4487,7 @@ def list_all_orders(message):
             bot.send_message(
                 chat_id,
                 "No orders have been placed in the system yet.",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -4608,9 +4501,9 @@ def list_all_orders(message):
 
         # Format order list with emojis and nice formatting
         orders_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 <b>ORDER LIST</b> (Page {page})  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>ORDER LIST</b> (Page {page})  
+_________________________
 
 <b>Total Orders:</b> {total_orders}
 
@@ -4618,11 +4511,11 @@ def list_all_orders(message):
 
         for i, (order, user) in enumerate(orders, 1):
             # Format status with emoji
-            status_emoji = "⏳"
+            status_emoji = "_"
             if order.status == "Shipping":
-                status_emoji = "🚚"
+                status_emoji = "_"
             elif order.status == "Completed":
-                status_emoji = "✅"
+                status_emoji = "_"
 
             # Format date
             order_date = order.created_at.strftime("%Y-%m-%d")
@@ -4634,15 +4527,15 @@ def list_all_orders(message):
 
             orders_text += f"""
 <b>{offset + i}. Order #{order.order_number}</b> - {status_emoji} {order.status}
-👤 Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
-🛍️ Product: <i>{product_link}</i>
-💰 Amount: <b>${order.amount:.2f}</b>
-📅 Date: {order_date}
+_ Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
+__ Product: <i>{product_link}</i>
+_ Amount: <b>${order.amount:.2f}</b>
+_ Date: {order_date}
 """
             if order.order_id:
-                orders_text += f"🆔 AliExpress ID: <code>{order.order_id}</code>\n"
+                orders_text += f"_ AliExpress ID: <code>{order.order_id}</code>\n"
             if order.tracking_number:
-                orders_text += f"📦 Tracking: <code>{order.tracking_number}</code>\n"
+                orders_text += f"_ Tracking: <code>{order.tracking_number}</code>\n"
 
         # Add pagination controls if needed
         if total_orders > per_page:
@@ -4650,16 +4543,16 @@ def list_all_orders(message):
 
             # Only add Next button on first page
             if page == 1:
-                markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"orders_page_{page+1}"))
+                markup.add(InlineKeyboardButton("__ Next Page", callback_data=f"orders_page_{page+1}"))
             # Add navigation buttons for middle pages
             elif page * per_page < total_orders:
                 markup.add(
-                    InlineKeyboardButton("⬅️ Previous", callback_data=f"orders_page_{page-1}"),
-                    InlineKeyboardButton("➡️ Next", callback_data=f"orders_page_{page+1}")
+                    InlineKeyboardButton("__ Previous", callback_data=f"orders_page_{page-1}"),
+                    InlineKeyboardButton("__ Next", callback_data=f"orders_page_{page+1}")
                 )
             # Only add Previous button on last page
             else:
-                markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"orders_page_{page-1}"))
+                markup.add(InlineKeyboardButton("__ Previous Page", callback_data=f"orders_page_{page-1}"))
 
             orders_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
 
@@ -4681,8 +4574,8 @@ def list_all_orders(message):
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error listing orders. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error listing orders. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
@@ -4713,9 +4606,9 @@ def handle_orders_pagination(call):
 
         # Format order list with emojis and nice formatting
         orders_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 <b>ORDER LIST</b> (Page {page})  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>ORDER LIST</b> (Page {page})  
+_________________________
 
 <b>Total Orders:</b> {total_orders}
 
@@ -4723,11 +4616,11 @@ def handle_orders_pagination(call):
 
         for i, (order, user) in enumerate(orders, 1):
             # Format status with emoji
-            status_emoji = "⏳"
+            status_emoji = "_"
             if order.status == "Shipping":
-                status_emoji = "🚚"
+                status_emoji = "_"
             elif order.status == "Completed":
-                status_emoji = "✅"
+                status_emoji = "_"
 
             # Format date
             order_date = order.created_at.strftime("%Y-%m-%d")
@@ -4739,30 +4632,30 @@ def handle_orders_pagination(call):
 
             orders_text += f"""
 <b>{offset + i}. Order #{order.order_number}</b> - {status_emoji} {order.status}
-👤 Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
-🛍️ Product: <i>{product_link}</i>
-💰 Amount: <b>${order.amount:.2f}</b>
-📅 Date: {order_date}
+_ Customer: <b>{user.name}</b> [ID: <code>{user.telegram_id}</code>]
+__ Product: <i>{product_link}</i>
+_ Amount: <b>${order.amount:.2f}</b>
+_ Date: {order_date}
 """
             if order.order_id:
-                orders_text += f"🆔 AliExpress ID: <code>{order.order_id}</code>\n"
+                orders_text += f"_ AliExpress ID: <code>{order.order_id}</code>\n"
             if order.tracking_number:
-                orders_text += f"📦 Tracking: <code>{order.tracking_number}</code>\n"
+                orders_text += f"_ Tracking: <code>{order.tracking_number}</code>\n"
 
         # Create pagination markup
         markup = InlineKeyboardMarkup()
 
         # First page - only Next button
         if page == 1 and total_orders > per_page:
-            markup.add(InlineKeyboardButton("➡️ Next Page", callback_data=f"orders_page_{page+1}"))
+            markup.add(InlineKeyboardButton("__ Next Page", callback_data=f"orders_page_{page+1}"))
         # Last page - only Previous button
         elif page * per_page >= total_orders:
-            markup.add(InlineKeyboardButton("⬅️ Previous Page", callback_data=f"orders_page_{page-1}"))
+            markup.add(InlineKeyboardButton("__ Previous Page", callback_data=f"orders_page_{page-1}"))
         # Middle pages - both Previous and Next buttons
         else:
             markup.add(
-                InlineKeyboardButton("⬅️ Previous", callback_data=f"orders_page_{page-1}"),
-                InlineKeyboardButton("➡️ Next", callback_data=f"orders_page_{page+1}")
+                InlineKeyboardButton("__ Previous", callback_data=f"orders_page_{page-1}"),
+                InlineKeyboardButton("__ Next", callback_data=f"orders_page_{page+1}")
             )
 
         orders_text += "\n\n<i>Use the buttons below to navigate between pages.</i>"
@@ -4786,7 +4679,7 @@ def handle_orders_pagination(call):
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '💰 Deposit Management')
+@bot.message_handler(func=lambda msg: msg.text == '_ Deposit Management')
 def deposit_management(message):
     """Show deposit management options"""
     chat_id = message.chat.id
@@ -4798,31 +4691,31 @@ def deposit_management(message):
     # Create deposit management menu
     deposit_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     deposit_mgmt_menu.add(
-        KeyboardButton('📋 Pending Deposits'),
-        KeyboardButton('🔍 Find Deposit')
+        KeyboardButton('_ Pending Deposits'),
+        KeyboardButton('_ Find Deposit')
     )
     deposit_mgmt_menu.add(
-        KeyboardButton('📊 Deposit Summary'),
-        KeyboardButton('➕ Add Balance')
+        KeyboardButton('_ Deposit Summary'),
+        KeyboardButton('_ Add Balance')
     )
     deposit_mgmt_menu.add(
-        KeyboardButton('🔙 Back to Admin')
+        KeyboardButton('_ Back to Admin')
     )
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>DEPOSIT MANAGEMENT</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT MANAGEMENT</b> _  
+_________________________
 
 Manage user deposits and balance from this panel.
 
 <b>Available Actions:</b>
-• 📋 <b>Pending Deposits</b> - View deposits awaiting approval
-• 🔍 <b>Find Deposit</b> - Search for a specific deposit
-• 📊 <b>Deposit Summary</b> - View deposit statistics
-• ➕ <b>Add Balance</b> - Manually add balance to a user
+_ _ <b>Pending Deposits</b> - View deposits awaiting approval
+_ _ <b>Find Deposit</b> - Search for a specific deposit
+_ _ <b>Deposit Summary</b> - View deposit statistics
+_ _ <b>Add Balance</b> - Manually add balance to a user
 
 <i>Select an action or go back to the admin dashboard.</i>
 """,
@@ -4830,7 +4723,7 @@ Manage user deposits and balance from this panel.
         reply_markup=deposit_mgmt_menu
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '📋 Pending Deposits')
+@bot.message_handler(func=lambda msg: msg.text == '_ Pending Deposits')
 def list_pending_deposits(message):
     """List pending deposits for approval"""
     chat_id = message.chat.id
@@ -4856,21 +4749,21 @@ def list_pending_deposits(message):
             bot.send_message(
                 chat_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 <b>DEPOSIT MANAGEMENT</b>  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT MANAGEMENT</b>  
+_________________________
 
-✅ <b>No manual approvals needed!</b>
+_ <b>No manual approvals needed!</b>
 
 All deposits have been processed. There are no deposits waiting for manual approval.
 
 <b>{auto_approved_count}</b> deposits have been automatically approved by the system.
 
-<i>✅ Online payments through Chapa are now fully automated and require no admin approval!</i>
+<i>_ Online payments through Chapa are now fully automated and require no admin approval!</i>
 <i>Only manual deposits (with screenshots) require admin review.</i>
 """,
                 parse_mode='HTML',
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -4878,14 +4771,14 @@ All deposits have been processed. There are no deposits waiting for manual appro
         bot.send_message(
             chat_id,
             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>DEPOSIT MANAGEMENT</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT MANAGEMENT</b> _  
+_________________________
 
 Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
 <b>{auto_approved_count}</b> deposits have been automatically approved by the system.
 
-<i>✅ Online payments through Chapa are now automatically verified and approved!</i>
+<i>_ Online payments through Chapa are now automatically verified and approved!</i>
 <i>Manual deposits (with screenshots) still require admin approval.</i>
 
 <i>Each pending deposit will be shown below with approval options.</i>
@@ -4898,8 +4791,8 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
             # Create inline keyboard for approval
             markup = InlineKeyboardMarkup(row_width=2)
             markup.add(
-                InlineKeyboardButton("✅ Approve", callback_data=f"approve_deposit_{deposit.id}"),
-                InlineKeyboardButton("❌ Reject", callback_data=f"reject_deposit_{deposit.id}")
+                InlineKeyboardButton("_ Approve", callback_data=f"approve_deposit_{deposit.id}"),
+                InlineKeyboardButton("_ Reject", callback_data=f"reject_deposit_{deposit.id}")
             )
 
             # Format deposit message
@@ -4908,9 +4801,9 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
             deposit_msg = f"""
 <b>Deposit #{deposit.id}</b>
 
-👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
-💰 <b>Amount:</b> ${deposit.amount:.2f}
-⏰ <b>Requested:</b> {deposit_date}
+_ <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+_ <b>Amount:</b> ${deposit.amount:.2f}
+_ <b>Requested:</b> {deposit_date}
 
 <i>Use the buttons below to approve or reject this deposit.</i>
 """
@@ -4927,8 +4820,8 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error listing pending deposits. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error listing pending deposits. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
@@ -4980,9 +4873,9 @@ def handle_deposit_approval(call):
             bot.send_message(
                 user.telegram_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT APPROVED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT APPROVED</b> _  
+_________________________
 
 Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
 
@@ -4996,12 +4889,12 @@ Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
             # Update admin message
             bot.edit_message_text(
                 f"""
-<b>Deposit #{deposit.id}</b> - ✅ APPROVED
+<b>Deposit #{deposit.id}</b> - _ APPROVED
 
-👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
-💰 <b>Amount:</b> ${deposit.amount:.2f}
-💳 <b>New Balance:</b> ${user.balance:.2f}
-⏰ <b>Approved at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+_ <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+_ <b>Amount:</b> ${deposit.amount:.2f}
+_ <b>New Balance:</b> ${user.balance:.2f}
+_ <b>Approved at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 <i>User has been notified of the approval.</i>
 """,
@@ -5021,9 +4914,9 @@ Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
             bot.send_message(
                 user.telegram_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ❌ <b>DEPOSIT REJECTED</b> ❌  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>DEPOSIT REJECTED</b> _  
+_________________________
 
 Your deposit of <b>${deposit.amount:.2f}</b> has been rejected.
 
@@ -5039,11 +4932,11 @@ Please contact customer support for assistance or try again with a clearer payme
             # Update admin message
             bot.edit_message_text(
                 f"""
-<b>Deposit #{deposit.id}</b> - ❌ REJECTED
+<b>Deposit #{deposit.id}</b> - _ REJECTED
 
-👤 <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
-💰 <b>Amount:</b> ${deposit.amount:.2f}
-⏰ <b>Rejected at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+_ <b>User:</b> {user.name} [ID: <code>{user.telegram_id}</code>]
+_ <b>Amount:</b> ${deposit.amount:.2f}
+_ <b>Rejected at:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 <i>User has been notified of the rejection.</i>
 """,
@@ -5061,7 +4954,7 @@ Please contact customer support for assistance or try again with a clearer payme
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '➕ Add Balance')
+@bot.message_handler(func=lambda msg: msg.text == '_ Add Balance')
 def add_balance_prompt(message):
     """Prompt admin to add balance to a user"""
     chat_id = message.chat.id
@@ -5075,18 +4968,18 @@ def add_balance_prompt(message):
 
     # Create a cancel button
     cancel_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    cancel_markup.add(KeyboardButton('🔙 Back to Admin'))
+    cancel_markup.add(KeyboardButton('_ Back to Admin'))
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ➕ <b>ADD USER BALANCE</b> ➕  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>ADD USER BALANCE</b> _  
+_________________________
 
 Please enter the user's Telegram ID to add balance to their account.
 
-<i>Or click '🔙 Back to Admin' to cancel.</i>
+<i>Or click '_ Back to Admin' to cancel.</i>
 """,
         parse_mode='HTML',
         reply_markup=cancel_markup
@@ -5100,7 +4993,7 @@ def process_balance_user_id(message):
     session = None
 
     # Check if user canceled
-    if user_input == '🔙 Back to Admin':
+    if user_input == '_ Back to Admin':
         if chat_id in user_states:
             del user_states[chat_id]
         back_to_admin(message)
@@ -5117,8 +5010,8 @@ def process_balance_user_id(message):
         except ValueError:
             bot.send_message(
                 chat_id,
-                "❌ Invalid Telegram ID. Please enter a valid numeric ID.",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                "_ Invalid Telegram ID. Please enter a valid numeric ID.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -5129,8 +5022,8 @@ def process_balance_user_id(message):
         if not user:
             bot.send_message(
                 chat_id,
-                f"❌ No user found with Telegram ID {user_telegram_id}",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                f"_ No user found with Telegram ID {user_telegram_id}",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -5146,9 +5039,9 @@ def process_balance_user_id(message):
         bot.send_message(
             chat_id,
             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   👤 <b>USER FOUND</b> 👤  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>USER FOUND</b> _  
+_________________________
 
 <b>User:</b> {user.name}
 <b>Telegram ID:</b> <code>{user.telegram_id}</code>
@@ -5157,10 +5050,10 @@ def process_balance_user_id(message):
 Please enter the amount in USD to add to the user's balance.
 (e.g., 10 for $10.00)
 
-<i>Or click '🔙 Back to Admin' to cancel.</i>
+<i>Or click '_ Back to Admin' to cancel.</i>
 """,
             parse_mode='HTML',
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
 
     except Exception as e:
@@ -5168,8 +5061,8 @@ Please enter the amount in USD to add to the user's balance.
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error processing user ID. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error processing user ID. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
@@ -5182,7 +5075,7 @@ def process_balance_amount(message):
     session = None
 
     # Check if user canceled
-    if amount_input == '🔙 Back to Admin':
+    if amount_input == '_ Back to Admin':
         if chat_id in user_states:
             del user_states[chat_id]
         back_to_admin(message)
@@ -5207,8 +5100,8 @@ def process_balance_amount(message):
         except ValueError:
             bot.send_message(
                 chat_id,
-                "❌ Invalid amount. Please enter a positive number.",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                "_ Invalid amount. Please enter a positive number.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -5219,8 +5112,8 @@ def process_balance_amount(message):
         if not user:
             bot.send_message(
                 chat_id,
-                "❌ User not found. They may have been deleted.",
-                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+                "_ User not found. They may have been deleted.",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
             )
             return
 
@@ -5237,9 +5130,9 @@ def process_balance_amount(message):
         bot.send_message(
             chat_id,
             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>BALANCE ADDED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>BALANCE ADDED</b> _  
+_________________________
 
 <b>User:</b> {user_name}
 <b>Telegram ID:</b> <code>{user_telegram_id}</code>
@@ -5250,16 +5143,16 @@ def process_balance_amount(message):
 <i>The user has been notified of the balance update.</i>
 """,
             parse_mode='HTML',
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
 
         # Notify user of balance update
         bot.send_message(
             user_telegram_id,
             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>BALANCE UPDATED</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>BALANCE UPDATED</b> _  
+_________________________
 
 <b>Amount Added:</b> ${amount:.2f}
 <b>New Balance:</b> ${new_balance:.2f}
@@ -5276,13 +5169,13 @@ Your account balance has been updated by the administrator.
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error adding balance. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error adding balance. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '📅 Subscription Management')
+@bot.message_handler(func=lambda msg: msg.text == '_ Subscription Management')
 def subscription_management(message):
     """Show subscription management options"""
     chat_id = message.chat.id
@@ -5294,31 +5187,31 @@ def subscription_management(message):
     # Create subscription management menu
     subscription_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     subscription_mgmt_menu.add(
-        KeyboardButton('📋 List Subscriptions'),
-        KeyboardButton('🔍 Find Subscription')
+        KeyboardButton('_ List Subscriptions'),
+        KeyboardButton('_ Find Subscription')
     )
     subscription_mgmt_menu.add(
-        KeyboardButton('⏰ Expiring Soon'),
-        KeyboardButton('➕ Extend Subscription')
+        KeyboardButton('_ Expiring Soon'),
+        KeyboardButton('_ Extend Subscription')
     )
     subscription_mgmt_menu.add(
-        KeyboardButton('🔙 Back to Admin')
+        KeyboardButton('_ Back to Admin')
     )
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📅 <b>SUBSCRIPTION MANAGEMENT</b> 📅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SUBSCRIPTION MANAGEMENT</b> _  
+_________________________
 
 Manage user subscriptions from this panel.
 
 <b>Available Actions:</b>
-• 📋 <b>List Subscriptions</b> - View all active subscriptions
-• 🔍 <b>Find Subscription</b> - Search for a user's subscription
-• ⏰ <b>Expiring Soon</b> - View subscriptions expiring soon
-• ➕ <b>Extend Subscription</b> - Manually extend a subscription
+_ _ <b>List Subscriptions</b> - View all active subscriptions
+_ _ <b>Find Subscription</b> - Search for a user's subscription
+_ _ <b>Expiring Soon</b> - View subscriptions expiring soon
+_ _ <b>Extend Subscription</b> - Manually extend a subscription
 
 <i>Select an action or go back to the admin dashboard.</i>
 """,
@@ -5326,7 +5219,7 @@ Manage user subscriptions from this panel.
         reply_markup=subscription_mgmt_menu
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '📊 System Stats')
+@bot.message_handler(func=lambda msg: msg.text == '_ System Stats')
 def system_stats(message):
     """Show system statistics"""
     chat_id = message.chat.id
@@ -5367,39 +5260,39 @@ def system_stats(message):
 
         # Format the stats message
         stats_message = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>SYSTEM STATISTICS</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SYSTEM STATISTICS</b> _  
+_________________________
 
-<b>📆 DATE:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>_ DATE:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-<b>👥 USER STATISTICS:</b>
-• Total Users: {total_users}
-• Active Subscriptions: {active_subscriptions}
-• Subscription Rate: {int(active_subscriptions/total_users*100) if total_users > 0 else 0}%
+<b>_ USER STATISTICS:</b>
+_ Total Users: {total_users}
+_ Active Subscriptions: {active_subscriptions}
+_ Subscription Rate: {int(active_subscriptions/total_users*100) if total_users > 0 else 0}%
 
-<b>📦 ORDER STATISTICS:</b>
-• Total Orders: {total_orders}
-• Processing: {processing_orders}
-• Shipped: {shipped_orders}
-• Completed: {completed_orders}
+<b>_ ORDER STATISTICS:</b>
+_ Total Orders: {total_orders}
+_ Processing: {processing_orders}
+_ Shipped: {shipped_orders}
+_ Completed: {completed_orders}
 
-<b>💰 FINANCIAL STATISTICS:</b>
-• Total User Balance: ${total_balance:.2f}
-• Pending Deposits: {pending_deposits}
+<b>_ FINANCIAL STATISTICS:</b>
+_ Total User Balance: ${total_balance:.2f}
+_ Pending Deposits: {pending_deposits}
 
-<b>🔄 RECENT ACTIVITY:</b>
+<b>_ RECENT ACTIVITY:</b>
 """
 
         # Add recent users
         stats_message += "\n<b>New Users:</b>"
         for user in recent_users:
-            stats_message += f"\n• {user.name} ({user.created_at.strftime('%Y-%m-%d')})"
+            stats_message += f"\n_ {user.name} ({user.created_at.strftime('%Y-%m-%d')})"
 
         # Add recent orders
         stats_message += "\n\n<b>Recent Orders:</b>"
         for order in recent_orders:
-            stats_message += f"\n• Order #{order.order_number} - {order.status} ({order.created_at.strftime('%Y-%m-%d')})"
+            stats_message += f"\n_ Order #{order.order_number} - {order.status} ({order.created_at.strftime('%Y-%m-%d')})"
 
         bot.send_message(
             chat_id,
@@ -5412,13 +5305,13 @@ def system_stats(message):
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ Error generating system statistics. Please try again later.",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
+            "_ Error generating system statistics. Please try again later.",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('_ Back to Admin'))
         )
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
+@bot.message_handler(func=lambda msg: msg.text == '_ Help Center')
 def help_center(message):
     """Handle Help Center button with all necessary information"""
     chat_id = message.chat.id
@@ -5426,34 +5319,34 @@ def help_center(message):
     # Create help center inline buttons
     help_markup = InlineKeyboardMarkup(row_width=1)
     help_markup.add(
-        InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
-        InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
-        InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
-        InlineKeyboardButton("🔍 How to Track Orders", callback_data="help_track"),
-        InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center")
+        InlineKeyboardButton("_ How to Register", callback_data="help_register"),
+        InlineKeyboardButton("_ How to Deposit", callback_data="help_deposit"),
+        InlineKeyboardButton("__ How to Order", callback_data="help_order"),
+        InlineKeyboardButton("_ How to Track Orders", callback_data="help_track"),
+        InlineKeyboardButton("_ Contact Support", url="https://t.me/alipay_help_center")
     )
 
     bot.send_message(
         chat_id,
         """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ❓ <b>HELP CENTER</b> ❓  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>HELP CENTER</b> _  
+_________________________
 
 <b>Welcome to AliPay_ETH Help Center!</b>
 
 How can we assist you today? Select a topic below to get detailed information and step-by-step guides.
 
-<b>📋 AVAILABLE HELP TOPICS:</b>
-• Registration Process
-• Deposit Methods
-• Ordering from AliExpress
-• Tracking Your Orders
-• Subscription Benefits
+<b>_ AVAILABLE HELP TOPICS:</b>
+_ Registration Process
+_ Deposit Methods
+_ Ordering from AliExpress
+_ Tracking Your Orders
+_ Subscription Benefits
 
 <i>If you need direct assistance, click 'Contact Support' to chat with our team.</i>
 
-<b>💡 TIP:</b> Our team is available 7 days a week to help you with any questions!
+<b>_ TIP:</b> Our team is available 7 days a week to help you with any questions!
 """,
         parse_mode='HTML',
         reply_markup=help_markup
@@ -5469,31 +5362,31 @@ def handle_help_buttons(call):
 
     # Back button for all help responses
     back_markup = InlineKeyboardMarkup()
-    back_markup.add(InlineKeyboardButton("◀️ Back to Help Center", callback_data="help_main"))
-    back_markup.add(InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center"))
+    back_markup.add(InlineKeyboardButton("__ Back to Help Center", callback_data="help_main"))
+    back_markup.add(InlineKeyboardButton("_ Contact Support", url="https://t.me/alipay_help_center"))
 
     if help_topic == "register":
         bot.send_message(
             chat_id,
             """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📝 <b>HOW TO REGISTER</b> 📝  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>HOW TO REGISTER</b> _  
+_________________________
 
 <b>Registration Process:</b>
 
-1️⃣ Click <b>🔑 Register</b> on the main menu
-2️⃣ Enter your full name when prompted
-3️⃣ Provide your complete delivery address
-4️⃣ Enter your phone number (format: 09xxxxxxxx)
-5️⃣ Pay the registration fee of 350 birr (200 birr one-time + 150 birr first month)
+1__ Click <b>_ Register</b> on the main menu
+2__ Enter your full name when prompted
+3__ Provide your complete delivery address
+4__ Enter your phone number (format: 09xxxxxxxx)
+5__ Pay the registration fee of 350 birr (200 birr one-time + 150 birr first month)
 
 <b>After Registration:</b>
-• Your account will be activated immediately
-• You'll gain access to all features
-• You can start depositing funds and placing orders
+_ Your account will be activated immediately
+_ You'll gain access to all features
+_ You can start depositing funds and placing orders
 
-<b>💡 TIP:</b> Make sure to provide accurate details for smooth delivery of your orders.
+<b>_ TIP:</b> Make sure to provide accurate details for smooth delivery of your orders.
 """,
             parse_mode='HTML',
             reply_markup=back_markup
@@ -5503,28 +5396,28 @@ def handle_help_buttons(call):
         bot.send_message(
             chat_id,
             """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>HOW TO DEPOSIT</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>HOW TO DEPOSIT</b> _  
+_________________________
 
 <b>Deposit Process:</b>
 
-1️⃣ Click <b>💰 Deposit</b> on the main menu
-2️⃣ Select an amount or choose "Customize"
-3️⃣ Transfer the exact amount to our payment details
-4️⃣ Take a screenshot of your payment confirmation
-5️⃣ Send the screenshot to the bot
+1__ Click <b>_ Deposit</b> on the main menu
+2__ Select an amount or choose "Customize"
+3__ Transfer the exact amount to our payment details
+4__ Take a screenshot of your payment confirmation
+5__ Send the screenshot to the bot
 
 <b>Payment Methods:</b>
-• Commercial Bank of Ethiopia (CBE)
-• TeleBirr mobile money
+_ Commercial Bank of Ethiopia (CBE)
+_ TeleBirr mobile money
 
 <b>After Deposit:</b>
-• Your payment will be verified
-• Your balance will be updated automatically
-• You can start placing orders immediately
+_ Your payment will be verified
+_ Your balance will be updated automatically
+_ You can start placing orders immediately
 
-<b>💡 TIP:</b> Remember that a $1 (150 birr) monthly subscription fee is automatically deducted from your first deposit.
+<b>_ TIP:</b> Remember that a $1 (150 birr) monthly subscription fee is automatically deducted from your first deposit.
 """,
             parse_mode='HTML',
             reply_markup=back_markup
@@ -5534,25 +5427,25 @@ def handle_help_buttons(call):
         bot.send_message(
             chat_id,
             """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🛍️ <b>HOW TO ORDER</b> 🛍️  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   __ <b>HOW TO ORDER</b> __  
+_________________________
 
 <b>Ordering Process:</b>
 
-1️⃣ Browse AliExpress and find your desired product
-2️⃣ Copy the complete product URL/link
-3️⃣ Click <b>📦 Submit Order</b> on the main menu
-4️⃣ Paste the AliExpress link when prompted
-5️⃣ Wait for order confirmation from our team
+1__ Browse AliExpress and find your desired product
+2__ Copy the complete product URL/link
+3__ Click <b>_ Submit Order</b> on the main menu
+4__ Paste the AliExpress link when prompted
+5__ Wait for order confirmation from our team
 
 <b>After Ordering:</b>
-• Our team will process your order
-• You'll receive an order confirmation with details
-• Your balance will be deducted once the price is confirmed
-• You'll receive tracking information when available
+_ Our team will process your order
+_ You'll receive an order confirmation with details
+_ Your balance will be deducted once the price is confirmed
+_ You'll receive tracking information when available
 
-<b>💡 TIP:</b> Make sure you have sufficient balance before placing orders. Check your balance anytime with the 💳 Balance button.
+<b>_ TIP:</b> Make sure you have sufficient balance before placing orders. Check your balance anytime with the _ Balance button.
 """,
             parse_mode='HTML',
             reply_markup=back_markup
@@ -5562,28 +5455,28 @@ def handle_help_buttons(call):
         bot.send_message(
             chat_id,
             """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔍 <b>HOW TO TRACK ORDERS</b> 🔍  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>HOW TO TRACK ORDERS</b> _  
+_________________________
 
 <b>Tracking Process:</b>
 
-1️⃣ Click <b>🔍 Track Order</b> on the main menu
-2️⃣ Enter your order number when prompted
-3️⃣ View your order details and current status
+1__ Click <b>_ Track Order</b> on the main menu
+2__ Enter your order number when prompted
+3__ View your order details and current status
 
 <b>Alternatively:</b>
-• Click <b>📊 Order Status</b> to see all your orders
-• Use the tracking links provided to track on ParcelsApp
+_ Click <b>_ Order Status</b> to see all your orders
+_ Use the tracking links provided to track on ParcelsApp
 
 <b>Order Statuses:</b>
-• <b>Processing</b> - Order received and being processed
-• <b>Confirmed</b> - Order placed on AliExpress
-• <b>Shipped</b> - Order shipped with tracking available
-• <b>Delivered</b> - Order arrived at destination
-• <b>Cancelled</b> - Order cancelled
+_ <b>Processing</b> - Order received and being processed
+_ <b>Confirmed</b> - Order placed on AliExpress
+_ <b>Shipped</b> - Order shipped with tracking available
+_ <b>Delivered</b> - Order arrived at destination
+_ <b>Cancelled</b> - Order cancelled
 
-<b>💡 TIP:</b> You'll receive automatic notifications when your order status changes!
+<b>_ TIP:</b> You'll receive automatic notifications when your order status changes!
 """,
             parse_mode='HTML',
             reply_markup=back_markup
@@ -5593,33 +5486,33 @@ def handle_help_buttons(call):
         # Return to the main help center menu
         help_markup = InlineKeyboardMarkup(row_width=1)
         help_markup.add(
-            InlineKeyboardButton("📝 How to Register", callback_data="help_register"),
-            InlineKeyboardButton("💰 How to Deposit", callback_data="help_deposit"),
-            InlineKeyboardButton("🛍️ How to Order", callback_data="help_order"),
-            InlineKeyboardButton("🔍 How to Track Orders", callback_data="help_track"),
-            InlineKeyboardButton("💬 Contact Support", url="https://t.me/alipay_help_center")
+            InlineKeyboardButton("_ How to Register", callback_data="help_register"),
+            InlineKeyboardButton("_ How to Deposit", callback_data="help_deposit"),
+            InlineKeyboardButton("__ How to Order", callback_data="help_order"),
+            InlineKeyboardButton("_ How to Track Orders", callback_data="help_track"),
+            InlineKeyboardButton("_ Contact Support", url="https://t.me/alipay_help_center")
         )
 
         bot.edit_message_text(
             """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ❓ <b>HELP CENTER</b> ❓  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>HELP CENTER</b> _  
+_________________________
 
 <b>Welcome to AliPay_ETH Help Center!</b>
 
 How can we assist you today? Select a topic below to get detailed information and step-by-step guides.
 
-<b>📋 AVAILABLE HELP TOPICS:</b>
-• Registration Process
-• Deposit Methods
-• Ordering from AliExpress
-• Tracking Your Orders
-• Subscription Benefits
+<b>_ AVAILABLE HELP TOPICS:</b>
+_ Registration Process
+_ Deposit Methods
+_ Ordering from AliExpress
+_ Tracking Your Orders
+_ Subscription Benefits
 
 <i>If you need direct assistance, click 'Contact Support' to chat with our team.</i>
 
-<b>💡 TIP:</b> Our team is available 7 days a week to help you with any questions!
+<b>_ TIP:</b> Our team is available 7 days a week to help you with any questions!
 """,
             chat_id=chat_id,
             message_id=call.message.message_id,
@@ -5654,11 +5547,11 @@ def start_companion(message):
     # Show helper info
     bot.send_message(
         chat_id,
-        "<i>💡 You can now chat directly with the AI Assistant! Type 'exit' or '/exit' to return to the main menu.</i>",
+        "<i>_ You can now chat directly with the AI Assistant! Type 'exit' or '/exit' to return to the main menu.</i>",
         parse_mode='HTML'
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '🤖 AI Assistant')
+@bot.message_handler(func=lambda msg: msg.text == '_ AI Assistant')
 def handle_companion_button(message):
     """Handle the companion button press"""
     chat_id = message.chat.id
@@ -5669,7 +5562,7 @@ def handle_companion_button(message):
     # Show a transitional message
     bot.send_message(
         chat_id,
-        "🌟 <b>Connecting to AI Assistant, your shopping companion...</b> 🌟",
+        "_ <b>Connecting to AI Assistant, your shopping companion...</b> _",
         parse_mode='HTML'
     )
 
@@ -5692,7 +5585,7 @@ def handle_companion_message(message):
         # Send exit message
         bot.send_message(
             chat_id,
-            "🌟 <b>Leaving conversation with AI Assistant...</b>\nReturning to main menu!",
+            "_ <b>Leaving conversation with AI Assistant...</b>\nReturning to main menu!",
             parse_mode='HTML'
         )
 
@@ -5759,7 +5652,7 @@ def handle_subscription_renewal(call):
         if not user:
             bot.send_message(
                 chat_id, 
-                "⚠️ Please register first to renew your subscription.",
+                "__ Please register first to renew your subscription.",
                 reply_markup=create_main_menu()
             )
             return
@@ -5808,25 +5701,25 @@ def handle_subscription_renewal(call):
         if not checkout_url:
             bot.send_message(
                 chat_id,
-                "❌ Error generating payment link. Please try again later or contact support.",
+                "_ Error generating payment link. Please try again later or contact support.",
                 reply_markup=create_main_menu(is_registered=True)
             )
             return
             
         # Send payment instructions with the payment link
         payment_markup = InlineKeyboardMarkup()
-        payment_markup.add(InlineKeyboardButton("💳 Pay Now - 150 birr", url=checkout_url))
+        payment_markup.add(InlineKeyboardButton("_ Pay Now - 150 birr", url=checkout_url))
         
         bot.send_message(
             chat_id,
             f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>SUBSCRIPTION RENEWAL</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>SUBSCRIPTION RENEWAL</b> _  
+_________________________
 
 You're about to renew your subscription for:
-• Monthly fee: <b>$1.00</b> (150 birr)
-• Duration: <b>30 days</b>
+_ Monthly fee: <b>$1.00</b> (150 birr)
+_ Duration: <b>30 days</b>
 
 <b>Click the Pay Now button below to complete your renewal:</b>
 """,
@@ -5839,7 +5732,7 @@ You're about to renew your subscription for:
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id, 
-            "⚠️ An error occurred while processing your subscription renewal. Please try again later.",
+            "__ An error occurred while processing your subscription renewal. Please try again later.",
             reply_markup=create_main_menu(is_registered=True)
         )
     finally:
@@ -5863,7 +5756,7 @@ def handle_payment_retry(call):
         # Verify this is the same user who's clicking their own retry button
         if chat_id != telegram_id:
             bot.edit_message_text(
-                "⚠️ This payment retry button is for another user.",
+                "__ This payment retry button is for another user.",
                 chat_id=chat_id,
                 message_id=message_id
             )
@@ -5875,7 +5768,7 @@ def handle_payment_retry(call):
         
         if not pending:
             bot.edit_message_text(
-                "⚠️ Your registration is no longer pending. Please restart with /start if needed.",
+                "__ Your registration is no longer pending. Please restart with /start if needed.",
                 chat_id=chat_id,
                 message_id=message_id
             )
@@ -5901,7 +5794,7 @@ def handle_payment_retry(call):
         if not payment_result or 'checkout_url' not in payment_result:
             logger.error(f"Failed to generate payment retry URL for user {telegram_id}")
             bot.edit_message_text(
-                "❌ <b>Payment Error</b>\n\nWe couldn't generate a new payment link. Please try again later or contact support.",
+                "_ <b>Payment Error</b>\n\nWe couldn't generate a new payment link. Please try again later or contact support.",
                 chat_id=chat_id,
                 message_id=message_id,
                 parse_mode='HTML'
@@ -5919,18 +5812,18 @@ def handle_payment_retry(call):
         # Send the new payment link
         from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
         payment_markup = InlineKeyboardMarkup()
-        payment_markup.add(InlineKeyboardButton("💳 Pay 350 Birr", url=payment_url))
+        payment_markup.add(InlineKeyboardButton("_ Pay 350 Birr", url=payment_url))
         
         bot.edit_message_text(
             f"""
-<b>🔄 PAYMENT RETRY INITIALIZED</b>
+<b>_ PAYMENT RETRY INITIALIZED</b>
 
 Your previous payment attempt was cancelled. A new payment link has been generated.
 
 <b>Registration Fee:</b>
-• One-time Fee: 200 Birr
-• First Month Subscription: 150 Birr
-• <b>Total: 350 Birr</b>
+_ One-time Fee: 200 Birr
+_ First Month Subscription: 150 Birr
+_ <b>Total: 350 Birr</b>
 
 <i>Click the button below to complete your payment. After successful payment, your registration will be automatically approved.</i>
 """,
@@ -5947,7 +5840,7 @@ Your previous payment attempt was cancelled. A new payment link has been generat
         logger.error(traceback.format_exc())
         bot.send_message(
             chat_id,
-            "❌ <b>Error</b>\n\nThere was a problem processing your payment retry. Please try again or contact support.",
+            "_ <b>Error</b>\n\nThere was a problem processing your payment retry. Please try again or contact support.",
             parse_mode='HTML'
         )
     finally:
@@ -5995,9 +5888,9 @@ def handle_referral_badges_buttons(call):
                 bot.send_message(
                     chat_id,
                     """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>YOUR REFERRALS</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>YOUR REFERRALS</b> _  
+_________________________
 
 You haven't referred anyone yet.
 
@@ -6010,16 +5903,16 @@ You haven't referred anyone yet.
             # Build referral list
             referral_list = ""
             for i, ref in enumerate(referrals, 1):
-                status_emoji = "✅" if ref['status'] == 'completed' else "⏳"
+                status_emoji = "_" if ref['status'] == 'completed' else "_"
                 date = ref['referral_date'].strftime('%Y-%m-%d') if ref['referral_date'] else "Unknown"
-                referral_list += f"{i}. {status_emoji} <b>{ref['referred_name']}</b> • <i>{date}</i>\n"
+                referral_list += f"{i}. {status_emoji} <b>{ref['referred_name']}</b> _ <i>{date}</i>\n"
                 
             bot.send_message(
                 chat_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📊 <b>YOUR REFERRALS</b> 📊  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>YOUR REFERRALS</b> _  
+_________________________
 
 <b>You've referred {len(referrals)} friends:</b>
 
@@ -6039,9 +5932,9 @@ You haven't referred anyone yet.
                 bot.send_message(
                     chat_id,
                     f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>REDEEM POINTS</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>REDEEM POINTS</b> _  
+_________________________
 
 <b>Your current points:</b> <code>{points}</code>
 
@@ -6059,16 +5952,16 @@ You need at least <b>100 points</b> to redeem them for account balance.
             bot.send_message(
                 chat_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   💰 <b>REDEEM POINTS</b> 💰  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>REDEEM POINTS</b> _  
+_________________________
 
 <b>Your current points:</b> <code>{points}</code>
 <b>Worth:</b> <code>{points}</code> birr
 
 Enter how many points you want to redeem:
-• Minimum: <code>100</code> points
-• Maximum: <code>{points}</code> points
+_ Minimum: <code>100</code> points
+_ Maximum: <code>{points}</code> points
 
 <i>1 point = 1 birr in account balance</i>
 """,
@@ -6087,31 +5980,31 @@ Enter how many points you want to redeem:
             bot.send_message(
                 chat_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ℹ️ <b>HOW REFERRALS WORK</b> ℹ️  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   __ <b>HOW REFERRALS WORK</b> __  
+_________________________
 
-<b>🏆 Earn Badges and Points:</b>
-• Invite friends using your referral link or code
-• Earn <b>50 points</b> for each successful registration
-• Collect beautiful badges as you refer more friends
-• Redeem points for account balance (1 point = 1 birr)
+<b>_ Earn Badges and Points:</b>
+_ Invite friends using your referral link or code
+_ Earn <b>50 points</b> for each successful registration
+_ Collect beautiful badges as you refer more friends
+_ Redeem points for account balance (1 point = 1 birr)
 
-<b>🎯 How to Refer Friends:</b>
-1️⃣ Share your personal referral link:
+<b>_ How to Refer Friends:</b>
+1__ Share your personal referral link:
 <code>{referral_url}</code>
 
-2️⃣ Or share your referral code:
+2__ Or share your referral code:
 <code>{referral_code}</code>
 
-3️⃣ Ask them to enter your code during registration
+3__ Ask them to enter your code during registration
 
-<b>💎 Badge Achievements:</b>
-• 🥉 <b>Beginner Referrer:</b> 1 referral
-• 🥈 <b>Rising Referrer:</b> 3 referrals
-• 🥇 <b>Champion Referrer:</b> 5 referrals
-• 💎 <b>Elite Referrer:</b> 10 referrals
-• 👑 <b>Legendary Referrer:</b> 20 referrals
+<b>_ Badge Achievements:</b>
+_ _ <b>Beginner Referrer:</b> 1 referral
+_ _ <b>Rising Referrer:</b> 3 referrals
+_ _ <b>Champion Referrer:</b> 5 referrals
+_ _ <b>Elite Referrer:</b> 10 referrals
+_ _ <b>Legendary Referrer:</b> 20 referrals
 
 <i>Note: Points are awarded ONLY for successful registrations.</i>
 """,
@@ -6125,11 +6018,7 @@ Enter how many points you want to redeem:
             try:
                 # Count user's successful referrals
                 from sqlalchemy import text
-                query = text("""
-                SELECT COUNT(*) as count
-                FROM referrals
-                WHERE referrer_id = :user_id
-                """)
+                query = text("SELECT COUNT(*) as count FROM referrals WHERE referrer_id = :user_id")
                 result = session.execute(query, {'user_id': user.id}).fetchone()
                 referral_count = result.count if result else 0
                 
@@ -6146,23 +6035,23 @@ Enter how many points you want to redeem:
                 
                 # Add buttons for different actions
                 markup.row(
-                    InlineKeyboardButton("💰 Redeem Points", callback_data="redeem_points"),
-                    InlineKeyboardButton("📊 View Referrals", callback_data="view_referrals")
+                    InlineKeyboardButton("_ Redeem Points", callback_data="redeem_points"),
+                    InlineKeyboardButton("_ View Referrals", callback_data="view_referrals")
                 )
                 markup.row(
-                    InlineKeyboardButton("❓ How It Works", callback_data="referral_help"),
-                    InlineKeyboardButton("🔗 My Referral Link", callback_data="back_to_reflink")
+                    InlineKeyboardButton("_ How It Works", callback_data="referral_help"),
+                    InlineKeyboardButton("_ My Referral Link", callback_data="back_to_reflink")
                 )
                 
                 # Get badge details with hover effects
                 badge_list = ""
                 for badge in badge_data['badges']:
-                    unlocked = "✓" if badge['unlocked'] else "  "
+                    unlocked = "_" if badge['unlocked'] else "  "
                     style = "color: gold; font-weight: bold;" if badge['unlocked'] else "color: gray;"
                     hover_details = f"""
-• {badge['description']}
-• Required: {badge['required']} referrals
-• Your progress: {referral_count}/{badge['required']} ({int(min(referral_count/max(1, badge['required']), 1)*100)}%)
+_ {badge['description']}
+_ Required: {badge['required']} referrals
+_ Your progress: {referral_count}/{badge['required']} ({int(min(referral_count/max(1, badge['required']), 1)*100)}%)
 """
                     badge_list += f"{unlocked} {badge['emoji']} <b>{badge['name']}</b>\n{hover_details if badge['unlocked'] else ''}\n"
                 
@@ -6170,17 +6059,17 @@ Enter how many points you want to redeem:
                 bot.send_message(
                     chat_id,
                     f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🏆 <b>YOUR REFERRAL BADGES</b> 🏆  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>YOUR REFERRAL BADGES</b> _  
+_________________________
 
-<b>🌟 Your Achievement Summary:</b>
-• Current level: <b>{badge_data['current_badge']['name']}</b> {badge_data['current_badge']['emoji']}
-• Total referrals: <code>{referral_count}</code>
-• Points earned: <code>{points}</code> (worth {points} birr)
-• Next badge in: <code>{max(0, badge_data['next_badge']['required'] - referral_count)}</code> more referrals
+<b>_ Your Achievement Summary:</b>
+_ Current level: <b>{badge_data['current_badge']['name']}</b> {badge_data['current_badge']['emoji']}
+_ Total referrals: <code>{referral_count}</code>
+_ Points earned: <code>{points}</code> (worth {points} birr)
+_ Next badge in: <code>{max(0, badge_data['next_badge']['required'] - referral_count)}</code> more referrals
 
-<b>✨ Your Badge Collection:</b>
+<b>_ Your Badge Collection:</b>
 {badge_list}
 
 <i>Keep inviting friends to unlock all badges and earn rewards!</i>
@@ -6225,11 +6114,7 @@ Enter how many points you want to redeem:
                 
                 # Count user's successful referrals
                 from sqlalchemy import text
-                query = text("""
-                SELECT COUNT(*) as count
-                FROM referrals
-                WHERE referrer_id = :user_id
-                """)
+query = text("SELECT COUNT(*) as count FROM referrals WHERE referrer_id = :user_id")
                 result = session.execute(query, {'user_id': user.id}).fetchone()
                 referral_count = result.count if result else 0
                 
@@ -6242,38 +6127,38 @@ Enter how many points you want to redeem:
                 
                 # Direct share buttons for common platforms
                 markup.row(
-                    InlineKeyboardButton("📱 Share via Telegram", url=f"https://t.me/share/url?url={referral_url}&text=Join%20AliPay%20ETH%20shopping%20service%20and%20we%20both%20get%20rewards!%20Use%20my%20referral%20link:")
+                    InlineKeyboardButton("_ Share via Telegram", url=f"https://t.me/share/url?url={referral_url}&text=Join%20AliPay%20ETH%20shopping%20service%20and%20we%20both%20get%20rewards!%20Use%20my%20referral%20link:")
                 )
                 
                 markup.row(
-                    InlineKeyboardButton("📊 View My Referrals", callback_data="view_referrals"),
-                    InlineKeyboardButton("🏆 View Badges", callback_data="view_badges")
+                    InlineKeyboardButton("_ View My Referrals", callback_data="view_referrals"),
+                    InlineKeyboardButton("_ View Badges", callback_data="view_badges")
                 )
                 
                 # Send message with QR code and referral details
                 bot.send_message(
                     chat_id,
                     f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔗 <b>YOUR REFERRAL LINK</b> 🔗  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>YOUR REFERRAL LINK</b> _  
+_________________________
 
 <b>Share your link and earn rewards!</b>
 
-<b>🔢 Your Referral Code:</b> 
+<b>_ Your Referral Code:</b> 
 <code>{referral_code}</code>
 
-<b>🔗 Your Referral Link:</b>
+<b>_ Your Referral Link:</b>
 <code>{referral_url}</code>
 
-<b>📊 Stats:</b>
-• <code>{referral_count}</code> successful referrals
-• <code>{points}</code> points earned (worth {points} birr)
+<b>_ Stats:</b>
+_ <code>{referral_count}</code> successful referrals
+_ <code>{points}</code> points earned (worth {points} birr)
 
-<b>💰 How it works:</b>
-• Share your link with friends
-• When they register, you earn 50 points
-• Redeem points for account balance (1 point = 1 birr)
+<b>_ How it works:</b>
+_ Share your link with friends
+_ When they register, you earn 50 points
+_ Redeem points for account balance (1 point = 1 birr)
 
 <i>Copy the link above and share it with friends!</i>
 """,
@@ -6308,7 +6193,7 @@ def process_redemption_amount(message):
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Invalid Amount</b>
+_ <b>Invalid Amount</b>
 
 Please enter a valid number of points to redeem.
 """,
@@ -6336,7 +6221,7 @@ Please enter a valid number of points to redeem.
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Amount Too Small</b>
+_ <b>Amount Too Small</b>
 
 You need to redeem at least 100 points.
 Please enter a larger amount.
@@ -6349,7 +6234,7 @@ Please enter a larger amount.
             bot.send_message(
                 chat_id,
                 f"""
-❌ <b>Insufficient Points</b>
+_ <b>Insufficient Points</b>
 
 You only have <code>{points}</code> points.
 Please enter a smaller amount.
@@ -6371,18 +6256,18 @@ Please enter a smaller amount.
             bot.send_message(
                 chat_id,
                 f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>POINTS REDEEMED!</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+_________________________
+   _ <b>POINTS REDEEMED!</b> _  
+_________________________
 
-<b>🎉 Redemption Successful! 🎉</b>
+<b>_ Redemption Successful! _</b>
 
 <b>Points redeemed:</b> <code>{points_to_redeem}</code> points
 <b>Value added:</b> <code>{etb_value:.2f}</code> birr
 
 <b>Updated Information:</b>
-• Remaining points: <code>{remaining_points}</code>
-• New balance: $<code>{new_balance:.2f}</code>
+_ Remaining points: <code>{remaining_points}</code>
+_ New balance: $<code>{new_balance:.2f}</code>
 
 <i>Thank you for participating in our referral program!</i>
 """,
@@ -6394,7 +6279,7 @@ Please enter a smaller amount.
             bot.send_message(
                 chat_id,
                 """
-❌ <b>Redemption Failed</b>
+_ <b>Redemption Failed</b>
 
 There was an error processing your points redemption.
 Please try again later or contact support.
@@ -6419,19 +6304,19 @@ def main():
     """Main function to start the bot with unlimited request handling capabilities"""
     global digital_companion
 
-    logger.info("🚀 Starting bot with unlimited request handling and smart error recovery...")
+    logger.info("_ Starting bot with unlimited request handling and smart error recovery...")
 
     # Initialize the database connection manager
     try:
         from connection_manager import connection_manager
         connection_manager.check_connection()
-        logger.info("✅ Connection manager initialized with optimized pool settings")
+        logger.info("_ Connection manager initialized with optimized pool settings")
         
         # Initialize the database
         init_db()
-        logger.info("✅ Database initialized")
+        logger.info("_ Database initialized")
     except Exception as db_error:
-        logger.error(f"❌ Database initialization error: {db_error}")
+        logger.error(f"_ Database initialization error: {db_error}")
         logger.error(traceback.format_exc())
         return False
 
@@ -6440,9 +6325,9 @@ def main():
         # Configure the request manager based on environment
         from request_manager import request_manager
         request_manager.start()
-        logger.info("✅ Request manager started with queue-based handling")
+        logger.info("_ Request manager started with queue-based handling")
     except Exception as req_error:
-        logger.error(f"❌ Failed to start request manager: {req_error}")
+        logger.error(f"_ Failed to start request manager: {req_error}")
         logger.error(traceback.format_exc())
         return False
         
@@ -6451,9 +6336,9 @@ def main():
         # Initialize and start the recovery manager
         from bot_recovery import recovery_manager
         recovery_manager.start()
-        logger.info("✅ Bot recovery manager started with smart state persistence")
+        logger.info("_ Bot recovery manager started with smart state persistence")
     except Exception as recovery_error:
-        logger.error(f"❌ Failed to start recovery manager: {recovery_error}")
+        logger.error(f"_ Failed to start recovery manager: {recovery_error}")
         logger.error(traceback.format_exc())
         # Don't return False here, as we can continue without recovery
 
@@ -6461,18 +6346,18 @@ def main():
     if COMPANION_ENABLED:
         try:
             digital_companion = DigitalCompanion(bot)
-            logger.info("✅ AI Assistant initialized with complete knowledge of bot features")
+            logger.info("_ AI Assistant initialized with complete knowledge of bot features")
         except Exception as e:
             logger.error(f"Failed to initialize AI Assistant: {e}")
             digital_companion = None
             
     # Tutorial functionality is now disabled
-    logger.info("🚫 Interactive Tutorial functionality has been completely disabled")
+    logger.info("_ Interactive Tutorial functionality has been completely disabled")
 
     # Delete any existing webhook
     try:
         bot.delete_webhook()
-        logger.info("✅ Webhook cleared")
+        logger.info("_ Webhook cleared")
     except Exception as e:
         logger.error(f"Error clearing webhook: {e}")
 
@@ -6498,12 +6383,12 @@ def main():
 
     # Payment notifications are now handled entirely by the standalone chapa_autopay.py process
     # No need to start a duplicate payment notifier from here
-    logger.info("✅ Using standalone chapa_autopay.py for payment processing")
-    logger.info("✓ Payment notifications will be handled by the Payment Auto-Approver workflow")
+    logger.info("_ Using standalone chapa_autopay.py for payment processing")
+    logger.info("_ Payment notifications will be handled by the Payment Auto-Approver workflow")
     
-    logger.info("✅ Bot handler setup complete with unlimited concurrent request handling")
-    logger.info("✓ The bot can now handle unlimited messages without crashing")
-    logger.info("✓ Smart error recovery system will preserve user state during interruptions")
+    logger.info("_ Bot handler setup complete with unlimited concurrent request handling")
+    logger.info("_ The bot can now handle unlimited messages without crashing")
+    logger.info("_ Smart error recovery system will preserve user state during interruptions")
 
     # Start polling with recovery and enhanced error handling
     while not shutdown_requested:
@@ -6537,7 +6422,7 @@ def main():
     try:
         # Stop the request manager
         request_manager.stop()
-        logger.info("✅ Request manager stopped")
+        logger.info("_ Request manager stopped")
     except Exception as stop_error:
         logger.error(f"Error stopping request manager: {stop_error}")
 
