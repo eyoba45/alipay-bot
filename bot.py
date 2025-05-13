@@ -313,8 +313,8 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('📅 Subscription')
         )
         menu.add(
-            KeyboardButton('🏆 Referral Badges'),
-            KeyboardButton('🔗 My Referral Link')
+            KeyboardButton('🏆 Referral Badges (Coming Soon)'),
+            KeyboardButton('🔗 My Referral Link (Coming Soon)')
         )
         menu.add(
             KeyboardButton('👥 Join Community'),
@@ -2288,7 +2288,7 @@ def check_balance(message):
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges')
+@bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges (Coming Soon)')
 @subscription_required
 def referral_badges(message):
     """Display referral badges coming soon message"""
@@ -2313,7 +2313,7 @@ You'll be able to invite friends and earn rewards.
         reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link')
+@bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link (Coming Soon)')
 @subscription_required
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
