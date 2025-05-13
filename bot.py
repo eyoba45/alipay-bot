@@ -313,8 +313,8 @@ def create_main_menu(is_registered=False, chat_id=None):
             KeyboardButton('📅 Subscription')
         )
         menu.add(
-            KeyboardButton('🏆 Referral Badges (Coming Soon)'),
-            KeyboardButton('🔗 My Referral Link (Coming Soon)')
+            KeyboardButton('🏆 Referral Badges '),
+            KeyboardButton('🔗 My Referral Link ')
         )
         menu.add(
             KeyboardButton('👥 Join Community'),
@@ -2263,7 +2263,7 @@ def check_balance(message):
             except Exception as ref_err:
                 logger.error(f"Error counting referrals: {ref_err}")
 
-            # Enhanced balance display with badge
+            # Enhanced balance display without referral points
             bot.send_message(
                 chat_id,
                 f"""
@@ -2274,14 +2274,11 @@ def check_balance(message):
 <b>Available Balance:</b> <code>{birr_balance:,}</code> birr
 ≈ $<code>{balance:,.2f}</code> USD
 
-<b>🎁 Referral Points:</b> <code>{points_balance}</code> points
-• Worth <code>{points_balance}</code> birr
-• <code>{referral_count}</code> successful referrals
+<i>Referral system coming soon!</i>
 
-<b>🏆 Your Referral Badge:</b> {badge_html}
+
 
 <i>Need more balance? Click 💰 Deposit</i>
-<i>Want more points? Invite friends with your referral code!</i>
 """,
                 parse_mode='HTML'
             )
@@ -2291,7 +2288,7 @@ def check_balance(message):
     finally:
         safe_close_session(session)
 
-@bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges (Coming Soon)')
+@bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges ')
 @subscription_required
 def referral_badges(message):
     """Display referral badges coming soon message"""
@@ -2316,7 +2313,7 @@ You'll be able to invite friends and earn rewards.
         reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
     )
 
-@bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link (Coming Soon)')
+@bot.message_handler(func=lambda msg: msg.text == '🔗 My Referral Link ')
 @subscription_required
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
