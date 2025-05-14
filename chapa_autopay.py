@@ -785,8 +785,10 @@ def check_pending_deposits():
     session = None
     try:
         session = get_session()
-        # Get all users with pending deposits
-        pending_deposits = session.query(PendingDeposit).filter_by(status='Processing').all()
+        # Get all users with pending deposits - check both 'Processing' and 'Pending' status
+        pending_deposits = session.query(PendingDeposit).filter(
+            PendingDeposit.status.in_(['Processing', 'Pending', 'Initiated'])
+        ).all()
         
         if pending_deposits:
             logger.info(f"Found {len(pending_deposits)} pending deposits to verify")
