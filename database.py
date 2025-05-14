@@ -39,17 +39,22 @@ try:
             connect_args=connect_args
         )
     else:
-        # PostgreSQL optimized settings
+        # PostgreSQL optimized settings with enhanced SSL resilience
         engine = create_engine(
             DATABASE_URL,
-            pool_size=5,         # Reduced from 10 to prevent connection issues
-            max_overflow=10,     # Reduced from 20
-            pool_timeout=20,     # Increased from 10
-            pool_recycle=300,    
-            pool_pre_ping=True,  # Keep pre-ping enabled for connection validation
+            pool_size=3,          # Further reduced to prevent connection exhaustion
+            max_overflow=5,       # Further reduced to prevent connection issues
+            pool_timeout=30,      # Increased timeout for connection acquisition
+            pool_recycle=60,      # More frequent connection recycling to avoid stale connections
+            pool_pre_ping=True,   # Keep pre-ping enabled for connection validation
             connect_args={
-                "connect_timeout": 10,
-                "application_name": "alipay_eth_telebot"
+                "connect_timeout": 15,
+                "application_name": "alipay_eth_telebot",
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+                "sslmode": "require"  # Enforce SSL but be more forgiving about validation
             }
         )
     logger.info("Database engine created successfully")
@@ -111,14 +116,30 @@ def init_db(retry=True, max_retries=5):
     return False
 
 def get_session():
-    """Get a new database session with performance logging"""
-    try:
-        session = Session()
-        return session
-    except Exception as e:
-        logger.error(f"Error creating session: {e}")
-        logger.error(traceback.format_exc())
-        raise
+    """Get a new database session with enhanced error handling and recovery"""
+    for attempt in range(3):  # Try up to 3 times
+        try:
+            # Reset connection pool on second and third attempts
+            if attempt > 0:
+                reset_connection_pool()
+                time.sleep(1)  # Brief pause before retry
+                
+            session = Session()
+            
+            # Verify session with lightweight query
+            if attempt > 0:  # Only test on retry attempts to avoid overhead
+                from sqlalchemy import text
+                session.execute(text("SELECT 1")).fetchone()
+                
+            return session
+        except Exception as e:
+            logger.error(f"Error creating session (attempt {attempt+1}/3): {e}")
+            if attempt == 2:  # Last attempt
+                logger.error(traceback.format_exc())
+                raise  # Only raise after all attempts fail
+            
+    # Should never reach here, but just in case
+    raise Exception("Failed to create database session after multiple attempts")
 
 @contextmanager
 def session_scope():
@@ -135,12 +156,13 @@ def session_scope():
         session.close()
 
 def safe_close_session(session):
-    """Safely close a database session"""
+    """Safely close a database session with enhanced error handling"""
     if session:
         try:
             session.close()
         except Exception as e:
-            logger.error(f"Error closing database session: {e}")
+            logger.error(f"Error closing database session: {str(e)}")
+            # No need to raise the exception here, just log it
 
 def with_retry(func):
     """Decorator for retrying database operations"""
