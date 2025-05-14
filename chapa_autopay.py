@@ -401,12 +401,52 @@ def process_verified_deposit(telegram_id, amount, payment_data):
             user.balance += amount
             logger.info(f"Balance updated: ${old_balance:.2f} -> ${user.balance:.2f}")
             
-        # Force the balance to be updated immediately
-        session.commit()
+        # Force the balance to be updated immediately with retry mechanism
+        max_retries = 3
+        retry_count = 0
+        commit_success = False
+        
+        while retry_count < max_retries and not commit_success:
+            try:
+                session.commit()
+                commit_success = True
+                logger.info(f"✅ Successfully committed balance update on attempt {retry_count + 1}")
+            except Exception as e:
+                retry_count += 1
+                logger.error(f"Error committing balance update (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count < max_retries:
+                    logger.info(f"Retrying commit in 1 second...")
+                    time.sleep(1)
+                    # Reset the session
+                    session.rollback()
+                    # Reload the user
+                    user = session.query(User).filter_by(telegram_id=telegram_id).first()
+                    if user:
+                        if retry_count == 1:  # First retry
+                            # On first retry, try direct SQL update as fallback
+                            try:
+                                from sqlalchemy import text
+                                new_balance = old_balance + amount if amount < 1.0 or user.subscription_date and (now - user.subscription_date).days < 30 else old_balance + (amount - 1.0)
+                                sql = text(f"UPDATE users SET balance = :balance WHERE telegram_id = :telegram_id")
+                                session.execute(sql, {"balance": new_balance, "telegram_id": telegram_id})
+                                session.commit()
+                                logger.info(f"✅ Used direct SQL to update balance to ${new_balance:.2f}")
+                                commit_success = True
+                                break
+                            except Exception as sql_err:
+                                logger.error(f"Direct SQL update failed: {sql_err}")
+                    else:
+                        logger.error(f"Could not reload user with telegram_id {telegram_id}")
+                else:
+                    logger.error(f"Failed to commit balance update after {max_retries} attempts")
         
         # Double-check the balance update
-        session.refresh(user)
-        logger.info(f"Verified balance after update: ${user.balance:.2f}")
+        if commit_success:
+            try:
+                session.refresh(user)
+                logger.info(f"✅ Verified balance after update: ${user.balance:.2f}")
+            except Exception as refresh_err:
+                logger.error(f"Error refreshing user after balance update: {refresh_err}")
 
         logger.info(f"✅ Deposit of ${amount} for user {telegram_id} auto-approved via Chapa")
 
@@ -811,10 +851,17 @@ def check_pending_deposits():
                 
                 # Handle different payment verification results based on status
                 if payment_data and isinstance(payment_data, dict):
+                    # Get payment status from multiple sources
                     payment_status = payment_data.get('payment_status')
+                    data_status = None
+                    
+                    # Try to get status from data field too (Chapa API sometimes puts it in different places)
+                    if 'data' in payment_data and isinstance(payment_data['data'], dict):
+                        data_status = payment_data['data'].get('status')
+                        logger.info(f"Found payment status in data field: {data_status}")
                     
                     # Case 1: Failed or cancelled payments
-                    if payment_status == 'failed/cancelled':
+                    if payment_status == 'failed/cancelled' or data_status == 'failed':
                         logger.info(f"Payment for deposit {deposit.tx_ref}, user {user.telegram_id} was cancelled or failed")
                         
                         # Update status to allow retry
@@ -896,8 +943,23 @@ You can try again by clicking the button below.
                         # Don't update status, just continue checking
                         continue
                 
-                # Case 4: Payment is successful (no special payment_status field means success)
-                if payment_data and not payment_data.get('payment_status'):
+                # Case 4: Payment is successful (check multiple fields for success status)
+                is_success = False
+                
+                # Check if payment data exists and is valid
+                if payment_data and isinstance(payment_data, dict):
+                    # Check for direct success flag
+                    if not payment_data.get('payment_status'):
+                        is_success = True
+                    
+                    # Check data field for success status (where Chapa usually puts it)
+                    if 'data' in payment_data and isinstance(payment_data['data'], dict):
+                        data_status = payment_data['data'].get('status')
+                        if data_status == 'success':
+                            is_success = True
+                            logger.info(f"Payment marked as SUCCESS in data field for {deposit.tx_ref}")
+                
+                if is_success:
                     # Payment verified successfully
                     logger.info(f"✅ Payment verified for deposit {deposit.tx_ref}, user {user.telegram_id}, amount: ${deposit.amount}")
                     # Process and automatically approve the deposit
