@@ -2937,7 +2937,7 @@ Please check the order number and try again.
         tracking_info = ""
         delivery_estimate = ""
         if order.tracking_number:
-            parcels_app_link = f"https://parcelsapp.com/en/tracking/{order.tracking_number}"
+            parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={order.tracking_number}"
             aliexpress_tracking_link = f"https://aliexpress.com/trackOrder.htm"
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
@@ -2945,7 +2945,7 @@ Please check the order number and try again.
 • Carrier: <b>{"Standard AliExpress Shipping" if not order.carrier else order.carrier}</b>
 
 <b>📱 TRACKING LINKS:</b>
-• <a href="{parcels_app_link}">🌎 Track Package on ParcelsApp</a> (Real-time global updates)
+• <a href="{parcels_app_link}">🌎 Track Package on Cainiao </a> (Real-time global updates)
 • <a href="{aliexpress_tracking_link}">🛒 Track on AliExpress</a> (Official tracking)
 """
             # Calculate estimated delivery date (between 15-30 days from order date for shipped orders)
@@ -3468,12 +3468,12 @@ def process_order_details(message, order_id, user_telegram_id):
 
         tracking_info = ""
         if tracking:
-            parcels_app_link = f"https://parcelsapp.com/en/tracking/{tracking}"
+            parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={tracking}"
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
 • Tracking Number: <code>{tracking}</code>
 • Carrier: <b>{order.carrier}</b>
-• <a href="{parcels_app_link}">📲 Track Package on ParcelsApp</a> (Real-time updates)
+• <a href="{parcels_app_link}">📲 Track Package on Cainiao </a> (Real-time updates)
 • <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
 """
 
