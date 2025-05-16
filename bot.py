@@ -18,10 +18,6 @@ import queue
 import urllib.parse
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from connection_manager import init_db, get_session, safe_close_session, session_scope
-
-# Import rate limit protection
-from db_helpers import with_neon_retry, execute_safe_query
-from neon_db_adapter import neon_db
 from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction, Transaction
 from datetime import datetime, timedelta
 from sqlalchemy import func
@@ -163,7 +159,6 @@ digital_companion = None  # Will be initialized in main() if COMPANION_ENABLED
 # Key: user_id, Value: Boolean (True if subscription is expired)
 expired_subscriptions = {}
 
-@with_neon_retry(max_retries=3)
 def has_valid_subscription(user_id):
     """Check if a user has a valid subscription or should be blocked from using features
 
@@ -173,7 +168,7 @@ def has_valid_subscription(user_id):
         return True  # Admins always have access
 
     # Check if user is registered
-    session = neon_db.get_session()
+    session = get_session()
     try:
         user = session.query(User).filter_by(telegram_id=user_id).first()
         if not user:
@@ -291,7 +286,7 @@ Subscription fee: $1.00 (150 birr)
         logger.error(f"Error checking subscription status: {e}")
         return False  # Error checking subscription
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 
 def is_admin(chat_id):
@@ -387,7 +382,7 @@ def start_message(message):
                 registration_data[chat_id] = {}
             registration_data[chat_id]['referral_code'] = referral_code
 
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         is_registered = user is not None
 
@@ -505,7 +500,7 @@ Your trusted Ethiopian payment solution for AliExpress shopping!
         logger.error(f"❌ Error in start command: {traceback.format_exc()}")
         bot.send_message(chat_id, "Welcome to AliPay_ETH!", reply_markup=create_main_menu(False, chat_id))
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🔑 Register')
 def register_user(message):
@@ -513,7 +508,7 @@ def register_user(message):
     chat_id = message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         # Check if user already exists
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if user:
@@ -593,7 +588,7 @@ Please complete your registration by making the payment.
         logger.error(f"Error in registration: {e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_name')
 def get_name(message):
@@ -638,7 +633,7 @@ def get_phone(message):
         from chapa_payment import generate_registration_payment
 
         # Create a pending approval
-        session = neon_db.get_session()
+        session = get_session()
         existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
 
         if not existing_pending:
@@ -740,7 +735,7 @@ Click the button below to pay securely with:
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_payment')
 def handle_payment_registration(message):
@@ -755,7 +750,7 @@ def handle_payment_registration(message):
             return
 
         # Check if user is already registered
-        session = neon_db.get_session()
+        session = get_session()
         existing_user = session.query(User).filter_by(telegram_id=chat_id).first()
         if existing_user:
             logger.warning(f"User {chat_id} attempted re-registration but is already registered")
@@ -904,7 +899,7 @@ If you don't receive confirmation within 5 minutes, please contact support.
             reply_markup=create_main_menu(is_registered=False)
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
     # Import performance monitor if available
     try:
@@ -939,7 +934,7 @@ If you don't receive confirmation within 5 minutes, please contact support.
         existing_user = None
         for db_attempt in range(3):  # Retry DB operations
             try:
-                session = neon_db.get_session()
+                session = get_session()
                 existing_user = session.query(User).filter_by(telegram_id=chat_id).first()
 
                 if existing_user:
@@ -954,7 +949,7 @@ Your account is active and ready to use.
                         parse_mode='HTML',
                         reply_markup=create_main_menu(is_registered=True)
                     )
-                    neon_db.close_session(session)
+                    safe_close_session(session)
                     return
 
                 # Check for existing pending approval
@@ -965,7 +960,7 @@ Your account is active and ready to use.
                 break
             except Exception as db_error:
                 logger.error(f"Database check error (attempt {db_attempt+1}): {db_error}")
-                neon_db.close_session(session)
+                safe_close_session(session)
                 if db_attempt == 2:  # Last attempt failed
                     raise
                 time.sleep(0.5 * (db_attempt + 1))  # Progressive delay
@@ -978,8 +973,8 @@ Your account is active and ready to use.
             try:
                 # Always get a fresh session for each retry
                 if session:
-                    neon_db.close_session(session)
-                session = neon_db.get_session()
+                    safe_close_session(session)
+                session = get_session()
 
                 # First, check if there's an existing pending approval
                 existing_pending = session.query(PendingApproval).filter_by(telegram_id=chat_id).first()
@@ -1198,7 +1193,7 @@ Don't worry! We've saved your information. Please try again in a few moments or 
         registration_timeout.cancel()
 
         # Always close the session
-        neon_db.close_session(session)
+        safe_close_session(session)
 
         # Final registration completion check
         if not registration_complete and has_monitor:
@@ -1328,7 +1323,7 @@ def handle_deposit_approval_callback(call):
         action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
         deposit_id = int(call.data.split('_')[-1])
 
-        session = neon_db.get_session()
+        session = get_session()
 
         # Get deposit and user information
         deposit_info = session.query(PendingDeposit, User).join(User).filter(
@@ -1533,7 +1528,7 @@ Please try again with a valid payment or contact support if you believe this is 
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "⚠️ Error processing deposit")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_', 'reject_')) and not call.data.startswith(('approve_deposit_', 'reject_deposit_', 'approve_order_', 'reject_order_')))
 def handle_admin_decision(call):
@@ -1545,7 +1540,7 @@ def handle_admin_decision(call):
         user_id = int(parts[1])
         logger.info(f"Processing {action} for user {user_id}")
 
-        session = neon_db.get_session()
+        session = get_session()
         pending = session.query(PendingApproval).filter_by(telegram_id=user_id).first()
 
         if not pending:
@@ -1763,16 +1758,14 @@ Please try registering again.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing decision")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '💰 Deposit')
 @subscription_required
-@with_neon_retry(max_retries=3)
 def deposit_funds(message):
     """Handle deposit button"""
     return deposit_funds_internal(message, for_subscription=False)
 
-@with_neon_retry(max_retries=3)
 def deposit_funds_internal(message, for_subscription=False):
     """Internal deposit handler with subscription renewal option"""
     chat_id = message.chat.id
@@ -1813,7 +1806,7 @@ def handle_deposit_amount(message):
         # Check if user is registered
         session = None
         try:
-            session = neon_db.get_session()
+            session = get_session()
             user = session.query(User).filter_by(telegram_id=chat_id).first()
             is_registered = user is not None
 
@@ -1831,7 +1824,7 @@ def handle_deposit_amount(message):
             logger.error(f"Error returning to main menu: {e}")
             bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
         finally:
-            neon_db.close_session(session)
+            safe_close_session(session)
         return
 
     if message.text == 'Customize':
@@ -1879,7 +1872,7 @@ def payment_details(message, amount, for_subscription=False):
     session = None
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -2000,7 +1993,7 @@ def payment_details(message, amount, for_subscription=False):
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error processing your request. Please try again.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_custom_amount')
 def process_custom_amount(message):
@@ -2096,7 +2089,7 @@ def handle_deposit_screenshot(message):
         birr_amount = int(deposit_amount * 160)  # Updated ETB conversion rate
 
         # Verify user exists in database
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -2229,17 +2222,16 @@ Screenshot attached below
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error processing your deposit. Please try again.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '💳 Balance')
 @subscription_required
-@with_neon_retry(max_retries=3)
 def check_balance(message):
     """Check user balance with referral badges and hover effects"""
     chat_id = message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if user:
@@ -2295,7 +2287,7 @@ def check_balance(message):
         logger.error(f"Error checking balance:{e}")
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🏆 Referral Badges (Coming Soon)')
 @subscription_required
@@ -2380,7 +2372,7 @@ def submit_order(message):
     chat_id = message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -2457,10 +2449,9 @@ Press 'Back to Main Menu' to cancel your order.
         logger.error(traceback.format_exc())
         bot.send_message(chat_id, "Sorry, there was an error. Please try again.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_link')
-@with_neon_retry(max_retries=3)
 def process_order_link(message):
     """Process the order link with enhanced UI and reliability"""
     chat_id = message.chat.id
@@ -2470,7 +2461,7 @@ def process_order_link(message):
     # Handle "Back to Main Menu" request
     if link == 'Back to Main Menu':
         try:
-            session = neon_db.get_session()
+            session = get_session()
             user = session.query(User).filter_by(telegram_id=chat_id).first()
             is_registered = user is not None
 
@@ -2491,7 +2482,7 @@ def process_order_link(message):
             bot.send_message(chat_id, "🏠 Back to main menu", reply_markup=create_main_menu(is_registered=True))
             return
         finally:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
     # First, send immediate acknowledgement
     processing_msg = bot.send_message(
@@ -2543,7 +2534,7 @@ Please try again or press 'Back to Main Menu' to cancel.
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         # Get user's order count to generate order number
@@ -2677,7 +2668,7 @@ If the issue persists, please contact our support team.
             )
     finally:
         # Always clean up
-        neon_db.close_session(session)
+        safe_close_session(session)
         if chat_id in user_states:
             del user_states[chat_id]
 
@@ -2694,7 +2685,7 @@ def handle_deposit_admin_decision(call):
 
         logger.info(f"Processing deposit {action} for user {chat_id}, amount: ${amount}")
 
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -2822,7 +2813,7 @@ Please try again or contact support.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing decision")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 @subscription_required
@@ -2831,7 +2822,7 @@ def track_order(message):
     chat_id = message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -2882,7 +2873,7 @@ You can use 📊 <b>Order Status</b> to view all your orders instead.
         )
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_order_number')
 def process_order_number(message):
@@ -2909,7 +2900,7 @@ Please enter a valid order number (digits only).
             )
             return
 
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         order = session.query(Order).filter_by(user_id=user.id, order_number=int(order_number)).first()
 
@@ -2947,9 +2938,7 @@ Please check the order number and try again.
         tracking_info = ""
         delivery_estimate = ""
         if order.tracking_number:
-            # Clean tracking number using proper URL encoding
             clean_tracking = order.tracking_number.strip()
-            # Use urllib.parse.quote to properly encode the tracking number for URL
             encoded_tracking = urllib.parse.quote(clean_tracking)
             parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={encoded_tracking}&lang=en"
             aliexpress_tracking_link = f"https://aliexpress.com/trackOrder.htm"
@@ -2959,7 +2948,7 @@ Please check the order number and try again.
 • Carrier: <b>{"Standard AliExpress Shipping" if not order.carrier else order.carrier}</b>
 
 <b>📱 TRACKING LINKS:</b>
-• <a href="{parcels_app_link}">🌎 Track Package on Cainiao</a> (Real-time global updates)
+• <a href="{parcels_app_link}">🌎 Track Package on Cainiao </a> (Real-time global updates)
 • <a href="{aliexpress_tracking_link}">🛒 Track on AliExpress</a> (Official tracking)
 """
             # Calculate estimated delivery date (between 15-30 days from order date for shipped orders)
@@ -3082,7 +3071,7 @@ Please try again or contact support if the problem persists.
         )
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📊 Order Status')
 @subscription_required
@@ -3091,7 +3080,7 @@ def order_status(message):
     chat_id = message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         if not user:
             bot.send_message(
@@ -3206,7 +3195,7 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
         )
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
 def handle_order_admin_decision(call):
@@ -3217,7 +3206,7 @@ def handle_order_admin_decision(call):
         action = parts[0]
         order_id = int(parts[1])
 
-        session = neon_db.get_session()
+        session = get_session()
         order = session.query(Order).filter_by(id=order_id).first()
         if not order:
             bot.answer_callback_query(call.id, "Order not found.")
@@ -3256,16 +3245,15 @@ Enter 'cancel' to cancel processing.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing decision.")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription')
-@with_neon_retry(max_retries=3)
 def check_subscription(message):
     """Handle subscription button press with enhanced UI"""
     chat_id = message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -3409,7 +3397,7 @@ Make a deposit of at least $1 to automatically activate your subscription.
         )
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
 def process_order_details(message, order_id, user_telegram_id):
     """Process order details provided by admin"""
@@ -3432,7 +3420,7 @@ def process_order_details(message, order_id, user_telegram_id):
             bot.reply_to(message, "Invalid format. Please try again with format: orderid|tracking|price")
             return
 
-        session = neon_db.get_session()
+        session = get_session()
         order = session.query(Order).filter_by(id=order_id).first()
         if not order:
             bot.reply_to(message, "Order not found.")
@@ -3483,16 +3471,14 @@ def process_order_details(message, order_id, user_telegram_id):
 
         tracking_info = ""
         if tracking:
-            # Clean tracking number using proper URL encoding
-            clean_tracking = tracking.strip()
-            # Use urllib.parse.quote to properly encode the tracking number for URL
+            clean_tracking = tracking.strip().
             encoded_tracking = urllib.parse.quote(clean_tracking)
             parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={encoded_tracking}&lang=en"
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
 • Tracking Number: <code>{tracking}</code>
 • Carrier: <b>{order.carrier}</b>
-• <a href="{parcels_app_link}">📲 Track Package on Cainiao</a> (Real-time updates)
+• <a href="{parcels_app_link}">📲 Track Package on Cainiao </a> (Real-time updates)
 • <a href="https://aliexpress.com/trackOrder.htm">📋 Check on AliExpress</a>
 """
 
@@ -3552,14 +3538,13 @@ Your order <b>#{order.order_number}</b> has been {status_emoji} <b>{order.status
         bot.reply_to(message, "Error processing order details. Please try again.")
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
-@with_neon_retry(max_retries=3)
 def check_subscription_status():
     """Check subscription status for all users and send reminders"""
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         users = session.query(User).all()
         now = datetime.utcnow()
         logger.info(f"Checking subscription status for {len(users)} users")
@@ -3741,7 +3726,7 @@ Your subscription has expired {days_expired} day{'s' if days_expired != 1 else '
         logger.error(traceback.format_exc())
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
 
 
@@ -3818,7 +3803,7 @@ def back_to_main_menu(message):
     session = None
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
         is_registered = user is not None
 
@@ -3835,7 +3820,7 @@ def back_to_main_menu(message):
             reply_markup=create_main_menu(True, chat_id)
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '👥 User Management')
 def user_management(message):
@@ -3905,7 +3890,7 @@ def list_all_users(message):
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         # Get total users count for pagination
         total_users = session.query(User).count()
 
@@ -3998,7 +3983,7 @@ def list_all_users(message):
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('users_page_'))
 def handle_users_pagination(call):
@@ -4018,7 +4003,7 @@ def handle_users_pagination(call):
         per_page = 10
         offset = (page - 1) * per_page
 
-        session = neon_db.get_session()
+        session = get_session()
         total_users = session.query(User).count()
 
         # Get users for the requested page
@@ -4091,7 +4076,7 @@ def handle_users_pagination(call):
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error loading users")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Find User')
 def find_user_prompt(message):
@@ -4143,7 +4128,7 @@ def search_user(message):
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         users = []
 
         # Try to parse as Telegram ID (int)
@@ -4234,7 +4219,7 @@ Found <b>{len(users)}</b> user(s) matching '{search_query}':
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('manage_user_'))
 def handle_manage_user(call):
@@ -4249,7 +4234,7 @@ def handle_manage_user(call):
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=user_id).first()
 
         if not user:
@@ -4321,7 +4306,7 @@ def handle_manage_user(call):
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error loading user details")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📦 Order Management')
 def order_management(message):
@@ -4380,7 +4365,7 @@ def list_all_orders(message):
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         # Get total orders count for pagination
         total_orders = session.query(Order).count()
 
@@ -4479,7 +4464,7 @@ def list_all_orders(message):
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('orders_page_'))
 def handle_orders_pagination(call):
@@ -4499,7 +4484,7 @@ def handle_orders_pagination(call):
         per_page = 5
         offset = (page - 1) * per_page
 
-        session = neon_db.get_session()
+        session = get_session()
         total_orders = session.query(Order).count()
 
         # Get orders for the requested page
@@ -4578,7 +4563,7 @@ def handle_orders_pagination(call):
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error loading orders")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '💰 Deposit Management')
 def deposit_management(message):
@@ -4635,7 +4620,7 @@ def list_pending_deposits(message):
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         # Get all pending deposits with user info (exclude auto-approved ones)
         pending_deposits = session.query(PendingDeposit, User).join(User).filter(
             PendingDeposit.status == 'Processing'
@@ -4725,7 +4710,7 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
 def handle_deposit_approval(call):
@@ -4743,7 +4728,7 @@ def handle_deposit_approval(call):
         action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
         deposit_id = int(call.data.split('_')[-1])
 
-        session = neon_db.get_session()
+        session = get_session()
 
         # Get deposit and user
         deposit_info = session.query(PendingDeposit, User).join(User).filter(
@@ -4853,7 +4838,7 @@ Please contact customer support for assistance or try again with a clearer payme
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing deposit")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '➕ Add Balance')
 def add_balance_prompt(message):
@@ -4917,7 +4902,7 @@ def process_balance_user_id(message):
             return
 
         # Check if user exists
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
 
         if not user:
@@ -4966,7 +4951,7 @@ Please enter the amount in USD to add to the user's balance.
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and isinstance(user_states[msg.chat.id], dict) and user_states[msg.chat.id].get('state') == 'waiting_for_balance_amount')
 def process_balance_amount(message):
@@ -5007,7 +4992,7 @@ def process_balance_amount(message):
             return
 
         # Update user balance
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
 
         if not user:
@@ -5074,7 +5059,7 @@ Your account balance has been updated by the administrator.
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription Management')
 def subscription_management(message):
@@ -5131,7 +5116,7 @@ def system_stats(message):
         return
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
 
         # Gather statistics
         total_users = session.query(User).count()
@@ -5210,7 +5195,7 @@ def system_stats(message):
             reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('🔙 Back to Admin'))
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '❓ Help Center')
 def help_center(message):
@@ -5493,7 +5478,7 @@ def handle_companion_message(message):
         # Return to main menu
         session = None
         try:
-            session = neon_db.get_session()
+            session = get_session()
             user = session.query(User).filter_by(telegram_id=chat_id).first()
             is_registered = user is not None
             bot.send_message(
@@ -5505,7 +5490,7 @@ def handle_companion_message(message):
             logger.error(f"Error returning to main menu: {e}")
             bot.send_message(chat_id, "Back to main menu", reply_markup=create_main_menu(False, chat_id))
         finally:
-            neon_db.close_session(session)
+            safe_close_session(session)
         return
 
     # Initialize the companion if needed
@@ -5547,7 +5532,7 @@ def handle_subscription_renewal(call):
     bot.answer_callback_query(call.id, "Processing subscription renewal...")
 
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -5638,7 +5623,7 @@ You're about to renew your subscription for:
         )
     finally:
         if session:
-            neon_db.close_session(session)
+            safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('retry_payment_'))
 def handle_payment_retry(call):
@@ -5664,7 +5649,7 @@ def handle_payment_retry(call):
             return
 
         # Get the pending approval from database
-        session = neon_db.get_session()
+        session = get_session()
         pending = session.query(PendingApproval).filter_by(telegram_id=telegram_id).first()
 
         if not pending:
@@ -5745,7 +5730,7 @@ Your previous payment attempt was cancelled. A new payment link has been generat
             parse_mode='HTML'
         )
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('companion_'))
 def handle_companion_callback(call):
@@ -5772,7 +5757,7 @@ def handle_referral_badges_buttons(call):
     chat_id = call.message.chat.id
     session = None
     try:
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -6077,7 +6062,7 @@ You'll be able to invite friends and earn rewards.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing request")
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.chat.id in user_states and user_states[msg.chat.id] == 'waiting_for_redemption_amount')
 def process_redemption_amount(message):
@@ -6103,7 +6088,7 @@ Please enter a valid number of points to redeem.
             )
             return
 
-        session = neon_db.get_session()
+        session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -6200,7 +6185,7 @@ Please try again later or contact support.
         if chat_id in user_states:
             del user_states[chat_id]
     finally:
-        neon_db.close_session(session)
+        safe_close_session(session)
 
 def main():
     """Main function to start the bot with unlimited request handling capabilities"""
