@@ -17,6 +17,10 @@ from sqlalchemy import or_
 from database import init_db, get_session, safe_close_session
 from models import User, PendingApproval, PendingDeposit, UserBalance
 
+# Import rate limit protection
+from db_helpers import with_neon_retry, execute_safe_query
+from neon_db_adapter import neon_db
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -250,13 +254,14 @@ def verify_payment(tx_ref):
         logger.error(traceback.format_exc())
         return False
 
+@with_neon_retry(max_retries=3)
 def process_verified_registration(telegram_id, payment_data):
     """Process a verified registration payment with improved notification"""
     session = None
     try:
         logger.info(f"Processing verified registration for user {telegram_id}")
 
-        session = get_session()
+        session = neon_db.get_session()
 
         # Check if user already exists
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
@@ -385,8 +390,10 @@ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             session.rollback()
         return False
     finally:
-        safe_close_session(session)
+        neon_db.close_session(session)
 
+@with_neon_retry(max_retries=3)
+@with_neon_retry(max_retries=3)
 def process_verified_deposit(telegram_id, amount, payment_data):
     """Process a verified deposit payment with enhanced error handling and stability"""
     session = None
@@ -401,8 +408,8 @@ def process_verified_deposit(telegram_id, amount, payment_data):
         elif 'tx_ref' in payment_data:
             tx_ref = payment_data['tx_ref']
         
-        # Get a session with transaction isolation
-        session = get_session()
+        # Get a rate-limited session with transaction isolation
+        session = neon_db.get_session()
         
         # First check if user exists
         user = session.query(User).filter_by(telegram_id=telegram_id).with_for_update().first()
@@ -438,19 +445,19 @@ def process_verified_deposit(telegram_id, amount, payment_data):
             logger.error("No tx_ref found in payment data, cannot process deposit")
             return False
             
-        # Check both Auto-Approved and Approved status
+        # Check if deposit exists and has already been FULLY processed (balance updated)
         existing_deposit = session.query(PendingDeposit).filter(
             PendingDeposit.user_id == user.id,
             PendingDeposit.tx_ref == tx_ref,
-            or_(
-                PendingDeposit.status == 'Approved',
-                PendingDeposit.status == 'Auto-Approved'
-            )
+            PendingDeposit.balance_updated == True  # Only return if balance was already updated
         ).first()
 
         if existing_deposit:
-            logger.info(f"Deposit with tx_ref {tx_ref} for user {telegram_id} already processed with status {existing_deposit.status}")
+            logger.info(f"Deposit with tx_ref {tx_ref} for user {telegram_id} already FULLY processed (balance updated)")
             return True
+            
+        # If deposit exists but balance wasn't updated, we'll continue processing
+        logger.info(f"Deposit with tx_ref {tx_ref} found but needs balance update")
 
         # Create or update pending deposit - use with_for_update to prevent concurrent updates
         pending_deposit = session.query(PendingDeposit).filter_by(
@@ -459,26 +466,30 @@ def process_verified_deposit(telegram_id, amount, payment_data):
         ).with_for_update().first()
 
         if pending_deposit:
-            # Only update if not already approved
+            # Check both status and balance_updated flag
             current_status = pending_deposit.status
-            logger.info(f"Current deposit status: {current_status} for tx_ref {tx_ref}")
+            balance_already_updated = pending_deposit.balance_updated
+            logger.info(f"Current deposit status: {current_status}, balance_updated: {balance_already_updated} for tx_ref {tx_ref}")
             
+            # If balance already updated, no need to process again
+            if balance_already_updated:
+                logger.info(f"Deposit balance already updated - tx_ref: {tx_ref}, skipping")
+                return True
+                
+            # Update status if needed
             if current_status not in ['Auto-Approved', 'Approved']:
                 # Directly update status with proper locking
                 pending_deposit.status = 'Auto-Approved'
                 session.flush()
                 logger.info(f"✅ Deposit status updated from {current_status} to Auto-Approved. ID: {pending_deposit.id}, tx_ref: {tx_ref}")
-            else:
-                # Already processed - this shouldn't happen but handle it gracefully
-                logger.info(f"Deposit already in '{current_status}' status - tx_ref: {tx_ref}, skipping")
-                return True
         else:
-            # Create new deposit record
+            # Create new deposit record with balance_updated flag set to False initially
             pending_deposit = PendingDeposit(
                 user_id=user.id,
                 amount=amount,
                 status='Auto-Approved',
                 tx_ref=tx_ref,
+                balance_updated=False,  # Initialize as not updated yet
                 created_at=datetime.utcnow()
             )
             session.add(pending_deposit)
@@ -578,10 +589,14 @@ def process_verified_deposit(telegram_id, amount, payment_data):
 • New Balance: ${new_balance:.2f}
 """
             
+        # Mark the deposit as having balance updated - CRITICAL FIX
+        pending_deposit.balance_updated = True
+        
         # Final commit (or rollback on exception)
         try:
             session.commit()
             logger.info(f"✅ Deposit processing transaction committed successfully for {tx_ref}")
+            logger.info(f"✅ CRITICAL FIX: Deposit marked as balance_updated=True")
             
             # Double-check the balance update
             try:
@@ -665,11 +680,12 @@ def process_verified_deposit(telegram_id, amount, payment_data):
             session.rollback()
             return False
 
+@with_neon_retry(max_retries=3)
 def check_pending_registrations():
     """Check for pending registrations and verify their payments"""
     session = None
     try:
-        session = get_session()
+        session = neon_db.get_session()
         # Store basic information for each pending approval and don't keep the ORM objects
         pending_data = []
         for pending in session.query(PendingApproval).all():
@@ -683,7 +699,7 @@ def check_pending_registrations():
             logger.info(f"Found {len(pending_data)} pending registrations to verify")
             
         # Close the first session to avoid keeping detached objects
-        safe_close_session(session)
+        neon_db.close_session(session)
         
         # Initialize bot for notifications (do this once to avoid recreation for each user)
         import telebot
@@ -728,7 +744,7 @@ def check_pending_registrations():
         
         # Process each pending registration with a fresh session
         for item in pending_data:
-            session = get_session()  # Get a fresh session for each item
+            session = neon_db.get_session()  # Get a fresh session for each item
             try:
                 telegram_id = item['telegram_id']
                 tx_ref = item['tx_ref']
@@ -803,7 +819,7 @@ You can retry your payment by clicking the button below.
                                 logger.error(f"Error sending payment retry notification: {e}")
                         
                         # Close this session and continue to next registration
-                        safe_close_session(session)
+                        neon_db.close_session(session)
                         session = None
                         continue
                     
@@ -845,7 +861,7 @@ You can try again by clicking the button below.
                                     logger.error(f"Error sending payment not found notification: {e}")
                         
                         # Continue to next registration
-                        safe_close_session(session)
+                        neon_db.close_session(session)
                         session = None
                         continue
                     
@@ -855,7 +871,7 @@ You can try again by clicking the button below.
                         pending.status = 'Payment Pending'
                         session.commit()
                         # Continue to next registration without sending notification
-                        safe_close_session(session)
+                        neon_db.close_session(session)
                         session = None
                         continue
                 
@@ -871,7 +887,7 @@ You can try again by clicking the button below.
                         logger.error(f"Failed to process verified registration for {telegram_id}")
                         
                     # Close session and continue to next registration
-                    safe_close_session(session)
+                    neon_db.close_session(session)
                     session = None
                     continue
                 
@@ -934,13 +950,14 @@ You can retry your registration by clicking the button below.
         logger.error(f"Error checking pending registrations: {e}")
         logger.error(traceback.format_exc())
     finally:
-        safe_close_session(session)
+        neon_db.close_session(session)
 
+@with_neon_retry(max_retries=3)
 def check_pending_deposits():
     """Check pending deposits and verify their payments"""
     session = None
     try:
-        session = get_session()
+        session = neon_db.get_session()
         # Get all users with pending deposits - check both 'Processing' and 'Pending' status
         pending_deposits = session.query(PendingDeposit).filter(
             PendingDeposit.status.in_(['Processing', 'Pending', 'Initiated'])
@@ -1195,20 +1212,11 @@ You can try again by clicking the button below.
                         # Log successful verification
                         logger.info(f"✅ Payment verified for deposit {tx_ref}, user {telegram_id}, amount: ${amount}")
                         
-                        # CRITICAL FIX: Update deposit status to Auto-Approved IMMEDIATELY in this session
-                        # This is the key change to fix manual approval requirements
-                        if deposit and deposit.status != 'Auto-Approved':
-                            old_status = deposit.status
-                            deposit.status = 'Auto-Approved'
-                            session.commit()
-                            logger.info(f"✅ CRITICAL: Updated deposit status from {old_status} to Auto-Approved for {tx_ref}")
-                            
-                            # Double-check the status was updated correctly
-                            updated_deposit = session.query(PendingDeposit).filter_by(tx_ref=tx_ref).first()
-                            if updated_deposit and updated_deposit.status == 'Auto-Approved':
-                                logger.info(f"✅ VERIFIED: Deposit status is now confirmed as Auto-Approved in the database")
-                            else:
-                                logger.error(f"❌ CRITICAL ERROR: Failed to verify updated deposit status")
+                        # IMPORTANT: We no longer update the status here as it would prevent 
+                        # the process_verified_deposit function from updating the balance
+                        # Instead, we'll let process_verified_deposit handle everything
+                        # This is a critical fix for the auto-approval balance update issue
+                        logger.info(f"✅ Payment verified for {tx_ref}, proceeding to update balance automatically")
                     except Exception as e:
                         logger.error(f"Error accessing deposit/user data: {e}")
                         # Fallback values if we can't get them directly
@@ -1287,7 +1295,7 @@ Please try again with a new deposit by clicking the button below.
         logger.error(f"Error checking pending deposits: {e}")
         logger.error(traceback.format_exc())
     finally:
-        safe_close_session(session)
+        neon_db.close_session(session)
 
 def verify_payment_task():
     """Background task to verify payments periodically"""
