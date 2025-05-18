@@ -449,7 +449,7 @@ def process_verified_deposit(telegram_id, amount, payment_data):
         existing_deposit = session.query(PendingDeposit).filter(
             PendingDeposit.user_id == user.id,
             PendingDeposit.tx_ref == tx_ref,
-            PendingDeposit.balance_updated == True  # Only return if balance was already updated
+            PendingDeposit.balance_update == True  # Only return if balance was already updated
         ).first()
 
         if existing_deposit:
@@ -466,9 +466,9 @@ def process_verified_deposit(telegram_id, amount, payment_data):
         ).with_for_update().first()
 
         if pending_deposit:
-            # Check both status and balance_updated flag
+            # Check both status and balance_update flag
             current_status = pending_deposit.status
-            balance_already_updated = pending_deposit.balance_updated
+            balance_already_updated = pending_deposit.balance_update
             logger.info(f"Current deposit status: {current_status}, balance_updated: {balance_already_updated} for tx_ref {tx_ref}")
             
             # If balance already updated, no need to process again
@@ -483,13 +483,13 @@ def process_verified_deposit(telegram_id, amount, payment_data):
                 session.flush()
                 logger.info(f"✅ Deposit status updated from {current_status} to Auto-Approved. ID: {pending_deposit.id}, tx_ref: {tx_ref}")
         else:
-            # Create new deposit record with balance_updated flag set to False initially
+            # Create new deposit record with balance_update flag set to False initially
             pending_deposit = PendingDeposit(
                 user_id=user.id,
                 amount=amount,
                 status='Auto-Approved',
                 tx_ref=tx_ref,
-                balance_updated=False,  # Initialize as not updated yet
+                balance_update=False,  # Initialize as not updated yet
                 created_at=datetime.utcnow()
             )
             session.add(pending_deposit)
@@ -590,13 +590,13 @@ def process_verified_deposit(telegram_id, amount, payment_data):
 """
             
         # Mark the deposit as having balance updated - CRITICAL FIX
-        pending_deposit.balance_updated = True
+        pending_deposit.balance_update = True
         
         # Final commit (or rollback on exception)
         try:
             session.commit()
             logger.info(f"✅ Deposit processing transaction committed successfully for {tx_ref}")
-            logger.info(f"✅ CRITICAL FIX: Deposit marked as balance_updated=True")
+            logger.info(f"✅ CRITICAL FIX: Deposit marked as balance_update=True")
             
             # Double-check the balance update
             try:
