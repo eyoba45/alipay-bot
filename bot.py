@@ -1306,17 +1306,11 @@ Click on "📅 Subscription" and use the renewal button.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing your request")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
-def handle_deposit_approval_callback(call):
-    """Handle deposit approval or rejection callback from inline buttons"""
-    chat_id = call.message.chat.id
-    message_id = call.message.message_id
-    session = None
-
-    # Check if user is admin
-    if not is_admin(chat_id):
-        bot.answer_callback_query(call.id, "⛔ You don't have permission to manage deposits")
-        return
+# This handler has been merged with handle_deposit_approval
+# @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+# def handle_deposit_approval_callback(call):
+#     """Handle deposit approval or rejection callback from inline buttons"""
+#     # Moved to handle_deposit_approval to fix duplicate callback handlers
 
     try:
         # Parse the callback data
@@ -2294,7 +2288,7 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2319,7 +2313,7 @@ You'll be able to invite friends and earn rewards.
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2672,9 +2666,10 @@ If the issue persists, please contact our support team.
         if chat_id in user_states:
             del user_states[chat_id]
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
-def handle_deposit_admin_decision(call):
-    """Handle admin approval/rejection for deposits"""
+# This handler has been merged with handle_deposit_approval
+# @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+# def handle_deposit_admin_decision(call):
+#     """Handle admin approval/rejection for deposits"""
     session = None
     try:
         parts = call.data.split('_')
@@ -3238,6 +3233,46 @@ Enter 'cancel' to cancel processing.
                 parse_mode='HTML'
             )
             bot.register_next_step_handler(msg, process_order_details, order.id, user.telegram_id)
+            return
+        elif action == 'reject':
+            # Update order status
+            order.status = 'Cancelled'
+            order.updated_at = datetime.utcnow()
+            session.commit()
+            
+            # Notify admin
+            bot.edit_message_text(
+                f"❌ Order #{order.order_number} has been rejected and cancelled.",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+            
+            # Notify user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>ORDER CANCELLED</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your order #{order.order_number} has been cancelled due to insufficient balance.
+
+<b>ORDER DETAILS:</b>
+• Order #: {order.order_number}
+• Status: <b>Cancelled</b>
+• Product: {order.product_link}
+
+<b>NEXT STEPS:</b>
+• Please add more funds to your account
+• Submit a new order when your balance is sufficient
+
+<i>If you have any questions, please contact support.</i>
+""",
+                parse_mode='HTML'
+            )
+            
+            # Acknowledge callback
+            bot.answer_callback_query(call.id, "Order rejected successfully")
             return
     except Exception as e:
         logger.error(f"Error in order admin decision: {e}")
@@ -4710,6 +4745,7 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
     finally:
         safe_close_session(session)
 
+# This is now the ONLY handler for deposit approval/rejection buttons
 @bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
 def handle_deposit_approval(call):
     """Handle deposit approval or rejection"""
@@ -5897,7 +5933,7 @@ Enter how many points you want to redeem:
 
         elif call.data == 'view_badges':
             bot.answer_callback_query(call.id)
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5921,7 +5957,7 @@ You'll be able to invite friends and earn rewards.
         elif call.data == 'redeem_points':
             # Check referral points
             points = user.referral_points or 0
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5941,7 +5977,7 @@ You'll be able to redeem your points for account balance.
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
-            
+
         elif call.data == 'view_referrals':
             # Display coming soon message
             bot.send_message(
