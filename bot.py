@@ -3196,9 +3196,26 @@ def handle_order_admin_decision(call):
     """Handle admin approval/rejection for orders with enhanced user notifications"""
     session = None
     try:
-        parts = call.data.split('_order_')
-        action = parts[0]
-        order_id = int(parts[1])
+        # Add comprehensive debug logging to track callback data
+        logger.info(f"Processing order admin decision callback: {call.data}")
+        chat_id = call.message.chat.id
+        logger.info(f"Full order callback details - ID: {call.id}, From: {chat_id}, Data: {call.data}")
+        
+        # Check if user is admin
+        if not is_admin(chat_id):
+            bot.answer_callback_query(call.id, "You don't have permission to manage orders")
+            return
+        
+        # Extract order ID with improved error handling
+        try:
+            parts = call.data.split('_order_')
+            action = parts[0]
+            order_id = int(parts[1])
+            logger.info(f"Successfully extracted order ID: {order_id}, Action: {action}")
+        except (ValueError, IndexError) as e:
+            logger.error(f"Failed to extract order ID from {call.data}: {str(e)}")
+            bot.answer_callback_query(call.id, "Error processing order. Invalid format.")
+            return
 
         session = get_session()
         order = session.query(Order).filter_by(id=order_id).first()
@@ -4759,8 +4776,22 @@ def handle_deposit_approval(call):
         return
 
     try:
+        # Log the incoming callback data for debugging
+        logger.info(f"Processing deposit approval callback: {call.data}")
+        
+        # Make sure to fully log the callback data to diagnose any issues
+        logger.info(f"Full callback details - ID: {call.id}, From: {chat_id}, Data: {call.data}")
+        
         action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
-        deposit_id = int(call.data.split('_')[-1])
+        
+        # Extract the deposit ID safely with improved error handling
+        try:
+            deposit_id = int(call.data.split('_')[-1])
+            logger.info(f"Successfully extracted deposit ID: {deposit_id}")
+        except (ValueError, IndexError) as e:
+            logger.error(f"Failed to extract deposit ID from {call.data}: {str(e)}")
+            bot.answer_callback_query(call.id, "Error processing deposit. Invalid format.")
+            return
 
         session = get_session()
 
