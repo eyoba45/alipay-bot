@@ -2691,6 +2691,10 @@ If the issue persists, please contact our support team.
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 @subscription_required
 def track_order(message):
+
+@bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
+@subscription_required
+def track_order(message):
     """Handle track order button with comprehensive tracking options"""
     chat_id = message.chat.id
     session = None
@@ -4704,8 +4708,12 @@ Please contact customer support for assistance or try again with a clearer payme
 
             bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} rejected")
 
-    # Make sure to close the session
-    safe_close_session(session)
+    except Exception as e:
+        logger.error(f"Error handling deposit approval: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing deposit")
+    finally:
+        safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '➕ Add Balance')
 def add_balance_prompt(message):
