@@ -2695,7 +2695,6 @@ def track_order(message):
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 @subscription_required
 def track_order(message):
-    """Handle track order button with comprehensive tracking options"""
     chat_id = message.chat.id
     session = None
     try:
