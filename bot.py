@@ -1306,12 +1306,15 @@ Click on "📅 Subscription" and use the renewal button.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing your request")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
 def handle_deposit_approval_callback(call):
     """Handle deposit approval or rejection callback from inline buttons"""
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     session = None
+
+    # Add detailed logging for button clicks
+    logger.info(f"Deposit admin button clicked: {call.data}")
 
     # Check if user is admin
     if not is_admin(chat_id):
@@ -1319,9 +1322,19 @@ def handle_deposit_approval_callback(call):
         return
 
     try:
-        # Parse the callback data
-        action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
-        deposit_id = int(call.data.split('_')[-1])
+        # Parse the callback data with improved reliability
+        if call.data.startswith('approve_deposit_'):
+            action = 'approve'
+            deposit_id = int(call.data.replace('approve_deposit_', ''))
+        elif call.data.startswith('reject_deposit_'):
+            action = 'reject'
+            deposit_id = int(call.data.replace('reject_deposit_', ''))
+        else:
+            logger.error(f"Unknown deposit action format: {call.data}")
+            bot.answer_callback_query(call.id, "Invalid deposit action")
+            return
+            
+        logger.info(f"Parsed deposit action: {action}, deposit_id: {deposit_id}")
 
         session = get_session()
 
@@ -2294,7 +2307,7 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2319,7 +2332,7 @@ You'll be able to invite friends and earn rewards.
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2672,148 +2685,8 @@ If the issue persists, please contact our support team.
         if chat_id in user_states:
             del user_states[chat_id]
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
-def handle_deposit_admin_decision(call):
-    """Handle admin approval/rejection for deposits"""
-    session = None
-    try:
-        parts = call.data.split('_')
-        action = parts[0]  # Now "approve" or "reject"
-        deposit_marker = parts[1]  # This will be "deposit"
-        chat_id = int(parts[2])
-        amount = float(parts[3])
-
-        logger.info(f"Processing deposit {action} for user {chat_id}, amount: ${amount}")
-
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-
-        if not user:
-            bot.answer_callback_query(call.id, "User not found")
-            logger.error(f"User {chat_id} not found for deposit {action}")
-            return
-
-        pending_deposit = session.query(PendingDeposit).filter_by(user_id=user.id, amount=amount, status='Processing').first()
-
-        if not pending_deposit:
-            bot.answer_callback_query(call.id, "No matching pending deposit found")
-            logger.warning(f"No pending deposit found for user {chat_id} with amount ${amount}")
-            return
-
-        if action == 'approve':
-            # Check subscription status to see if we need to deduct the subscription fee
-            now = datetime.utcnow()
-            subscription_deducted = False
-            subscription_renewal_msg = ""
-
-            if user.subscription_date:
-                days_passed = (now - user.subscription_date).days
-                # If subscription has expired, deduct $1 for renewal
-                if days_passed >= 30:
-                    # Only deduct if they have enough to cover deposit + subscription
-                    if amount >= 1.0:
-                        amount_after_sub = amount - 1.0  # Deduct $1 subscription fee
-                        user.balance += amount_after_sub
-                        user.subscription_date = now  # Set new subscription date
-                        subscription_deducted = True
-                        subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION RENEWED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• New expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
-                    else:
-                        # If deposit is less than $1, just add to balance without renewing
-                        user.balance += amount
-                else:
-                    # Subscription still active, add full amount
-                    user.balance += amount
-            else:
-                # No previous subscription, set initial subscription date and deduct fee
-                if amount >= 1.0:
-                    amount_after_sub = amount - 1.0  # Deduct $1 subscription fee
-                    user.balance += amount_after_sub
-                    user.subscription_date = now  # Set initial subscription date
-                    subscription_deducted = True
-                    subscription_renewal_msg = "\n<b>📅 SUBSCRIPTION ACTIVATED:</b>\n• Monthly fee: $1.00 (150 birr) deducted\n• Expiry date: " + (now + timedelta(days=30)).strftime('%Y-%m-%d')
-                else:
-                    # If deposit is less than $1, just add to balance without subscription
-                    user.balance += amount
-
-            pending_deposit.status = 'Approved'
-            session.commit()
-
-            # Notify user
-            message_text = f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ✅ <b>DEPOSIT APPROVED</b> ✅  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-<b>💰 DEPOSIT DETAILS:</b>
-• Amount: <code>{int(amount * 160.0):,}</code> birr
-• USD Value: ${amount:.2f}
-{f"• Amount after subscription fee: ${amount - 1.0:.2f}" if subscription_deducted else ""}
-{subscription_renewal_msg}
-
-<b>💳 ACCOUNT UPDATED:</b>
-• New Balance: <code>{int(user.balance * 160):,}</code> birr
-
-✨ <b>You're ready to start shopping!</b> ✨
-
-<i>Browse AliExpress and submit your orders now!</i>
-"""
-
-            bot.send_message(
-                chat_id,
-                message_text,
-                parse_mode='HTML'
-            )
-
-            # Update admin message
-            bot.edit_message_text(
-                f"✅ Deposit of ${amount:.2f} approved for {user.name}",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        elif action == 'reject':
-            # Mark as rejected without changing balance
-            pending_deposit.status = 'Rejected'
-            try:
-                session.commit()
-            except Exception as commit_error:
-                logger.error(f"Error committing rejection: {commit_error}")
-                session.rollback()
-                raise
-
-            # Notify user
-            bot.send_message(
-                chat_id,
-                f"""
-❌ DEPOSIT REJECTED ❌
-
-Your deposit of ${amount:.2f} was rejected.
-
-Possible reasons:
-• Payment amount didn't match
-• Payment screenshot unclear
-• Payment not received
-
-Please try again or contact support.
-""",
-                parse_mode='HTML'
-            )
-
-            # Update admin message
-            bot.edit_message_text(
-                f"❌ Deposit of ${amount:.2f} rejected for {user.name}",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-
-        bot.answer_callback_query(call.id, "Action processed successfully")
-
-    except Exception as e:
-        logger.error(f"Error processing deposit decision: {e}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error processing decision")
-    finally:
-        safe_close_session(session)
+# This handler has been replaced with the consolidated version at line 1309
+# All code has been removed from this duplicate handler to fix button conflicts
 
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 @subscription_required
@@ -3196,14 +3069,27 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
         if session:
             safe_close_session(session)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('process_order_') or call.data.startswith('reject_order_'))
 def handle_order_admin_decision(call):
     """Handle admin approval/rejection for orders with enhanced user notifications"""
     session = None
     try:
-        parts = call.data.split('_order_')
-        action = parts[0]
-        order_id = int(parts[1])
+        # Add detailed logging for button clicks to help with debugging
+        logger.info(f"Order admin button clicked: {call.data}")
+        
+        # More robust parsing of callback data to handle both formats reliably
+        if call.data.startswith('process_order_'):
+            action = 'process'
+            order_id = int(call.data.replace('process_order_', ''))
+        elif call.data.startswith('reject_order_'):
+            action = 'reject'
+            order_id = int(call.data.replace('reject_order_', ''))
+        else:
+            logger.error(f"Unknown order action format: {call.data}")
+            bot.answer_callback_query(call.id, "Invalid order action")
+            return
+            
+        logger.info(f"Parsed order action: {action}, order_id: {order_id}")
 
         session = get_session()
         order = session.query(Order).filter_by(id=order_id).first()
@@ -4710,21 +4596,8 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
     finally:
         safe_close_session(session)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
-def handle_deposit_approval(call):
-    """Handle deposit approval or rejection"""
-    chat_id = call.message.chat.id
-    message_id = call.message.message_id
-    session = None
-
-    # Check if user is admin
-    if not is_admin(chat_id):
-        bot.answer_callback_query(call.id, "You don't have permission to manage deposits")
-        return
-
-    try:
-        action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
-        deposit_id = int(call.data.split('_')[-1])
+# This handler has been replaced with the improved version at line 1309
+# Left this comment for code history tracking purposes
 
         session = get_session()
 
@@ -4831,12 +4704,8 @@ Please contact customer support for assistance or try again with a clearer payme
 
             bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} rejected")
 
-    except Exception as e:
-        logger.error(f"Error handling deposit approval: {e}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error processing deposit")
-    finally:
-        safe_close_session(session)
+    # Make sure to close the session
+    safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '➕ Add Balance')
 def add_balance_prompt(message):
@@ -5897,7 +5766,7 @@ Enter how many points you want to redeem:
 
         elif call.data == 'view_badges':
             bot.answer_callback_query(call.id)
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5921,7 +5790,7 @@ You'll be able to invite friends and earn rewards.
         elif call.data == 'redeem_points':
             # Check referral points
             points = user.referral_points or 0
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5941,7 +5810,7 @@ You'll be able to redeem your points for account balance.
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
-            
+
         elif call.data == 'view_referrals':
             # Display coming soon message
             bot.send_message(
