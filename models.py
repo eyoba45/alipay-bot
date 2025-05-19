@@ -97,7 +97,6 @@ class PendingDeposit(Base):
     tx_ref = Column(String, unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default='Processing')
-    balance_updated = Column(Boolean, default=False)  # Track if the user's balance has been updated
 
     # Relationship with user
     user = relationship("User", back_populates="pending_deposits")
