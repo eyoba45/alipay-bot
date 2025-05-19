@@ -15,6 +15,7 @@ import threading
 import fcntl
 import requests
 import queue
+import urllib.parse
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from connection_manager import init_db, get_session, safe_close_session, session_scope
 from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction, Transaction
@@ -2937,8 +2938,8 @@ Please check the order number and try again.
         tracking_info = ""
         delivery_estimate = ""
         if order.tracking_number:
-            clean_tracking = order.tracking_number.strip().replace('+', '')
-            parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={order.tracking_number}&lang=en"
+            clean_tracking = order.tracking_number.strip().replace(" ", "").replace("+", "%20")
+            parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={clean_tracking}&lang=en"
             aliexpress_tracking_link = f"https://aliexpress.com/trackOrder.htm"
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
@@ -3469,8 +3470,8 @@ def process_order_details(message, order_id, user_telegram_id):
 
         tracking_info = ""
         if tracking:
-            clean_tracking = tracking.strip().replace('+', '')
-            parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={tracking}&lang=en"
+            clean_tracking = tracking.strip().replace(" ", "").replace("+", "%2B")      
+            parcels_app_link = f"https://global.cainiao.com/detail.htm?mailNo={clean_tracking}&lang=en"
             tracking_info = f"""
 <b>📬 TRACKING INFORMATION:</b>
 • Tracking Number: <code>{tracking}</code>
