@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Telegram Bot Runner with enhanced functionality
 Implements unlimited request handling system to prevent crashes under heavy load
@@ -1306,6 +1307,7 @@ Click on "📅 Subscription" and use the renewal button.
         logger.error(traceback.format_exc())
         bot.answer_callback_query(call.id, "Error processing your request")
 
+# This is the primary handler for deposit approval/rejection
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
 def handle_deposit_approval_callback(call):
     """Handle deposit approval or rejection callback from inline buttons"""
@@ -2294,7 +2296,7 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2319,7 +2321,7 @@ You'll be able to invite friends and earn rewards.
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2672,20 +2674,21 @@ If the issue persists, please contact our support team.
         if chat_id in user_states:
             del user_states[chat_id]
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
-def handle_deposit_admin_decision(call):
-    """Handle admin approval/rejection for deposits"""
-    session = None
-    try:
-        parts = call.data.split('_')
-        action = parts[0]  # Now "approve" or "reject"
-        deposit_marker = parts[1]  # This will be "deposit"
-        chat_id = int(parts[2])
-        amount = float(parts[3])
+# This handler is commented out to prevent duplicate callback handling
+# @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+# def handle_deposit_admin_decision(call):
+#     """Handle admin approval/rejection for deposits"""
+#     session = None
+#     try:
+#         parts = call.data.split('_')
+#         action = parts[0]  # Now "approve" or "reject"
+#         deposit_marker = parts[1]  # This will be "deposit"
+#         chat_id = int(parts[2])
+#         amount = float(parts[3])
 
-        logger.info(f"Processing deposit {action} for user {chat_id}, amount: ${amount}")
-
-        session = get_session()
+#         logger.info(f"Processing deposit {action} for user {chat_id}, amount: ${amount}")
+#
+#         session = get_session()
         user = session.query(User).filter_by(telegram_id=chat_id).first()
 
         if not user:
@@ -2806,14 +2809,14 @@ Please try again or contact support.
                 message_id=call.message.message_id
             )
 
-        bot.answer_callback_query(call.id, "Action processed successfully")
-
-    except Exception as e:
-        logger.error(f"Error processing deposit decision: {e}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error processing decision")
-    finally:
-        safe_close_session(session)
+#         bot.answer_callback_query(call.id, "Action processed successfully")
+#
+#     except Exception as e:
+#         logger.error(f"Error processing deposit decision: {e}")
+#         logger.error(traceback.format_exc())
+#         bot.answer_callback_query(call.id, "Error processing decision")
+#     finally:
+#         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '🔍 Track Order')
 @subscription_required
@@ -4710,28 +4713,29 @@ Found <b>{len(pending_deposits)}</b> deposits pending manual approval.
     finally:
         safe_close_session(session)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
-def handle_deposit_approval(call):
-    """Handle deposit approval or rejection"""
-    chat_id = call.message.chat.id
-    message_id = call.message.message_id
-    session = None
+# This handler is commented out to prevent duplicate callback handling
+# @bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
+# def handle_deposit_approval(call):
+#     """Handle deposit approval or rejection"""
+#     chat_id = call.message.chat.id
+#     message_id = call.message.message_id
+#     session = None
 
-    # Check if user is admin
-    if not is_admin(chat_id):
-        bot.answer_callback_query(call.id, "You don't have permission to manage deposits")
-        return
+#     # Check if user is admin
+#     if not is_admin(chat_id):
+#         bot.answer_callback_query(call.id, "You don't have permission to manage deposits")
+#         return
 
-    try:
-        action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
-        deposit_id = int(call.data.split('_')[-1])
+#     try:
+#         action = 'approve' if call.data.startswith('approve_deposit_') else 'reject'
+#         deposit_id = int(call.data.split('_')[-1])
+#
+#         session = get_session()
 
-        session = get_session()
-
-        # Get deposit and user
-        deposit_info = session.query(PendingDeposit, User).join(User).filter(
-            PendingDeposit.id == deposit_id
-        ).first()
+#         # Get deposit and user
+#         deposit_info = session.query(PendingDeposit, User).join(User).filter(
+#             PendingDeposit.id == deposit_id
+#         ).first()
 
         if not deposit_info:
             bot.answer_callback_query(call.id, "Deposit not found or already processed")
@@ -4829,14 +4833,14 @@ Please contact customer support for assistance or try again with a clearer payme
                 parse_mode='HTML'
             )
 
-            bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} rejected")
-
-    except Exception as e:
-        logger.error(f"Error handling deposit approval: {e}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, "Error processing deposit")
-    finally:
-        safe_close_session(session)
+#            bot.answer_callback_query(call.id, f"Deposit of ${deposit.amount:.2f} rejected")
+#
+#     except Exception as e:
+#         logger.error(f"Error handling deposit approval: {e}")
+#         logger.error(traceback.format_exc())
+#         bot.answer_callback_query(call.id, "Error processing deposit")
+#     finally:
+#         safe_close_session(session)
 
 @bot.message_handler(func=lambda msg: msg.text == '➕ Add Balance')
 def add_balance_prompt(message):
@@ -5897,7 +5901,7 @@ Enter how many points you want to redeem:
 
         elif call.data == 'view_badges':
             bot.answer_callback_query(call.id)
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5921,7 +5925,7 @@ You'll be able to invite friends and earn rewards.
         elif call.data == 'redeem_points':
             # Check referral points
             points = user.referral_points or 0
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5941,7 +5945,7 @@ You'll be able to redeem your points for account balance.
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
-            
+
         elif call.data == 'view_referrals':
             # Display coming soon message
             bot.send_message(
