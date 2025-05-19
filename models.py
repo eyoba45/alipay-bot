@@ -17,12 +17,12 @@ class User(Base):
     phone = Column(String)
     address = Column(String)
     balance = Column(Float, default=0.0)
-    
+
     # Referral system fields
     referral_code = Column(String, unique=True, nullable=True)
     referred_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     referral_points = Column(Integer, default=0)
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -31,7 +31,7 @@ class User(Base):
     pending_deposits = relationship("PendingDeposit", back_populates="user")
     companion_profile = relationship("CompanionProfile", back_populates="user", uselist=False)
     companion_interactions = relationship("CompanionInteraction", back_populates="user")
-    
+
     # Referral relationships
     referred_users = relationship("User", backref="referred_by", remote_side=[id])
     referral_rewards = relationship("ReferralReward", back_populates="user")
@@ -97,6 +97,7 @@ class PendingDeposit(Base):
     tx_ref = Column(String, unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default='Processing')
+    balance_updated = Column(Boolean, default=False)
 
     # Relationship with user
     user = relationship("User", back_populates="pending_deposits")
@@ -106,23 +107,23 @@ class PendingDeposit(Base):
 
 class CompanionInteraction(Base):
     __tablename__ = 'companion_interactions'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     message_text = Column(Text, nullable=False)
     interaction_type = Column(String, nullable=False)  # 'greeting', 'question', 'recommendation', etc.
     sentiment = Column(String, nullable=True)  # 'positive', 'negative', 'neutral'
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationship with user
     user = relationship("User", back_populates="companion_interactions")
-    
+
     def __repr__(self):
         return f"<CompanionInteraction(user_id={self.user_id}, type='{self.interaction_type}')>"
 
 class CompanionProfile(Base):
     __tablename__ = 'companion_profiles'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
     companion_name = Column(String, default="Selam")
@@ -134,16 +135,16 @@ class CompanionProfile(Base):
     morning_brief = Column(Boolean, default=True)  # Whether to send morning briefings
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationship with user
     user = relationship("User", back_populates="companion_profile")
-    
+
     def __repr__(self):
         return f"<CompanionProfile(user_id={self.user_id}, name='{self.companion_name}', relationship_level={self.relationship_level})>"
 
 class Referral(Base):
     __tablename__ = 'referrals'
-    
+
     id = Column(Integer, primary_key=True)
     referrer_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     referred_id = Column(Integer, ForeignKey('users.id'), nullable=False)
@@ -152,17 +153,17 @@ class Referral(Base):
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     referrer = relationship("User", foreign_keys=[referrer_id], back_populates="referrals_made")
     referred = relationship("User", foreign_keys=[referred_id], back_populates="referrals_received")
-    
+
     def __repr__(self):
         return f"<Referral(referrer_id={self.referrer_id}, referred_id={self.referred_id}, status='{self.status}')>"
 
 class ReferralReward(Base):
     __tablename__ = 'referral_rewards'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     referral_id = Column(Integer, ForeignKey('referrals.id'), nullable=True)
@@ -170,17 +171,17 @@ class ReferralReward(Base):
     reward_type = Column(String, nullable=False)  # 'signup', 'deposit', 'subscription', 'order', 'bonus'
     description = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     user = relationship("User", back_populates="referral_rewards")
     referral = relationship("Referral", backref="rewards")
-    
+
     def __repr__(self):
         return f"<ReferralReward(user_id={self.user_id}, points={self.points}, type='{self.reward_type}')>"
 
 class UserBalance(Base):
     __tablename__ = 'user_balances'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
     balance = Column(Float, default=0.0)
@@ -188,16 +189,16 @@ class UserBalance(Base):
     last_spend_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationship
     user = relationship("User", backref="user_balance")
-    
+
     def __repr__(self):
         return f"<UserBalance(user_id={self.user_id}, balance=${self.balance:.2f})>"
 
 class Transaction(Base):
     __tablename__ = 'transactions'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     amount = Column(Float, nullable=False)
@@ -207,9 +208,9 @@ class Transaction(Base):
     status = Column(String, default='completed')  # pending, completed, failed, refunded
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationship
     user = relationship("User", backref="transactions")
-    
+
     def __repr__(self):
         return f"<Transaction(user_id={self.user_id}, type='{self.transaction_type}', amount=${self.amount:.2f})>"
