@@ -483,7 +483,7 @@ def process_verified_deposit(telegram_id, amount, payment_data):
                 session.flush()
                 logger.info(f"✅ Deposit status updated from {current_status} to Auto-Approved. ID: {pending_deposit.id}, tx_ref: {tx_ref}")
         else:
-            # Create new deposit record with balance_update flag set to False initially
+            # Create new deposit record with balance_updated flag set to False initially
             pending_deposit = PendingDeposit(
                 user_id=user.id,
                 amount=amount,
@@ -590,7 +590,6 @@ def process_verified_deposit(telegram_id, amount, payment_data):
 """
             
         # Mark the deposit as having balance updated - CRITICAL FIX
-        # Use balance_updated column name as it exists in the database
         pending_deposit.balance_updated = True
         
         # Final commit (or rollback on exception)
