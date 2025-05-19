@@ -2294,7 +2294,7 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges coming soon message"""
     chat_id = message.chat.id
-
+    
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2319,7 +2319,7 @@ You'll be able to invite friends and earn rewards.
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
     chat_id = message.chat.id
-
+    
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -3238,46 +3238,6 @@ Enter 'cancel' to cancel processing.
                 parse_mode='HTML'
             )
             bot.register_next_step_handler(msg, process_order_details, order.id, user.telegram_id)
-            return
-        elif action == 'reject':
-            # Update order status
-            order.status = 'Cancelled'
-            order.updated_at = datetime.utcnow()
-            session.commit()
-            
-            # Notify admin
-            bot.edit_message_text(
-                f"❌ Order #{order.order_number} has been rejected and cancelled.",
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
-            
-            # Notify user
-            bot.send_message(
-                user.telegram_id,
-                f"""
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   ❌ <b>ORDER CANCELLED</b> ❌  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Your order #{order.order_number} has been cancelled due to insufficient balance.
-
-<b>ORDER DETAILS:</b>
-• Order #: {order.order_number}
-• Status: <b>Cancelled</b>
-• Product: {order.product_link}
-
-<b>NEXT STEPS:</b>
-• Please add more funds to your account
-• Submit a new order when your balance is sufficient
-
-<i>If you have any questions, please contact support.</i>
-""",
-                parse_mode='HTML'
-            )
-            
-            # Acknowledge callback
-            bot.answer_callback_query(call.id, "Order rejected successfully")
             return
     except Exception as e:
         logger.error(f"Error in order admin decision: {e}")
@@ -5937,7 +5897,7 @@ Enter how many points you want to redeem:
 
         elif call.data == 'view_badges':
             bot.answer_callback_query(call.id)
-
+            
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5961,7 +5921,7 @@ You'll be able to invite friends and earn rewards.
         elif call.data == 'redeem_points':
             # Check referral points
             points = user.referral_points or 0
-
+            
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5981,7 +5941,7 @@ You'll be able to redeem your points for account balance.
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
-
+            
         elif call.data == 'view_referrals':
             # Display coming soon message
             bot.send_message(
