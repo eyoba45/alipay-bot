@@ -3932,19 +3932,11 @@ def run_subscription_checker():
         time.sleep(24 * 60 * 60)
 
 # Admin Dashboard Function Handlers
-@bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')
-def admin_dashboard(message):
-    """Show admin dashboard with all admin features"""
-    chat_id = message.chat.id
+# Import admin handlers
+from admin_handlers import register_handlers as register_admin_handlers
 
-    # Check if user is admin
-    if not is_admin(chat_id):
-        bot.send_message(
-            chat_id,
-            "⚠️ You don't have permission to access the admin dashboard.",
-            reply_markup=create_main_menu(True, chat_id)
-        )
-        return
+# Initialize admin handlers
+register_admin_handlers(bot, ADMIN_IDS)
 
     # Create admin menu
     admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
