@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 Telegram Bot Runner with enhanced functionality
@@ -2295,7 +2294,7 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2320,7 +2319,7 @@ You'll be able to invite friends and earn rewards.
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -5898,7 +5897,7 @@ Enter how many points you want to redeem:
 
         elif call.data == 'view_badges':
             bot.answer_callback_query(call.id)
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5922,7 +5921,7 @@ You'll be able to invite friends and earn rewards.
         elif call.data == 'redeem_points':
             # Check referral points
             points = user.referral_points or 0
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5942,7 +5941,7 @@ You'll be able to redeem your points for account balance.
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
-            
+
         elif call.data == 'view_referrals':
             # Display coming soon message
             bot.send_message(
