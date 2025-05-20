@@ -3196,8 +3196,28 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
         if session:
             safe_close_session(session)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
-def handle_order_admin_decision(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_', 'approve_deposit_', 'reject_deposit_')))
+def handle_admin_decisions(call):
+    """Handle all admin approval/rejection decisions"""
+    chat_id = call.message.chat.id
+    
+    # Check if user is admin
+    if not is_admin(chat_id):
+        bot.answer_callback_query(call.id, "You don't have permission to perform this action")
+        return
+
+    try:
+        action = call.data.split('_')[0]  # approve/reject/process
+        action_type = call.data.split('_')[1]  # order/deposit
+        
+        if action_type == 'order':
+            handle_order_admin_decision(call)
+        elif action_type == 'deposit':
+            handle_deposit_admin_decision(call)
+            
+    except Exception as e:
+        logger.error(f"Error in admin decision handler: {e}")
+        bot.answer_callback_query(call.id, "Error processing request")
     """Handle admin approval/rejection for orders with enhanced user notifications"""
     session = None
     try:
