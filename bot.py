@@ -3196,36 +3196,201 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
         if session:
             safe_close_session(session)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_', 'approve_deposit_', 'reject_deposit_')))
-def handle_admin_decisions(call):
-    """Handle all admin approval/rejection decisions"""
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
+def handle_order_admin_decision(call):
+    """Handle admin approval/rejection for orders"""
     chat_id = call.message.chat.id
-    
-    logger.info(f"Admin button pressed - Callback: {call.data}, User: {chat_id}")
-    
-    # Check if user is admin
+    message_id = call.message.message_id
+    session = None
+
+    logger.info(f"Order button pressed - Callback: {call.data}, Admin: {chat_id}")
+
     if not is_admin(chat_id):
-        logger.warning(f"Unauthorized admin button access attempt from user {chat_id}")
-        bot.answer_callback_query(call.id, "You don't have permission to perform this action")
+        logger.warning(f"Unauthorized order button access from user {chat_id}")
+        bot.answer_callback_query(call.id, "⛔️ Admin access required")
         return
 
-    # Log the specific action type
-    action = call.data.split('_')[0]  # approve/reject/process
-    action_type = call.data.split('_')[1]  # order/deposit
-    logger.info(f"Processing {action} {action_type} request from admin {chat_id}")
+    try:
+        parts = call.data.split('_order_')
+        action = parts[0]  # process or reject
+        order_id = int(parts[1])
+        logger.info(f"Processing order action: {action} for order {order_id}")
+
+        session = get_session()
+        order = session.query(Order).filter_by(id=order_id).first()
+        
+        if not order:
+            logger.error(f"Order {order_id} not found")
+            bot.answer_callback_query(call.id, "Order not found")
+            return
+
+        user = session.query(User).filter_by(id=order.user_id).first()
+
+        if action == 'process':
+            order.status = 'Processing'
+            order.updated_at = datetime.utcnow()
+            session.commit()
+            logger.info(f"Order {order_id} marked as processing")
+
+            bot.answer_callback_query(call.id, "Please provide order details")
+            msg = bot.send_message(
+                chat_id,
+                """
+Please provide the following order details:
+
+1. AliExpress Order ID
+2. Tracking Number (if available)
+3. Product Price (in USD)
+
+Format: orderid|tracking|price
+Example: 8675309|LY123456789CN|25.99
+
+Enter 'cancel' to cancel processing.
+""",
+                parse_mode='HTML'
+            )
+            bot.register_next_step_handler(msg, process_order_details, order.id, user.telegram_id)
+            return
+
+    except Exception as e:
+        logger.error(f"Error processing order action: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing order action")
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+def handle_deposit_admin_decision(call):
+    """Handle deposit approval/rejection"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+
+    logger.info(f"Deposit button pressed - Callback: {call.data}, Admin: {chat_id}")
+
+    if not is_admin(chat_id):
+        logger.warning(f"Unauthorized deposit button access from user {chat_id}")
+        bot.answer_callback_query(call.id, "⛔️ Admin access required")
+        return
 
     try:
-        action = call.data.split('_')[0]  # approve/reject/process
-        action_type = call.data.split('_')[1]  # order/deposit
-        
-        if action_type == 'order':
-            handle_order_admin_decision(call)
-        elif action_type == 'deposit':
-            handle_deposit_admin_decision(call)
+        parts = call.data.split('_deposit_')
+        action = parts[0]  # approve or reject  
+        deposit_id = int(parts[1])
+        logger.info(f"Processing deposit action: {action} for deposit {deposit_id}")
+
+        session = get_session()
+        deposit_info = session.query(PendingDeposit, User).join(User).filter(
+            PendingDeposit.id == deposit_id
+        ).first()
+
+        if not deposit_info:
+            logger.error(f"Deposit {deposit_id} not found")
+            bot.answer_callback_query(call.id, "Deposit already processed or not found")
+            bot.edit_message_text(
+                "This deposit has already been processed.",
+                chat_id=chat_id,
+                message_id=message_id
+            )
+            return
+
+        deposit, user = deposit_info
+        logger.info(f"Found deposit for user {user.telegram_id}")
+
+        if action == 'approve':
+            # Add amount to user balance
+            user.balance += deposit.amount
             
+            # Update deposit status
+            deposit.status = 'Approved'
+            deposit.updated_at = datetime.utcnow()
+            
+            session.commit()
+            logger.info(f"Approved deposit {deposit_id} for user {user.telegram_id}")
+
+            # Notify user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
+
+<b>New Balance:</b> ${user.balance:.2f}
+
+<i>Thank you for using our service!</i>
+""",
+                parse_mode='HTML'
+            )
+
+            # Update admin message
+            bot.edit_message_text(
+                f"""
+<b>Deposit #{deposit.id}</b> - ✅ APPROVED
+
+👤 <b>User:</b> {user.name}
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+💳 <b>New Balance:</b> ${user.balance:.2f}
+⏰ <b>Time:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified.</i>
+""",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+
+            bot.answer_callback_query(call.id, f"✅ Deposit approved: ${deposit.amount:.2f}")
+
+        else:  # reject
+            deposit.status = 'Rejected'
+            deposit.updated_at = datetime.utcnow()
+            session.commit()
+            logger.info(f"Rejected deposit {deposit_id} for user {user.telegram_id}")
+
+            # Notify user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>DEPOSIT REJECTED</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> was rejected.
+
+Please try again with clear payment proof or contact support.
+
+<i>For help: @alipay_help_center</i>
+""",
+                parse_mode='HTML'
+            )
+
+            # Update admin message
+            bot.edit_message_text(
+                f"""
+<b>Deposit #{deposit.id}</b> - ❌ REJECTED
+
+👤 <b>User:</b> {user.name}
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+⏰ <b>Time:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified.</i>
+""",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+
+            bot.answer_callback_query(call.id, f"❌ Deposit rejected: ${deposit.amount:.2f}")
+
     except Exception as e:
-        logger.error(f"Error in admin decision handler: {e}")
-        bot.answer_callback_query(call.id, "Error processing request")
+        logger.error(f"Error processing deposit action: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing deposit action")
+    finally:
+        safe_close_session(session)
     """Handle admin approval/rejection for orders with enhanced user notifications"""
     session = None
     try:
