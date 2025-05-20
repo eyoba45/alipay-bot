@@ -3201,10 +3201,18 @@ def handle_admin_decisions(call):
     """Handle all admin approval/rejection decisions"""
     chat_id = call.message.chat.id
     
+    logger.info(f"Admin button pressed - Callback: {call.data}, User: {chat_id}")
+    
     # Check if user is admin
     if not is_admin(chat_id):
+        logger.warning(f"Unauthorized admin button access attempt from user {chat_id}")
         bot.answer_callback_query(call.id, "You don't have permission to perform this action")
         return
+
+    # Log the specific action type
+    action = call.data.split('_')[0]  # approve/reject/process
+    action_type = call.data.split('_')[1]  # order/deposit
+    logger.info(f"Processing {action} {action_type} request from admin {chat_id}")
 
     try:
         action = call.data.split('_')[0]  # approve/reject/process
