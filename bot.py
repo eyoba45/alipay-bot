@@ -3939,22 +3939,22 @@ from admin_handlers import register_handlers as register_admin_handlers
 register_admin_handlers(bot, ADMIN_IDS)
 
     # Create admin menu
-    admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    admin_menu.add(
-        KeyboardButton('👥 User Management'),
-        KeyboardButton('📦 Order Management')
-    )
-    admin_menu.add(
-        KeyboardButton('💰 Deposit Management'),
-        KeyboardButton('📊 System Stats')
-    )
-    admin_menu.add(
-        KeyboardButton('📅 Subscription Management'),
-        KeyboardButton('⚙️ Bot Settings')
-    )
-    admin_menu.add(
-        KeyboardButton('🔙 Back to Main Menu')
-    )
+admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+admin_menu.add(
+    KeyboardButton('👥 User Management'),
+    KeyboardButton('📦 Order Management')
+)
+admin_menu.add(
+    KeyboardButton('💰 Deposit Management'),
+    KeyboardButton('📊 System Stats')
+)
+admin_menu.add(
+    KeyboardButton('📅 Subscription Management'),
+    KeyboardButton('⚙️ Bot Settings')
+)
+admin_menu.add(
+    KeyboardButton('🔙 Back to Main Menu')
+)
 
     bot.send_message(
         chat_id,
