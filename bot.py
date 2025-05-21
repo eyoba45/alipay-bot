@@ -6469,8 +6469,9 @@ def order_update_command(message):
             return
 
         # Update the order in the database
-        session = Session()
+        session = None
         try:
+            session = get_session()
             order = session.query(Order).filter_by(id=order_id).first()
 
             if not order:
@@ -6522,7 +6523,8 @@ def order_update_command(message):
             bot.reply_to(message, f"❌ Error updating order: {e}")
             logger.error(f"Error updating order: {e}")
         finally:
-            session.close()
+            if session:
+                safe_close_session(session)
 
     except Exception as e:
         bot.reply_to(message, f"❌ Error processing command: {e}")
@@ -6535,8 +6537,9 @@ def order_list_command(message):
         bot.reply_to(message, "⚠️ This command is only available to administrators.")
         return
 
+    session = None
     try:
-        session = Session()
+        session = get_session()
         orders = session.query(Order).order_by(Order.created_at.desc()).limit(10).all()
 
         if not orders:
@@ -6563,7 +6566,8 @@ def order_list_command(message):
         bot.reply_to(message, f"❌ Error listing orders: {e}")
         logger.error(f"Error in order_list_command: {e}")
     finally:
-        session.close()
+        if session:
+            safe_close_session(session)
 
 @bot.message_handler(regexp="^/orderdetail_([0-9]+)$")
 def order_detail_inline_command(message):
@@ -6608,8 +6612,9 @@ def order_detail_command(message):
 
 def _show_order_details(chat_id, order_id):
     """Helper function to show order details"""
+    session = None
     try:
-        session = Session()
+        session = get_session()
         order = session.query(Order).filter_by(id=order_id).first()
 
         if not order:
@@ -6662,7 +6667,8 @@ def _show_order_details(chat_id, order_id):
         bot.send_message(chat_id, f"❌ Error retrieving order details: {e}")
         logger.error(f"Error in _show_order_details: {e}")
     finally:
-        session.close()
+        if session:
+            safe_close_session(session)
 
 
 
