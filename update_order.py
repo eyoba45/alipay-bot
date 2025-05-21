@@ -81,19 +81,23 @@ def list_orders():
     session = Session()
     try:
         print("\n===== ORDERS LIST =====")
-        print(f"{'ID':<5} {'USER':<10} {'DATE':<12} {'STATUS':<12} {'AMOUNT':<10}")
-        print("-" * 50)
+        print(f"{'ID':<5} {'USER':<20} {'DATE':<12} {'STATUS':<12} {'AMOUNT':<10}")
+        print("-" * 60)
         
         orders = session.query(Order).order_by(desc(Order.created_at)).all()
         for order in orders:
             # Get user info
             user = session.query(User).filter_by(id=order.user_id).first()
-            user_name = user.name if user else "Unknown"
+            user_name = user.name if user and user.name else f"User {order.user_id}"
+            
+            # Truncate name if too long
+            if len(user_name) > 18:
+                user_name = user_name[:16] + ".."
             
             date_str = order.created_at.strftime('%Y-%m-%d')
-            print(f"{order.id:<5} {user_name:<10} {date_str:<12} {order.status:<12} ${order.amount:<10.2f}")
+            print(f"{order.id:<5} {user_name:<20} {date_str:<12} {order.status:<12} ${order.amount:<10.2f}")
         
-        print("-" * 50)
+        print("-" * 60)
         print(f"Total Orders: {len(orders)}")
         
     except Exception as e:
