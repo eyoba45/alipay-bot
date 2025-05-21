@@ -6672,7 +6672,82 @@ def _show_order_details(chat_id, order_id):
 
 
 
-@bot.message_handler(commands=['orderplace'])
+@bot.message_handler(commands=['ordership'])
+def order_ship_command(message):
+    """Update an order's status from Processing to Shipped
+    Format: /ordership ORDER_ID [TRACKING_NUMBER]
+    Example: /ordership 123 LY123456789CN
+    """
+    if not is_admin(message.chat.id):
+        bot.reply_to(message, "⚠️ This command is only available to administrators.")
+        return
+
+    # Extract the command format
+    text = message.text.strip()
+    parts = text.split()
+    
+    # Check command format
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ Missing parameters. Format: /ordership ORDER_ID [TRACKING_NUMBER]")
+        return
+        
+    order_id = parts[1]
+    tracking_number = parts[2] if len(parts) > 2 else None
+    
+    session = None
+    try:
+        session = get_session()
+        
+        # Find the order
+        order = session.query(Order).filter_by(id=order_id).first()
+        if not order:
+            bot.reply_to(message, f"❌ Order with ID {order_id} not found.")
+            return
+            
+        # Check if the order is in 'Processing' status
+        if order.status != "Processing":
+            bot.reply_to(message, f"⚠️ Cannot update order status. Current status is '{order.status}', not 'Processing'.")
+            return
+            
+        # Update the order status to 'Shipped'
+        previous_status = order.status
+        order.status = "Shipped"
+        order.delivery_status = "in_transit"
+        order.updated_at = datetime.now()
+        
+        # Update tracking number if provided
+        if tracking_number:
+            order.tracking_number = tracking_number
+        
+        # Commit the changes
+        session.commit()
+        
+        # Notify the admin
+        bot.reply_to(message, f"✅ Order #{order_id} updated from {previous_status} to Shipped.")
+        
+        # Get the user to notify them
+        user = session.query(User).get(order.user_id)
+        if user:
+            # Notify the user of the status change
+            try:
+                user_notification = (
+                    f"🚚 <b>Your order has been shipped!</b>\n\n"
+                    f"<b>Order Number:</b> {order.order_number}\n"
+                    f"<b>Tracking Number:</b> {order.tracking_number}\n"
+                    f"<b>Carrier:</b> {order.carrier}\n\n"
+                    f"You can track your package using the tracking number above."
+                )
+                bot.send_message(user.telegram_id, user_notification, parse_mode='HTML')
+            except Exception as e:
+                logging.error(f"Error notifying user about shipped order: {e}")
+                
+    except Exception as e:
+        logging.error(f"Error updating order to shipped: {e}")
+        bot.reply_to(message, f"❌ Error updating order: {str(e)}")
+    finally:
+        if session:
+            session.close()
+
 def order_place_command(message):
     """Place a new order with all details and notify the user
     Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE PRODUCT_DESCRIPTION [CARRIER]
@@ -6760,7 +6835,21 @@ def order_place_command(message):
         tracking_number = parts[3]
         price = parts[4]
         product_description = parts[5]
-        carrier = parts[6] if len(parts) > 6 else "AliExpress"  # Default carrier
+        # Check for optional carrier and/or manual order number
+        carrier = "AliExpress"  # Default carrier
+        manual_order_number = None
+        
+        # If part 6 exists, it could be the carrier or an order number
+        if len(parts) > 6:
+            if parts[6].isdigit():
+                manual_order_number = int(parts[6])
+            else:
+                carrier = parts[6]
+                
+        # If part 7 exists, it could be the order number (if part 6 was the carrier)
+        if len(parts) > 7 and manual_order_number is None:
+            if parts[7].isdigit():
+                manual_order_number = int(parts[7])
 
     # Validate inputs
     try:
@@ -6781,13 +6870,38 @@ def order_place_command(message):
             bot.reply_to(message, f"❌ User with Telegram ID {user_telegram_id} not found.")
             return
             
-        # Generate a unique order number for tracking
-        # Get the highest order number for this user and increment it
-        last_order = session.query(Order).filter_by(user_id=user.id).order_by(Order.order_number.desc()).first()
-        next_order_number = 1
-        if last_order and last_order.order_number:
-            next_order_number = last_order.order_number + 1
+        # If a manual order number was provided, use it
+        # Otherwise, generate the next sequential order number
+        if manual_order_number is not None:
+            next_order_number = manual_order_number
+            logging.info(f"Using manually specified order number {next_order_number} for user {user.id} (Telegram ID: {user_telegram_id})")
+        else:
+            # Generate a unique order number for tracking
+            # Get the highest order number for this user and increment it
+            last_order = session.query(Order).filter_by(user_id=user.id).order_by(Order.order_number.desc()).first()
             
+            # Default to 1 for new users
+            next_order_number = 1
+            
+            if last_order and last_order.order_number:
+                # Make sure we're dealing with integer values for proper incrementing
+                try:
+                    # If the order_number is stored as a string (after our column change), convert it to int
+                    current_highest = int(last_order.order_number)
+                    next_order_number = current_highest + 1
+                except (ValueError, TypeError):
+                    # If conversion fails, just use numeric order number 
+                    logging.warning(f"Could not parse existing order number {last_order.order_number} for user {user.id}, starting from 1")
+                    next_order_number = 1
+                    
+            # Log the next order number for debugging
+            logging.info(f"Assigning next sequential order number {next_order_number} to user {user.id} (Telegram ID: {user_telegram_id})")
+            
+        # Check if user has enough balance
+        if user.balance < price:
+            bot.reply_to(message, f"❌ User does not have enough balance. Current balance: ${user.balance:.2f}, Order amount: ${price:.2f}")
+            return
+
         # Create a new order with the unique order number
         # Store AliExpress order ID in the order_id column 
         new_order = Order(
@@ -6803,7 +6917,30 @@ def order_place_command(message):
             updated_at=datetime.now()
         )
         
+        # Add the order to the session
         session.add(new_order)
+        session.commit()
+        
+        # Deduct the amount from user's balance
+        user.balance -= price
+        
+        # Create a transaction record for this order
+        transaction = Transaction(
+            user_id=user.id,
+            amount=-price,  # Negative amount for deduction
+            transaction_type="Order Placement",
+            description=f"Order #{next_order_number}: {product_description[:30]}{'...' if len(product_description) > 30 else ''}",
+            created_at=datetime.now()
+        )
+        
+        # Add the transaction
+        session.add(transaction)
+        session.commit()
+        
+        # Automatically update order status from "Processing" to "Shipped"
+        new_order.status = "Shipped"
+        new_order.delivery_status = "in_transit"
+        new_order.updated_at = datetime.now()
         session.commit()
         
         # Get the new order ID
@@ -6813,12 +6950,13 @@ def order_place_command(message):
         try:
             user_notification = (
                 f"🎉 <b>Your order has been placed!</b>\n\n"
+                f"<b>Your Order Number:</b> {next_order_number} ✅\n"
                 f"<b>Product:</b> {product_description}\n"
-                f"<b>Order ID:</b> {order_id}\n"
+                f"<b>AliExpress Order ID:</b> {order_id}\n"
                 f"<b>Tracking Number:</b> {tracking_number}\n"
                 f"<b>Carrier:</b> {carrier}\n"
                 f"<b>Amount:</b> ${price:.2f}\n\n"
-                f"You can track your order status in the bot menu."
+                f"<b>📝 Important:</b> Save your Order Number ({next_order_number}) to track your order status in the bot menu."
             )
             bot.send_message(user_telegram_id, user_notification, parse_mode='HTML')
             
