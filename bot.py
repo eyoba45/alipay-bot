@@ -6675,32 +6675,101 @@ def _show_order_details(chat_id, order_id):
 @bot.message_handler(commands=['orderplace'])
 def order_place_command(message):
     """Place a new order with all details and notify the user
-    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE [CARRIER]
-    Example: /orderplace 123456789 AE123456789 LY123456789CN 25.99 AliExpress
+    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE PRODUCT_DESCRIPTION [CARRIER]
+    Example: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress
     """
     if not is_admin(message.chat.id):
         bot.reply_to(message, "⚠️ This command is only available to administrators.")
         return
 
-    # Extract the command format
+    # Extract the command format - handle quoted product description
     text = message.text.strip()
-    parts = text.split()
-
-    # Check command format
-    if len(parts) < 5:
-        bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE [CARRIER]")
-        return
-
-    user_telegram_id = parts[1]
-    order_id = parts[2]
-    tracking_number = parts[3]
-    price = parts[4]
-    carrier = parts[5] if len(parts) > 5 else "AliExpress"  # Default carrier
+    
+    # Check if we have a quoted product description
+    if '"' in text:
+        # Split by first space to get /orderplace
+        command_parts = text.split(' ', 1)
+        if len(command_parts) < 2:
+            bot.reply_to(message, "⚠️ Incorrect format. Missing parameters.")
+            return
+            
+        # Get the rest of the text
+        rest_of_text = command_parts[1].strip()
+        
+        # Extract user_id, order_id, tracking_number, and price (before the quoted text)
+        before_quote_parts = []
+        current_pos = 0
+        for _ in range(4):  # We need 4 parts before the quote
+            if current_pos >= len(rest_of_text):
+                break
+            # Skip spaces
+            while current_pos < len(rest_of_text) and rest_of_text[current_pos] == ' ':
+                current_pos += 1
+            # If we've reached a quote, we've gone too far
+            if current_pos < len(rest_of_text) and rest_of_text[current_pos] == '"':
+                break
+            # Find the next space
+            next_space = rest_of_text.find(' ', current_pos)
+            if next_space == -1:  # No more spaces
+                before_quote_parts.append(rest_of_text[current_pos:])
+                current_pos = len(rest_of_text)
+            else:
+                before_quote_parts.append(rest_of_text[current_pos:next_space])
+                current_pos = next_space + 1
+        
+        # If we don't have enough parts before the quote
+        if len(before_quote_parts) < 4:
+            bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE \"PRODUCT DESCRIPTION\" [CARRIER]")
+            return
+        
+        # Extract the quoted product description
+        first_quote = rest_of_text.find('"', current_pos)
+        if first_quote == -1:
+            bot.reply_to(message, "⚠️ Product description must be enclosed in quotes.")
+            return
+        second_quote = rest_of_text.find('"', first_quote + 1)
+        if second_quote == -1:
+            bot.reply_to(message, "⚠️ Product description must be enclosed in quotes.")
+            return
+        
+        product_description = rest_of_text[first_quote + 1:second_quote]
+        
+        # Check if there's anything after the second quote (carrier)
+        carrier = "AliExpress"  # Default
+        if second_quote + 1 < len(rest_of_text):
+            carrier_text = rest_of_text[second_quote + 1:].strip()
+            if carrier_text:
+                carrier = carrier_text
+        
+        # Assign the parts
+        user_telegram_id = before_quote_parts[0]
+        order_id = before_quote_parts[1]
+        tracking_number = before_quote_parts[2]
+        price = before_quote_parts[3]
+    else:
+        # No quotes - split by spaces
+        parts = text.split()
+        
+        # Check command format
+        if len(parts) < 6:  # Now we need at least a product description
+            bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE PRODUCT_DESCRIPTION [CARRIER]")
+            return
+        
+        user_telegram_id = parts[1]
+        order_id = parts[2]
+        tracking_number = parts[3]
+        price = parts[4]
+        product_description = parts[5]
+        carrier = parts[6] if len(parts) > 6 else "AliExpress"  # Default carrier
 
     # Validate inputs
     try:
         user_telegram_id = int(user_telegram_id)
         price = float(price)
+        # Make sure order_id is not too large for database integer field
+        if order_id.isdigit() and len(order_id) > 9:  # Standard PostgreSQL integer limit
+            bot.reply_to(message, "⚠️ Order ID is too large. Please use a shorter ID or include letters.")
+            return
     except ValueError:
         bot.reply_to(message, "⚠️ USER_ID must be a number and PRICE must be a valid number.")
         return
@@ -6715,12 +6784,20 @@ def order_place_command(message):
             bot.reply_to(message, f"❌ User with Telegram ID {user_telegram_id} not found.")
             return
             
-        # Create a new order
+        # Generate a unique order number for tracking
+        # Get the highest order number for this user and increment it
+        last_order = session.query(Order).filter_by(user_id=user.id).order_by(Order.order_number.desc()).first()
+        next_order_number = 1
+        if last_order and last_order.order_number:
+            next_order_number = last_order.order_number + 1
+            
+        # Create a new order with the unique order number
+        # Store AliExpress order ID in the order_id column 
         new_order = Order(
             user_id=user.id,
-            order_number=order_id,
-            product_link="Added by admin",
-            order_id=order_id,
+            order_number=next_order_number,  # Unique order number for tracking
+            product_link=product_description,  # Store product description here
+            order_id=str(order_id),  # AliExpress order ID stored here
             tracking_number=tracking_number,
             carrier=carrier,
             status="Processing",
@@ -6739,6 +6816,7 @@ def order_place_command(message):
         try:
             user_notification = (
                 f"🎉 <b>Your order has been placed!</b>\n\n"
+                f"<b>Product:</b> {product_description}\n"
                 f"<b>Order ID:</b> {order_id}\n"
                 f"<b>Tracking Number:</b> {tracking_number}\n"
                 f"<b>Carrier:</b> {carrier}\n"
@@ -6751,7 +6829,8 @@ def order_place_command(message):
             bot.reply_to(
                 message, 
                 f"✅ Order successfully placed for user {user.name} (ID: {user_telegram_id}).\n"
-                f"Order #{new_order_id} created in the system.\n"
+                f"Product: {product_description}\n"
+                f"Order #{new_order_id} created with tracking number #{next_order_number}.\n"
                 f"User has been notified."
             )
             
