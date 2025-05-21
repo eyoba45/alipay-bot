@@ -3935,6 +3935,50 @@ def run_subscription_checker():
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
 
+# Create a generic callback handler to ensure all inline button callbacks are captured
+@bot.callback_query_handler(func=lambda call: True)
+def handle_all_callbacks(call):
+    """Global fallback callback handler to ensure all button callbacks are handled"""
+    try:
+        logger.info(f"Received callback: {call.data}")
+        
+        # Handle different callback types based on prefixes
+        if call.data in ["tutorials", "faqs", "sub_benefits"]:
+            handle_info_buttons(call)
+        elif call.data.startswith(("approve_deposit_", "reject_deposit_")):
+            handle_deposit_approval_callback(call)
+        elif call.data.startswith(("process_order_", "reject_order_")):
+            handle_order_admin_decision(call)
+        elif call.data.startswith("renew_subscription_"):
+            handle_subscription_renewal(call)
+        elif call.data.startswith("retry_payment_"):
+            handle_payment_retry(call)
+        elif call.data.startswith("companion_"):
+            handle_companion_callback(call)
+        elif call.data.startswith("referral_badges_"):
+            handle_referral_badges_buttons(call)
+        elif call.data.startswith("manage_user_"):
+            handle_manage_user(call)
+        elif call.data.startswith("handle_users_page_"):
+            handle_users_pagination(call)
+        elif call.data.startswith("handle_orders_page_"):
+            handle_orders_pagination(call)
+        elif call.data.startswith("admin_decision_"):
+            handle_admin_decision(call)
+        elif call.data.startswith("deposit_admin_decision_"):
+            handle_deposit_admin_decision(call)
+        else:
+            # If the callback type is not recognized, send a default response
+            bot.answer_callback_query(call.id, "This button is currently not active")
+            
+    except Exception as e:
+        logger.error(f"Error handling callback {call.data}: {e}")
+        logger.error(traceback.format_exc())
+        try:
+            bot.answer_callback_query(call.id, "Error processing request")
+        except:
+            pass
+
 # Admin Dashboard Function Handlers
 # Import admin handlers
 from admin_handlers import setup_admin_handlers
