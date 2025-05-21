@@ -18,6 +18,7 @@ import queue
 import urllib.parse
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from connection_manager import init_db, get_session, safe_close_session, session_scope
+from admin_handlers import setup_admin_handlers
 from models import User, Order, PendingApproval, PendingDeposit, CompanionProfile, CompanionInteraction, Transaction
 from datetime import datetime, timedelta
 from sqlalchemy import func
@@ -289,9 +290,12 @@ Subscription fee: $1.00 (150 birr)
         safe_close_session(session)
 
 
+# Admin check is now handled by admin_handlers.py
+from admin_handlers import AdminSection
+
 def is_admin(chat_id):
     """Check if a user is an admin"""
-    return chat_id in ADMIN_IDS
+    return AdminSection.is_admin(chat_id)
 
 def create_main_menu(is_registered=False, chat_id=None):
     """Create the main menu keyboard based on registration status and admin status"""
@@ -2294,7 +2298,7 @@ def check_balance(message):
 def referral_badges(message):
     """Display referral badges coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -2319,7 +2323,7 @@ You'll be able to invite friends and earn rewards.
 def my_referral_link(message):
     """Handle My Referral Link button to display coming soon message"""
     chat_id = message.chat.id
-    
+
     # Display coming soon message
     bot.send_message(
         chat_id,
@@ -3198,6 +3202,199 @@ To place an order, click 📦 <b>Submit Order</b> from the main menu.
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('process_order_', 'reject_order_')))
 def handle_order_admin_decision(call):
+    """Handle admin approval/rejection for orders"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+
+    logger.info(f"Order button pressed - Callback: {call.data}, Admin: {chat_id}")
+
+    if not is_admin(chat_id):
+        logger.warning(f"Unauthorized order button access from user {chat_id}")
+        bot.answer_callback_query(call.id, "⛔️ Admin access required")
+        return
+
+    try:
+        parts = call.data.split('_order_')
+        action = parts[0]  # process or reject
+        order_id = int(parts[1])
+        logger.info(f"Processing order action: {action} for order {order_id}")
+
+        session = get_session()
+        order = session.query(Order).filter_by(id=order_id).first()
+        
+        if not order:
+            logger.error(f"Order {order_id} not found")
+            bot.answer_callback_query(call.id, "Order not found")
+            return
+
+        user = session.query(User).filter_by(id=order.user_id).first()
+
+        if action == 'process':
+            order.status = 'Processing'
+            order.updated_at = datetime.utcnow()
+            session.commit()
+            logger.info(f"Order {order_id} marked as processing")
+
+            bot.answer_callback_query(call.id, "Please provide order details")
+            msg = bot.send_message(
+                chat_id,
+                """
+Please provide the following order details:
+
+1. AliExpress Order ID
+2. Tracking Number (if available)
+3. Product Price (in USD)
+
+Format: orderid|tracking|price
+Example: 8675309|LY123456789CN|25.99
+
+Enter 'cancel' to cancel processing.
+""",
+                parse_mode='HTML'
+            )
+            bot.register_next_step_handler(msg, process_order_details, order.id, user.telegram_id)
+            return
+
+    except Exception as e:
+        logger.error(f"Error processing order action: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing order action")
+    finally:
+        safe_close_session(session)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_deposit_', 'reject_deposit_')))
+def handle_deposit_admin_decision(call):
+    """Handle deposit approval/rejection"""
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    session = None
+
+    logger.info(f"Deposit button pressed - Callback: {call.data}, Admin: {chat_id}")
+
+    if not is_admin(chat_id):
+        logger.warning(f"Unauthorized deposit button access from user {chat_id}")
+        bot.answer_callback_query(call.id, "⛔️ Admin access required")
+        return
+
+    try:
+        parts = call.data.split('_deposit_')
+        action = parts[0]  # approve or reject  
+        deposit_id = int(parts[1])
+        logger.info(f"Processing deposit action: {action} for deposit {deposit_id}")
+
+        session = get_session()
+        deposit_info = session.query(PendingDeposit, User).join(User).filter(
+            PendingDeposit.id == deposit_id
+        ).first()
+
+        if not deposit_info:
+            logger.error(f"Deposit {deposit_id} not found")
+            bot.answer_callback_query(call.id, "Deposit already processed or not found")
+            bot.edit_message_text(
+                "This deposit has already been processed.",
+                chat_id=chat_id,
+                message_id=message_id
+            )
+            return
+
+        deposit, user = deposit_info
+        logger.info(f"Found deposit for user {user.telegram_id}")
+
+        if action == 'approve':
+            # Add amount to user balance
+            user.balance += deposit.amount
+            
+            # Update deposit status
+            deposit.status = 'Approved'
+            deposit.updated_at = datetime.utcnow()
+            
+            session.commit()
+            logger.info(f"Approved deposit {deposit_id} for user {user.telegram_id}")
+
+            # Notify user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>DEPOSIT APPROVED</b> ✅  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> has been approved!
+
+<b>New Balance:</b> ${user.balance:.2f}
+
+<i>Thank you for using our service!</i>
+""",
+                parse_mode='HTML'
+            )
+
+            # Update admin message
+            bot.edit_message_text(
+                f"""
+<b>Deposit #{deposit.id}</b> - ✅ APPROVED
+
+👤 <b>User:</b> {user.name}
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+💳 <b>New Balance:</b> ${user.balance:.2f}
+⏰ <b>Time:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified.</i>
+""",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+
+            bot.answer_callback_query(call.id, f"✅ Deposit approved: ${deposit.amount:.2f}")
+
+        else:  # reject
+            deposit.status = 'Rejected'
+            deposit.updated_at = datetime.utcnow()
+            session.commit()
+            logger.info(f"Rejected deposit {deposit_id} for user {user.telegram_id}")
+
+            # Notify user
+            bot.send_message(
+                user.telegram_id,
+                f"""
+╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ❌ <b>DEPOSIT REJECTED</b> ❌  
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+
+Your deposit of <b>${deposit.amount:.2f}</b> was rejected.
+
+Please try again with clear payment proof or contact support.
+
+<i>For help: @alipay_help_center</i>
+""",
+                parse_mode='HTML'
+            )
+
+            # Update admin message
+            bot.edit_message_text(
+                f"""
+<b>Deposit #{deposit.id}</b> - ❌ REJECTED
+
+👤 <b>User:</b> {user.name}
+💰 <b>Amount:</b> ${deposit.amount:.2f}
+⏰ <b>Time:</b> {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+<i>User has been notified.</i>
+""",
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode='HTML'
+            )
+
+            bot.answer_callback_query(call.id, f"❌ Deposit rejected: ${deposit.amount:.2f}")
+
+    except Exception as e:
+        logger.error(f"Error processing deposit action: {e}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Error processing deposit action")
+    finally:
+        safe_close_session(session)
     """Handle admin approval/rejection for orders with enhanced user notifications"""
     session = None
     try:
@@ -3739,147 +3936,44 @@ def run_subscription_checker():
         time.sleep(24 * 60 * 60)
 
 # Admin Dashboard Function Handlers
-@bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')
+# Import admin handlers
+from admin_handlers import setup_admin_handlers
+
+# Admin handlers are now initialized in the main() function
+
+def admin_command(message):
+    """Direct access to admin dashboard via command"""
+    from admin_handlers import AdminSection
+    AdminSection.handle_admin_dashboard(bot, message)
+
+@bot.message_handler(commands=['admin'])
 def admin_dashboard(message):
-    """Show admin dashboard with all admin features"""
-    chat_id = message.chat.id
+    """Handle /admin command with admin dashboard access"""
+    admin_command(message)
 
-    # Check if user is admin
-    if not is_admin(chat_id):
-        bot.send_message(
-            chat_id,
-            "⚠️ You don't have permission to access the admin dashboard.",
-            reply_markup=create_main_menu(True, chat_id)
-        )
-        return
-
-    # Create admin menu
-    admin_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    admin_menu.add(
-        KeyboardButton('👥 User Management'),
-        KeyboardButton('📦 Order Management')
-    )
-    admin_menu.add(
-        KeyboardButton('💰 Deposit Management'),
-        KeyboardButton('📊 System Stats')
-    )
-    admin_menu.add(
-        KeyboardButton('📅 Subscription Management'),
-        KeyboardButton('⚙️ Bot Settings')
-    )
-    admin_menu.add(
-        KeyboardButton('🔙 Back to Main Menu')
-    )
-
-    bot.send_message(
-        chat_id,
-        """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   🔐 <b>ADMIN DASHBOARD</b> 🔐  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-
-Welcome to the Admin Dashboard! Select a management option:
-
-<b>Available Admin Features:</b>
-• 👥 <b>User Management</b> - View and manage users
-• 📦 <b>Order Management</b> - View and manage orders
-• 💰 <b>Deposit Management</b> - View and manage deposits
-• 📊 <b>System Stats</b> - View system statistics
-• 📅 <b>Subscription Management</b> - Manage user subscriptions
-• ⚙️ <b>Bot Settings</b> - Configure bot settings
-
-<i>Select any option to continue or go back to the main menu.</i>
-""",
-        parse_mode='HTML',
-        reply_markup=admin_menu
-    )
-
-@bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Main Menu')
 def back_to_main_menu(message):
     """Return to main menu from admin dashboard"""
-    chat_id = message.chat.id
-    session = None
+    from admin_handlers import AdminSection
+    AdminSection.back_to_main_menu(bot, message)
 
-    try:
-        session = get_session()
-        user = session.query(User).filter_by(telegram_id=chat_id).first()
-        is_registered = user is not None
+# Back to main menu button is now handled by admin_handlers.py
 
-        bot.send_message(
-            chat_id,
-            "🏠 Returning to main menu...",
-            reply_markup=create_main_menu(is_registered, chat_id)
-        )
-    except Exception as e:
-        logger.error(f"Error returning to main menu: {e}")
-        bot.send_message(
-            chat_id,
-            "🏠 Returning to main menu...",
-            reply_markup=create_main_menu(True, chat_id)
-        )
-    finally:
-        safe_close_session(session)
+# Admin panel functionality has been moved to admin_handlers.py
 
-@bot.message_handler(func=lambda msg: msg.text == '👥 User Management')
-def user_management(message):
-    """Show user management options"""
-    chat_id = message.chat.id
+# All user management functionality is now handled in admin_handlers.py
 
-    # Check if user is admin
-    if not is_admin(chat_id):
-        return
+# All admin functionality is now implemented in admin_handlers.py
+# All admin dashboard functionality is completely implemented in admin_handlers.py
 
-    # Create user management menu
-    user_mgmt_menu = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    user_mgmt_menu.add(
-        KeyboardButton('📋 List All Users'),
-        KeyboardButton('🔍 Find User')
-    )
-    user_mgmt_menu.add(
-        KeyboardButton('➕ Add User'),
-        KeyboardButton('🚫 Block User')
-    )
-    user_mgmt_menu.add(
-        KeyboardButton('✅ Pending Approvals'),
-        KeyboardButton('🔙 Back to Admin')
-    )
+# User management panel has been moved to admin_handlers.py
+# All admin panel UI is now handled by admin_handlers.py
+# Import admin handlers module at the top of the file (already done)
+# from admin_handlers import setup_admin_handlers
 
-    bot.send_message(
-        chat_id,
-        """
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   👥 <b>USER MANAGEMENT</b> 👥  
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+# All admin functionality is now in admin_handlers.py
+# All admin functionality is now in admin_handlers.py
 
-Manage all user accounts from this panel.
-
-<b>Available Actions:</b>
-• 📋 <b>List All Users</b> - View all registered users
-• 🔍 <b>Find User</b> - Search for a specific user
-• ➕ <b>Add User</b> - Manually add a new user
-• 🚫 <b>Block User</b> - Block a user from using the bot
-• ✅ <b>Pending Approvals</b> - View pending registration approvals
-
-<i>Select an action or go back to the admin dashboard.</i>
-""",
-        parse_mode='HTML',
-        reply_markup=user_mgmt_menu
-    )
-
-@bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Admin')
-def back_to_admin(message):
-    """Return to admin dashboard"""
-    chat_id = message.chat.id
-
-    # Check if user is admin
-    if not is_admin(chat_id):
-        return
-
-    admin_dashboard(message)
-
-@bot.message_handler(func=lambda msg: msg.text == '📋 List All Users')
-def list_all_users(message):
-    """List all registered users with pagination"""
+# Admin list users functionality is now handled in admin_handlers.py
     chat_id = message.chat.id
     session = None
 
@@ -5897,7 +5991,7 @@ Enter how many points you want to redeem:
 
         elif call.data == 'view_badges':
             bot.answer_callback_query(call.id)
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5921,7 +6015,7 @@ You'll be able to invite friends and earn rewards.
         elif call.data == 'redeem_points':
             # Check referral points
             points = user.referral_points or 0
-            
+
             # Display coming soon message
             bot.send_message(
                 chat_id,
@@ -5941,7 +6035,7 @@ You'll be able to redeem your points for account balance.
                 reply_markup=create_main_menu(is_registered=True, chat_id=chat_id)
             )
             return
-            
+
         elif call.data == 'view_referrals':
             # Display coming soon message
             bot.send_message(
@@ -6271,6 +6365,15 @@ def main():
     logger.info("✅ Using standalone chapa_autopay.py for payment processing")
     logger.info("✓ Payment notifications will be handled by the Payment Auto-Approver workflow")
 
+    # Initialize the new admin panel system
+    try:
+        from admin_handlers import setup_admin_handlers
+        setup_admin_handlers(bot)
+        logger.info("✅ Admin panel system initialized with clean, well-structured implementation")
+    except Exception as admin_error:
+        logger.error(f"❌ Failed to initialize admin panel: {admin_error}")
+        logger.error(traceback.format_exc())
+    
     logger.info("✅ Bot handler setup complete with unlimited concurrent request handling")
     logger.info("✓ The bot can now handle unlimited messages without crashing")
     logger.info("✓ Smart error recovery system will preserve user state during interruptions")
