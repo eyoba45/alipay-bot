@@ -228,8 +228,13 @@ Select a user management option:
             sub_status = "✅ Active" if user.subscription_date and (datetime.utcnow() - user.subscription_date).days < 30 else "❌ Inactive"
             
             # Format user details
+            # Check if is_banned attribute exists, otherwise default to "ACTIVE"
+            user_status = "✅ ACTIVE"
+            if hasattr(user, 'is_banned'):
+                user_status = '🚫 BANNED' if user.is_banned else '✅ ACTIVE'
+                
             message_text += f"""
-👤 <b>User #{user.id}</b> - {'🚫 BANNED' if user.is_banned else '✅ ACTIVE'}
+👤 <b>User #{user.id}</b> - {user_status}
 • Name: <b>{user.name}</b>
 • Telegram ID: <code>{user.telegram_id}</code>
 • Balance: <b>${user.balance:.2f}</b>
@@ -586,7 +591,12 @@ Type your search query or click 'Back' to cancel.
                 InlineKeyboardButton("📝 Edit Info", callback_data=f"edit_user_{user.id}")
             )
             
-            if user.is_banned:
+            # Check if user has is_banned attribute and handle its absence
+            is_banned = False
+            if hasattr(user, 'is_banned'):
+                is_banned = user.is_banned
+                
+            if is_banned:
                 keyboard.add(InlineKeyboardButton("✅ Unban User", callback_data=f"unban_user_{user.id}"))
             else:
                 keyboard.add(InlineKeyboardButton("🚫 Ban User", callback_data=f"ban_user_{user.id}"))
@@ -639,17 +649,27 @@ Type your search query or click 'Back' to cancel.
                 bot.answer_callback_query(call.id, f"Managing user {user.name}")
                 
             elif action == "ban":
-                # Ban user
-                user.is_banned = True
-                session.commit()
-                
-                bot.answer_callback_query(call.id, f"User {user.name} has been banned")
-                
-                # Notify the user
+                # Ban user - safely handle missing attribute
                 try:
-                    bot.send_message(
-                        user.telegram_id,
-                        """
+                    # Check if is_banned attribute exists before setting it
+                    if hasattr(user, 'is_banned'):
+                        user.is_banned = True
+                        session.commit()
+                        bot.answer_callback_query(call.id, f"User {user.name} has been banned")
+                    else:
+                        # If attribute doesn't exist, let the admin know
+                        bot.answer_callback_query(call.id, f"Ban feature available after DB update")
+                        bot.send_message(
+                            chat_id,
+                            "The ban feature requires a database update. Users will remain active for now."
+                        )
+                        return
+                    
+                    # Notify the user
+                    try:
+                        bot.send_message(
+                            user.telegram_id,
+                            """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    🚫 <b>ACCOUNT BANNED</b> 🚫  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -658,26 +678,39 @@ Your account has been banned by an administrator.
 
 <i>Please contact support if you believe this is an error.</i>
 """,
-                        parse_mode='HTML'
-                    )
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.error(f"Error notifying user about ban: {e}")
+                    
+                    # Update admin view
+                    UserManagement._display_user_details(bot, chat_id, user)
                 except Exception as e:
-                    logger.error(f"Error notifying user about ban: {e}")
-                
-                # Update admin view
-                UserManagement._display_user_details(bot, chat_id, user)
+                    logger.error(f"Error banning user: {e}")
+                    bot.answer_callback_query(call.id, "Error processing ban request")
                 
             elif action == "unban":
-                # Unban user
-                user.is_banned = False
-                session.commit()
-                
-                bot.answer_callback_query(call.id, f"User {user.name} has been unbanned")
-                
-                # Notify the user
+                # Unban user - safely handle missing attribute
                 try:
-                    bot.send_message(
-                        user.telegram_id,
-                        """
+                    # Check if is_banned attribute exists before setting it
+                    if hasattr(user, 'is_banned'):
+                        user.is_banned = False
+                        session.commit()
+                        bot.answer_callback_query(call.id, f"User {user.name} has been unbanned")
+                    else:
+                        # If attribute doesn't exist, let the admin know
+                        bot.answer_callback_query(call.id, f"Unban feature available after DB update")
+                        bot.send_message(
+                            chat_id,
+                            "The unban feature requires a database update. All users are active by default."
+                        )
+                        return
+                    
+                    # Notify the user
+                    try:
+                        bot.send_message(
+                            user.telegram_id,
+                            """
 ╭━━━━━━━━━━━━━━━━━━━━━━━╮
    ✅ <b>ACCOUNT RESTORED</b> ✅  
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
@@ -686,13 +719,16 @@ Your account has been unbanned by an administrator.
 
 <i>You may now use all features of the bot again.</i>
 """,
-                        parse_mode='HTML'
-                    )
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.error(f"Error notifying user about unban: {e}")
+                    
+                    # Update admin view
+                    UserManagement._display_user_details(bot, chat_id, user)
                 except Exception as e:
-                    logger.error(f"Error notifying user about unban: {e}")
-                
-                # Update admin view
-                UserManagement._display_user_details(bot, chat_id, user)
+                    logger.error(f"Error unbanning user: {e}")
+                    bot.answer_callback_query(call.id, "Error processing unban request")
                 
             elif action == "add":
                 # Set up state for adding balance
