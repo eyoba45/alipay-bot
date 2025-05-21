@@ -4974,7 +4974,7 @@ def process_balance_user_id(message):
     if user_input == '🔙 Back to Admin':
         if chat_id in user_states:
             del user_states[chat_id]
-        back_to_admin(message)
+        admin_dashboard(message)  # Using admin_dashboard instead of back_to_admin
         return
 
     # Check if user is admin
