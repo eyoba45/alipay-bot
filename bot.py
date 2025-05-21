@@ -6766,10 +6766,7 @@ def order_place_command(message):
     try:
         user_telegram_id = int(user_telegram_id)
         price = float(price)
-        # Make sure order_id is not too large for database integer field
-        if order_id.isdigit() and len(order_id) > 9:  # Standard PostgreSQL integer limit
-            bot.reply_to(message, "⚠️ Order ID is too large. Please use a shorter ID or include letters.")
-            return
+        # No need to validate order_id size since we store it as a string
     except ValueError:
         bot.reply_to(message, "⚠️ USER_ID must be a number and PRICE must be a valid number.")
         return
