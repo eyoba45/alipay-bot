@@ -354,6 +354,11 @@ def create_main_menu(is_registered=False, chat_id=None):
 # Global handler for ALL callback queries to fix non-responsive buttons
 @bot.callback_query_handler(func=lambda call: True)
 def ensure_all_callbacks_answered(call):
+    # Auto-fixed by quick_button_fix.py
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
     # Immediately answer all callback queries to prevent loading spinner
     try:
         bot.answer_callback_query(call.id)
@@ -1217,6 +1222,11 @@ Don't worry! We've saved your information. Please try again in a few moments or 
 
 @bot.callback_query_handler(func=lambda call: call.data in ["tutorials", "faqs", "sub_benefits"])
 def handle_info_buttons(call):
+    # Auto-fixed by quick_button_fix.py
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
     """Handle information buttons like tutorials, FAQs, and subscription benefits"""
     try:
         if call.data == "tutorials":
@@ -3955,6 +3965,11 @@ def run_subscription_checker():
 
 @bot.callback_query_handler(func=lambda call: call.data in ["tutorials", "faqs", "sub_benefits"])
 def info_buttons_callback(call):
+    # Auto-fixed by quick_button_fix.py
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
     """Handle information buttons like tutorials, FAQs, and subscription benefits"""
     # Log the callback first
     logger.info(f"Processing info button callback: {call.data}")
@@ -4045,7 +4060,15 @@ def fallback_callback_handler(call):
     """Fallback handler to ensure all callbacks get processed"""
     logger.info(f"Processing unrecognized callback through fallback: {call.data}")
     # Always acknowledge the callback to prevent the loading indicator
-    bot.answer_callback_query(call.id, "Processing your request...")
+    try:
+        bot.answer_callback_query(call.id, "Processing your request...")
+    except Exception as e:
+        logger.error(f"Error answering callback query: {e}")
+        # Still try without text as a fallback
+        try:
+            bot.answer_callback_query(call.id)
+        except Exception:
+            pass
     
     try:
         # Log the unknown callback for debugging
@@ -4336,7 +4359,7 @@ def search_user(message):
     # Check if user canceled the search
     if search_query == '🔙 Back to Admin':
         del user_states[chat_id]
-        back_to_admin(message)
+        admin_dashboard(message)  # Use admin_dashboard instead of undefined back_to_admin
         return
 
     # Check if user is admin
@@ -5739,6 +5762,11 @@ def handle_ai_assistant_greeting(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "deposit_renew")
 def handle_subscription_renewal(call):
+    # Auto-fixed by quick_button_fix.py
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
     """Handle subscription renewal button clicks"""
     chat_id = call.message.chat.id
     message_id = call.message.message_id
@@ -5969,6 +5997,11 @@ def handle_companion_callback(call):
 
 @bot.callback_query_handler(func=lambda call: call.data in ['view_referrals', 'redeem_points', 'referral_help', 'view_badges', 'back_to_reflink'])
 def handle_referral_badges_buttons(call):
+    # Auto-fixed by quick_button_fix.py
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
     """Handle callback actions for referral badges screen"""
     chat_id = call.message.chat.id
     session = None
