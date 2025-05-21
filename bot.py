@@ -350,6 +350,18 @@ def create_main_menu(is_registered=False, chat_id=None):
 
     return menu
 
+
+# Global handler for ALL callback queries to fix non-responsive buttons
+@bot.callback_query_handler(func=lambda call: True)
+def ensure_all_callbacks_answered(call):
+    # Immediately answer all callback queries to prevent loading spinner
+    try:
+        bot.answer_callback_query(call.id)
+        logger.debug(f"Answered callback query {call.id} for data: {call.data}")
+    except Exception as e:
+        logger.error(f"Error answering callback query {call.id}: {e}")
+    
+    # We don't return here, allowing other specific handlers to process the callback
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
     """Direct access to admin dashboard via command"""
@@ -6480,24 +6492,7 @@ def main():
     # Initialize the new admin panel system
     try:
         from admin_handlers import setup_admin_handlers
-        
-
-# Direct fix for non-responsive inline buttons
-# This ensures all buttons get their callbacks answered immediately
-
-# Register a top-level handler for ALL callback queries that immediately answers them
-@bot.callback_query_handler(func=lambda call: True)
-def ensure_all_callbacks_answered(call):
-    # Immediately answer all callback queries to prevent loading spinner
-    try:
-        bot.answer_callback_query(call.id)
-        logger.info(f"Answered callback query {call.id} for data: {call.data}")
-    except Exception as e:
-        logger.error(f"Error answering callback query {call.id}: {e}")
-    
-    # Let the processing continue for specific handlers
-    # We don't return here, allowing other handlers to also process the callback
-setup_admin_handlers(bot)
+        setup_admin_handlers(bot)
         logger.info("✅ Admin panel system initialized with clean, well-structured implementation")
     except Exception as admin_error:
         logger.error(f"❌ Failed to initialize admin panel: {admin_error}")
