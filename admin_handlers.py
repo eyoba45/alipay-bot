@@ -2550,107 +2550,165 @@ def setup_admin_handlers(bot):
         bot: A Telebot instance
     """
     # Admin dashboard
-    bot.message_handler(commands=['admin'])(AdminSection.handle_admin_dashboard)
-    bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')(AdminSection.handle_admin_dashboard)
+    @bot.message_handler(commands=['admin'])
+    def admin_command(message):
+        AdminSection.handle_admin_dashboard(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔐 Admin Dashboard')
+    def admin_dashboard_menu(message):
+        AdminSection.handle_admin_dashboard(bot, message)
     
     # Navigation handlers
-    bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Main Menu')(AdminSection.back_to_main_menu)
-    bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Admin')(AdminSection.handle_admin_dashboard)
+    @bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Main Menu')
+    def back_to_main(message):
+        AdminSection.back_to_main_menu(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Admin')
+    def back_to_admin(message):
+        AdminSection.handle_admin_dashboard(bot, message)
     
     # User management
-    bot.message_handler(func=lambda msg: msg.text == '👥 User Management')(UserManagement.show_user_management)
-    bot.message_handler(func=lambda msg: msg.text == '📋 List All Users')(UserManagement.list_all_users)
-    bot.message_handler(func=lambda msg: msg.text == '🔍 Find User')(UserManagement.find_user_prompt)
-    bot.message_handler(func=lambda msg: msg.text == '🔙 Back to User Management')(UserManagement.show_user_management)
+    @bot.message_handler(func=lambda msg: msg.text == '👥 User Management')
+    def user_management(message):
+        UserManagement.show_user_management(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '📋 List All Users')
+    def list_users(message):
+        UserManagement.list_all_users(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔍 Find User')
+    def find_user(message):
+        UserManagement.find_user_prompt(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔙 Back to User Management')
+    def back_to_user_management(message):
+        UserManagement.show_user_management(bot, message)
     
     # Handle user search
-    bot.message_handler(func=lambda msg: msg.chat.id in admin_states and admin_states[msg.chat.id] == 'waiting_for_user_search')(
-        UserManagement.search_user
-    )
+    @bot.message_handler(func=lambda msg: msg.chat.id in admin_states and admin_states[msg.chat.id] == 'waiting_for_user_search')
+    def search_user_handler(message):
+        UserManagement.search_user(bot, message)
     
     # User pagination
-    bot.callback_query_handler(func=lambda call: call.data.startswith('users_page_'))(
-        UserManagement.handle_users_pagination
-    )
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('users_page_'))
+    def handle_users_page(call):
+        UserManagement.handle_users_pagination(bot, call)
     
     # User management callbacks
-    bot.callback_query_handler(func=lambda call: call.data.startswith('manage_user_'))(
-        UserManagement.handle_manage_user
-    )
-    bot.callback_query_handler(func=lambda call: call.data.startswith('ban_user_') or call.data.startswith('unban_user_'))(
-        UserManagement.handle_manage_user
-    )
-    bot.callback_query_handler(func=lambda call: call.data.startswith('add_balance_'))(
-        UserManagement.handle_manage_user
-    )
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('manage_user_'))
+    def handle_manage_user_callback(call):
+        UserManagement.handle_manage_user(bot, call)
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('ban_user_') or call.data.startswith('unban_user_'))
+    def handle_ban_unban_callback(call):
+        UserManagement.handle_manage_user(bot, call)
+        
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('add_balance_'))
+    def handle_add_balance_callback(call):
+        UserManagement.handle_manage_user(bot, call)
     
     # Process balance addition
-    bot.message_handler(func=lambda msg: msg.chat.id in admin_states and 
+    @bot.message_handler(func=lambda msg: msg.chat.id in admin_states and 
                        isinstance(admin_states[msg.chat.id], dict) and 
-                       admin_states[msg.chat.id].get('action') == 'adding_balance')(
-        UserManagement.process_balance_amount
-    )
+                       admin_states[msg.chat.id].get('action') == 'adding_balance')
+    def process_balance_amount_handler(message):
+        UserManagement.process_balance_amount(bot, message)
     
     # Order management
-    bot.message_handler(func=lambda msg: msg.text == '📦 Order Management')(OrderManagement.show_order_management)
-    bot.message_handler(func=lambda msg: msg.text == '📋 List All Orders')(OrderManagement.list_all_orders)
-    bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Order Management')(OrderManagement.show_order_management)
+    @bot.message_handler(func=lambda msg: msg.text == '📦 Order Management')
+    def order_management_handler(message):
+        OrderManagement.show_order_management(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '📋 List All Orders')
+    def list_orders_handler(message):
+        OrderManagement.list_all_orders(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Order Management')
+    def back_to_order_management(message):
+        OrderManagement.show_order_management(bot, message)
     
     # Order pagination
-    bot.callback_query_handler(func=lambda call: call.data.startswith('orders_page_'))(
-        OrderManagement.handle_orders_pagination
-    )
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('orders_page_'))
+    def handle_orders_pagination_callback(call):
+        OrderManagement.handle_orders_pagination(bot, call)
     
     # Order management callbacks
-    bot.callback_query_handler(func=lambda call: call.data.startswith('manage_order_'))(
-        OrderManagement.handle_manage_order
-    )
-    bot.callback_query_handler(func=lambda call: call.data.startswith('update_order_') or 
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('manage_order_'))
+    def handle_manage_order_callback(call):
+        OrderManagement.handle_manage_order(bot, call)
+        
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('update_order_') or 
                               call.data.startswith('add_tracking_') or 
-                              call.data.startswith('change_status_'))(
-        OrderManagement.handle_update_order
-    )
+                              call.data.startswith('change_status_'))
+    def handle_update_order_callback(call):
+        OrderManagement.handle_update_order(bot, call)
     
     # Process order updates
-    bot.message_handler(func=lambda msg: msg.chat.id in admin_states and 
+    @bot.message_handler(func=lambda msg: msg.chat.id in admin_states and 
                        isinstance(admin_states[msg.chat.id], dict) and 
-                       admin_states[msg.chat.id].get('action') in ['update', 'add', 'change'])(
-        OrderManagement.process_order_update
-    )
+                       admin_states[msg.chat.id].get('action') in ['update', 'add', 'change'])
+    def process_order_update_handler(message):
+        OrderManagement.process_order_update(bot, message)
     
     # Deposit management
-    bot.message_handler(func=lambda msg: msg.text == '💰 Deposit Management')(DepositManagement.show_deposit_management)
-    bot.message_handler(func=lambda msg: msg.text == '📋 List Pending Deposits')(DepositManagement.list_pending_deposits)
-    bot.message_handler(func=lambda msg: msg.text == '🕒 Recent Deposits')(DepositManagement.show_recent_deposits)
-    bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Deposit Management')(DepositManagement.show_deposit_management)
+    @bot.message_handler(func=lambda msg: msg.text == '💰 Deposit Management')
+    def deposit_management_handler(message):
+        DepositManagement.show_deposit_management(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '📋 List Pending Deposits')
+    def list_pending_deposits_handler(message):
+        DepositManagement.list_pending_deposits(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🕒 Recent Deposits')
+    def show_recent_deposits_handler(message):
+        DepositManagement.show_recent_deposits(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Deposit Management')
+    def back_to_deposit_management(message):
+        DepositManagement.show_deposit_management(bot, message)
     
     # Deposit approval/rejection
-    bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))(
-        DepositManagement.handle_deposit_approval
-    )
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('approve_deposit_') or call.data.startswith('reject_deposit_'))
+    def handle_deposit_approval_callback(call):
+        DepositManagement.handle_deposit_approval(bot, call)
     
     # Subscription management
-    bot.message_handler(func=lambda msg: msg.text == '📅 Subscription Management')(SubscriptionManagement.show_subscription_management)
-    bot.message_handler(func=lambda msg: msg.text == '📊 Subscription Stats')(SubscriptionManagement.show_subscription_stats)
-    bot.message_handler(func=lambda msg: msg.text == '🕒 Expiring Soon')(SubscriptionManagement.show_expiring_subscriptions)
-    bot.message_handler(func=lambda msg: msg.text == '✅ Renew Subscription')(SubscriptionManagement.show_renew_subscription)
-    bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Subscription Management')(SubscriptionManagement.show_subscription_management)
+    @bot.message_handler(func=lambda msg: msg.text == '📅 Subscription Management')
+    def subscription_management_handler(message):
+        SubscriptionManagement.show_subscription_management(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '📊 Subscription Stats')
+    def subscription_stats_handler(message):
+        SubscriptionManagement.show_subscription_stats(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🕒 Expiring Soon')
+    def expiring_soon_handler(message):
+        SubscriptionManagement.show_expiring_subscriptions(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '✅ Renew Subscription')
+    def renew_subscription_handler(message):
+        SubscriptionManagement.show_renew_subscription(bot, message)
+        
+    @bot.message_handler(func=lambda msg: msg.text == '🔙 Back to Subscription Management')
+    def back_to_subscription_management(message):
+        SubscriptionManagement.show_subscription_management(bot, message)
     
     # Process subscription renewal
-    bot.message_handler(func=lambda msg: msg.chat.id in admin_states and admin_states[msg.chat.id] == 'waiting_for_subscription_user_id')(
-        SubscriptionManagement.process_subscription_user_id
-    )
+    @bot.message_handler(func=lambda msg: msg.chat.id in admin_states and admin_states[msg.chat.id] == 'waiting_for_subscription_user_id')
+    def process_subscription_user_id_handler(message):
+        SubscriptionManagement.process_subscription_user_id(bot, message)
     
     # Subscription renewal callbacks
-    bot.callback_query_handler(func=lambda call: call.data.startswith('confirm_renew_') or call.data == 'cancel_sub_renewal')(
-        SubscriptionManagement.handle_subscription_renewal
-    )
-    bot.callback_query_handler(func=lambda call: call.data.startswith('renew_sub_'))(
-        lambda call: bot.send_message(
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('confirm_renew_') or call.data == 'cancel_sub_renewal')
+    def handle_subscription_renewal_callback(call):
+        SubscriptionManagement.handle_subscription_renewal(bot, call)
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('renew_sub_'))
+    def renew_sub_callback(call):
+        bot.send_message(
             call.message.chat.id, 
             "Feature coming soon: Direct subscription renewal from list. Please use the manual renewal option."
         )
-    )
     
     # System statistics
-    bot.message_handler(func=lambda msg: msg.text == '📊 System Stats')(SystemStats.show_system_stats)
+    @bot.message_handler(func=lambda msg: msg.text == '📊 System Stats')
+    def system_stats_handler(message):
+        SystemStats.show_system_stats(bot, message)
