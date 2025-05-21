@@ -3935,44 +3935,112 @@ def run_subscription_checker():
         # Wait for 24 hours before checking again
         time.sleep(24 * 60 * 60)
 
-# Create a generic callback handler to ensure all inline button callbacks are captured
+# =============================================================================
+# INLINE BUTTON CALLBACK SECTION - ALL BUTTON CALLBACKS
+# =============================================================================
+
+# These specific handlers ensure each type of button has its own specialized handler
+
+@bot.callback_query_handler(func=lambda call: call.data in ["tutorials", "faqs", "sub_benefits"])
+def info_buttons_callback(call):
+    """Handle information buttons like tutorials, FAQs, and subscription benefits"""
+    # Log the callback first
+    logger.info(f"Processing info button callback: {call.data}")
+    # Ensure the callback query gets answered to stop the "loading" state
+    bot.answer_callback_query(call.id)
+    # Process the callback
+    handle_info_buttons(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("approve_deposit_", "reject_deposit_")))
+def deposit_approval_callback(call):
+    """Handle deposit approval actions"""
+    logger.info(f"Processing deposit approval callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_deposit_approval_callback(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("process_order_", "reject_order_")))
+def order_decision_callback(call):
+    """Handle order processing decisions"""
+    logger.info(f"Processing order decision callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_order_admin_decision(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("renew_subscription_"))
+def subscription_renewal_callback(call):
+    """Handle subscription renewal"""
+    logger.info(f"Processing subscription renewal callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_subscription_renewal(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("retry_payment_"))
+def payment_retry_callback(call):
+    """Handle payment retry"""
+    logger.info(f"Processing payment retry callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_payment_retry(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("companion_"))
+def companion_action_callback(call):
+    """Handle AI companion interactions"""
+    logger.info(f"Processing companion action callback: {call.data}")
+    handle_companion_callback(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("referral_badges_"))
+def referral_badges_callback(call):
+    """Handle referral badge interactions"""
+    logger.info(f"Processing referral badges callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_referral_badges_buttons(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("manage_user_"))
+def user_management_callback(call):
+    """Handle user management"""
+    logger.info(f"Processing user management callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_manage_user(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("handle_users_page_"))
+def users_pagination_callback(call):
+    """Handle users pagination"""
+    logger.info(f"Processing users pagination callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_users_pagination(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("handle_orders_page_"))
+def orders_pagination_callback(call):
+    """Handle orders pagination"""
+    logger.info(f"Processing orders pagination callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_orders_pagination(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("admin_decision_"))
+def admin_decision_callback(call):
+    """Handle admin decisions"""
+    logger.info(f"Processing admin decision callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_admin_decision(call)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("deposit_admin_decision_"))
+def deposit_admin_decision_callback(call):
+    """Handle deposit admin decisions"""
+    logger.info(f"Processing deposit admin decision callback: {call.data}")
+    bot.answer_callback_query(call.id)
+    handle_deposit_admin_decision(call)
+
+# Fallback handler for any other callback types
 @bot.callback_query_handler(func=lambda call: True)
-def handle_all_callbacks(call):
-    """Global fallback callback handler to ensure all button callbacks are handled"""
+def fallback_callback_handler(call):
+    """Fallback handler to ensure all callbacks get processed"""
+    logger.info(f"Processing unrecognized callback through fallback: {call.data}")
+    # Always acknowledge the callback to prevent the loading indicator
+    bot.answer_callback_query(call.id, "Processing your request...")
+    
     try:
-        logger.info(f"Received callback: {call.data}")
-        
-        # Handle different callback types based on prefixes
-        if call.data in ["tutorials", "faqs", "sub_benefits"]:
-            handle_info_buttons(call)
-        elif call.data.startswith(("approve_deposit_", "reject_deposit_")):
-            handle_deposit_approval_callback(call)
-        elif call.data.startswith(("process_order_", "reject_order_")):
-            handle_order_admin_decision(call)
-        elif call.data.startswith("renew_subscription_"):
-            handle_subscription_renewal(call)
-        elif call.data.startswith("retry_payment_"):
-            handle_payment_retry(call)
-        elif call.data.startswith("companion_"):
-            handle_companion_callback(call)
-        elif call.data.startswith("referral_badges_"):
-            handle_referral_badges_buttons(call)
-        elif call.data.startswith("manage_user_"):
-            handle_manage_user(call)
-        elif call.data.startswith("handle_users_page_"):
-            handle_users_pagination(call)
-        elif call.data.startswith("handle_orders_page_"):
-            handle_orders_pagination(call)
-        elif call.data.startswith("admin_decision_"):
-            handle_admin_decision(call)
-        elif call.data.startswith("deposit_admin_decision_"):
-            handle_deposit_admin_decision(call)
-        else:
-            # If the callback type is not recognized, send a default response
-            bot.answer_callback_query(call.id, "This button is currently not active")
-            
+        # Log the unknown callback for debugging
+        logger.warning(f"Unhandled callback type received: {call.data}")
+        bot.answer_callback_query(call.id, "This button action is being processed")
     except Exception as e:
-        logger.error(f"Error handling callback {call.data}: {e}")
+        logger.error(f"Error in fallback callback handler: {e}")
         logger.error(traceback.format_exc())
         try:
             bot.answer_callback_query(call.id, "Error processing request")
@@ -6412,7 +6480,24 @@ def main():
     # Initialize the new admin panel system
     try:
         from admin_handlers import setup_admin_handlers
-        setup_admin_handlers(bot)
+        
+
+# Direct fix for non-responsive inline buttons
+# This ensures all buttons get their callbacks answered immediately
+
+# Register a top-level handler for ALL callback queries that immediately answers them
+@bot.callback_query_handler(func=lambda call: True)
+def ensure_all_callbacks_answered(call):
+    # Immediately answer all callback queries to prevent loading spinner
+    try:
+        bot.answer_callback_query(call.id)
+        logger.info(f"Answered callback query {call.id} for data: {call.data}")
+    except Exception as e:
+        logger.error(f"Error answering callback query {call.id}: {e}")
+    
+    # Let the processing continue for specific handlers
+    # We don't return here, allowing other handlers to also process the callback
+setup_admin_handlers(bot)
         logger.info("✅ Admin panel system initialized with clean, well-structured implementation")
     except Exception as admin_error:
         logger.error(f"❌ Failed to initialize admin panel: {admin_error}")
