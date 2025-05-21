@@ -16,6 +16,7 @@ import fcntl
 import requests
 import queue
 import urllib.parse
+import re
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from connection_manager import init_db, get_session, safe_close_session, session_scope
 from admin_handlers import setup_admin_handlers
@@ -6646,8 +6647,7 @@ def _show_order_details(chat_id, order_id):
         if order.updated_at:
             response += f"<b>Updated:</b> {order.updated_at.strftime('%Y-%m-%d %H:%M')}\n"
 
-        if order.delivery_status:
-            response += f"<b>Delivery Status:</b> {order.delivery_status}\n"
+        # Status is already shown above, no need for delivery_status field
 
         if order.estimated_delivery:
             response += f"<b>Est. Delivery:</b> {order.estimated_delivery.strftime('%Y-%m-%d')}\n"
@@ -6671,6 +6671,106 @@ def _show_order_details(chat_id, order_id):
             safe_close_session(session)
 
 
+
+@bot.message_handler(commands=['orderplace'])
+def order_place_command(message):
+    """Place a new order with all details and notify the user
+    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE [CARRIER]
+    Example: /orderplace 123456789 AE123456789 LY123456789CN 25.99 AliExpress
+    """
+    if not is_admin(message.chat.id):
+        bot.reply_to(message, "⚠️ This command is only available to administrators.")
+        return
+
+    # Extract the command format
+    text = message.text.strip()
+    parts = text.split()
+
+    # Check command format
+    if len(parts) < 5:
+        bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE [CARRIER]")
+        return
+
+    user_telegram_id = parts[1]
+    order_id = parts[2]
+    tracking_number = parts[3]
+    price = parts[4]
+    carrier = parts[5] if len(parts) > 5 else "AliExpress"  # Default carrier
+
+    # Validate inputs
+    try:
+        user_telegram_id = int(user_telegram_id)
+        price = float(price)
+    except ValueError:
+        bot.reply_to(message, "⚠️ USER_ID must be a number and PRICE must be a valid number.")
+        return
+    
+    session = None
+    try:
+        session = get_session()
+        
+        # Check if user exists
+        user = session.query(User).filter_by(telegram_id=user_telegram_id).first()
+        if not user:
+            bot.reply_to(message, f"❌ User with Telegram ID {user_telegram_id} not found.")
+            return
+            
+        # Create a new order
+        new_order = Order(
+            user_id=user.id,
+            order_number=order_id,
+            product_link="Added by admin",
+            order_id=order_id,
+            tracking_number=tracking_number,
+            carrier=carrier,
+            status="Processing",
+            amount=price,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        
+        session.add(new_order)
+        session.commit()
+        
+        # Get the new order ID
+        new_order_id = new_order.id
+        
+        # Notify the user
+        try:
+            user_notification = (
+                f"🎉 <b>Your order has been placed!</b>\n\n"
+                f"<b>Order ID:</b> {order_id}\n"
+                f"<b>Tracking Number:</b> {tracking_number}\n"
+                f"<b>Carrier:</b> {carrier}\n"
+                f"<b>Amount:</b> ${price:.2f}\n\n"
+                f"You can track your order status in the bot menu."
+            )
+            bot.send_message(user_telegram_id, user_notification, parse_mode='HTML')
+            
+            # Confirm to admin
+            bot.reply_to(
+                message, 
+                f"✅ Order successfully placed for user {user.name} (ID: {user_telegram_id}).\n"
+                f"Order #{new_order_id} created in the system.\n"
+                f"User has been notified."
+            )
+            
+        except Exception as e:
+            # If notification fails but order is created
+            bot.reply_to(
+                message, 
+                f"⚠️ Order created (#{new_order_id}) but failed to notify user: {e}\n"
+                f"User may need to be notified manually."
+            )
+            
+    except Exception as e:
+        if session:
+            session.rollback()
+        bot.reply_to(message, f"❌ Error creating order: {e}")
+        logger.error(f"Error in order_place_command: {e}")
+    finally:
+        if session:
+            safe_close_session(session)
 
 def main():
     """Main function to start the bot with unlimited request handling capabilities"""
