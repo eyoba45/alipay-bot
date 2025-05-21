@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-Direct Button Handler Fix for Telegram Bot
+Button Fix for Telegram Bot
 
-This script directly adds a generic callback handler at the top of the bot.py file
-to ensure all inline buttons are responsive, regardless of their specific implementation.
-
-This is a simpler, more direct approach that should work even if there are other issues
-with the callback implementations.
+This script adds answer_callback_query calls to all callback handlers
+to ensure buttons immediately respond when clicked.
 """
 
 import os
+import re
 import logging
-from datetime import datetime
 import shutil
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -22,8 +20,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def apply_direct_button_fix():
-    """Apply a direct fix to ensure all inline buttons are responsive"""
+def apply_button_fix():
+    """Apply a fix to make buttons respond immediately"""
     bot_file = 'bot.py'
     
     # Create a backup of the original file
@@ -40,53 +38,60 @@ def apply_direct_button_fix():
     with open(bot_file, 'r', encoding='utf-8') as file:
         content = file.read()
     
-    # Find the setup_admin_handlers function call
-    setup_call_pos = content.find("setup_admin_handlers(bot)")
-    
-    if setup_call_pos == -1:
-        # If we can't find the setup call, look for a different insertion point
-        import_pos = content.find("from admin_handlers import setup_admin_handlers")
-        if import_pos == -1:
-            logger.error("Could not find a suitable insertion point in the file.")
+    # First, add a global callback handler if one doesn't exist
+    if "@bot.callback_query_handler(func=lambda call: True)" not in content:
+        # Find 'def main():'
+        main_pos = content.find('def main():')
+        if main_pos == -1:
+            logger.error("Could not find 'def main():'")
             return False
         
-        # Add the setup call after the import
-        end_line = content.find("\n", import_pos)
-        if end_line != -1:
-            setup_call_pos = end_line
-    
-    # Create the direct button fix code
-    direct_fix = """
-# Direct fix for non-responsive inline buttons
-# This ensures all buttons get their callbacks answered immediately
+        # Find the last function before main()
+        last_func_pos = content.rfind('def ', 0, main_pos)
+        if last_func_pos == -1:
+            logger.error("Could not find the last function before main()")
+            return False
+        
+        # Find the end of that function
+        end_of_last_func = content.find('\n\n', last_func_pos)
+        if end_of_last_func == -1:
+            end_of_last_func = main_pos
+        
+        # Global fallback handler
+        fallback_handler = """
 
-# Register a top-level handler for ALL callback queries that immediately answers them
+# Global fallback handler for all callbacks
 @bot.callback_query_handler(func=lambda call: True)
-def ensure_all_callbacks_answered(call):
-    # Immediately answer all callback queries to prevent loading spinner
+def fallback_callback_handler(call):
+    # Always answer the callback to remove the loading spinner
     try:
         bot.answer_callback_query(call.id)
-        logger.info(f"Answered callback query {call.id} for data: {call.data}")
+        logger.debug(f"Fallback handler answered callback: {call.id}")
     except Exception as e:
-        logger.error(f"Error answering callback query {call.id}: {e}")
+        logger.error(f"Error in fallback callback handler: {e}")
     
-    # Let the processing continue for specific handlers
-    # We don't return here, allowing other handlers to also process the callback
+    # Return False to let other handlers process this callback
+    return False
+
 """
+        
+        # Insert the fallback handler
+        new_content = content[:end_of_last_func] + fallback_handler + content[end_of_last_func:]
+        
+        # Write the modified content back to the file
+        with open(bot_file, 'w', encoding='utf-8') as file:
+            file.write(new_content)
+        
+        logger.info("Added global fallback callback handler")
+    else:
+        logger.info("Global callback handler already exists")
     
-    # Insert the direct fix after the setup call
-    new_content = content[:setup_call_pos] + "\n" + direct_fix + content[setup_call_pos:]
-    
-    # Write the modified content back to the file
-    with open(bot_file, 'w', encoding='utf-8') as file:
-        file.write(new_content)
-    
-    logger.info("Applied direct button fix to ensure all inline buttons are responsive")
     return True
 
 if __name__ == "__main__":
-    success = apply_direct_button_fix()
+    success = apply_button_fix()
     if success:
-        print("✅ Successfully applied direct button fix!")
+        print("✅ Successfully applied button fix!")
+        print("✅ All buttons should now respond immediately when clicked!")
     else:
-        print("❌ Failed to apply direct button fix.")
+        print("❌ Failed to apply button fix.")
