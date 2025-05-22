@@ -6751,110 +6751,48 @@ def order_ship_command(message):
 @bot.message_handler(commands=['orderplace'])
 def order_place_command(message):
     """Place a new order with all details and notify the user
-    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE "PRODUCT_DESCRIPTION" [CARRIER] [ORDER_NUMBER]
+    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE [CARRIER] [ORDER_NUMBER]
     
     Examples:
-    Auto order number: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress
-    Manual order number: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress 3
-    With quotes: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress 5
+    Auto order number: /orderplace 123456789 AE123456789 LY123456789CN 25.99 AliExpress
+    Manual order number: /orderplace 123456789 AE123456789 LY123456789CN 25.99 AliExpress 3
+    Just essentials: /orderplace 123456789 AE123456789 LY123456789CN 25.99
     """
     if not is_admin(message.chat.id):
         bot.reply_to(message, "⚠️ This command is only available to administrators.")
         return
 
-    # Extract the command format - handle quoted product description
+    # Extract the command format - simplified without product description
     text = message.text.strip()
+    parts = text.split()
     
-    # Check if we have a quoted product description
-    if '"' in text:
-        # Split by first space to get /orderplace
-        command_parts = text.split(' ', 1)
-        if len(command_parts) < 2:
-            bot.reply_to(message, "⚠️ Incorrect format. Missing parameters.")
-            return
+    # Check command format - minimum required: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE
+    if len(parts) < 5:
+        bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE [CARRIER] [ORDER_NUMBER]")
+        return
+    
+    user_telegram_id = parts[1]
+    order_id = parts[2]
+    tracking_number = parts[3]
+    price = parts[4]
+    
+    # Default values
+    carrier = "AliExpress"
+    manual_order_number = None
+    product_description = f"Order {order_id}"  # Simple default description
+    
+    # Check for optional carrier and/or manual order number
+    # If part 5 exists, it could be the carrier or an order number
+    if len(parts) > 5:
+        if parts[5].isdigit():
+            manual_order_number = int(parts[5])
+        else:
+            carrier = parts[5]
             
-        # Get the rest of the text
-        rest_of_text = command_parts[1].strip()
-        
-        # Extract user_id, order_id, tracking_number, and price (before the quoted text)
-        before_quote_parts = []
-        current_pos = 0
-        for _ in range(4):  # We need 4 parts before the quote
-            if current_pos >= len(rest_of_text):
-                break
-            # Skip spaces
-            while current_pos < len(rest_of_text) and rest_of_text[current_pos] == ' ':
-                current_pos += 1
-            # If we've reached a quote, we've gone too far
-            if current_pos < len(rest_of_text) and rest_of_text[current_pos] == '"':
-                break
-            # Find the next space
-            next_space = rest_of_text.find(' ', current_pos)
-            if next_space == -1:  # No more spaces
-                before_quote_parts.append(rest_of_text[current_pos:])
-                current_pos = len(rest_of_text)
-            else:
-                before_quote_parts.append(rest_of_text[current_pos:next_space])
-                current_pos = next_space + 1
-        
-        # If we don't have enough parts before the quote
-        if len(before_quote_parts) < 4:
-            bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE \"PRODUCT DESCRIPTION\" [CARRIER]")
-            return
-        
-        # Extract the quoted product description
-        first_quote = rest_of_text.find('"', current_pos)
-        if first_quote == -1:
-            bot.reply_to(message, "⚠️ Product description must be enclosed in quotes.")
-            return
-        second_quote = rest_of_text.find('"', first_quote + 1)
-        if second_quote == -1:
-            bot.reply_to(message, "⚠️ Product description must be enclosed in quotes.")
-            return
-        
-        product_description = rest_of_text[first_quote + 1:second_quote]
-        
-        # Check if there's anything after the second quote (carrier)
-        carrier = "AliExpress"  # Default
-        if second_quote + 1 < len(rest_of_text):
-            carrier_text = rest_of_text[second_quote + 1:].strip()
-            if carrier_text:
-                carrier = carrier_text
-        
-        # Assign the parts
-        user_telegram_id = before_quote_parts[0]
-        order_id = before_quote_parts[1]
-        tracking_number = before_quote_parts[2]
-        price = before_quote_parts[3]
-    else:
-        # No quotes - split by spaces
-        parts = text.split()
-        
-        # Check command format
-        if len(parts) < 6:  # Now we need at least a product description
-            bot.reply_to(message, "⚠️ Incorrect format. Please use:\n/orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE PRODUCT_DESCRIPTION [CARRIER]")
-            return
-        
-        user_telegram_id = parts[1]
-        order_id = parts[2]
-        tracking_number = parts[3]
-        price = parts[4]
-        product_description = parts[5]
-        # Check for optional carrier and/or manual order number
-        carrier = "AliExpress"  # Default carrier
-        manual_order_number = None
-        
-        # If part 6 exists, it could be the carrier or an order number
-        if len(parts) > 6:
-            if parts[6].isdigit():
-                manual_order_number = int(parts[6])
-            else:
-                carrier = parts[6]
-                
-        # If part 7 exists, it could be the order number (if part 6 was the carrier)
-        if len(parts) > 7 and manual_order_number is None:
-            if parts[7].isdigit():
-                manual_order_number = int(parts[7])
+    # If part 6 exists, it could be the order number (if part 5 was the carrier)
+    if len(parts) > 6 and manual_order_number is None:
+        if parts[6].isdigit():
+            manual_order_number = int(parts[6])
 
     # Validate inputs
     try:
