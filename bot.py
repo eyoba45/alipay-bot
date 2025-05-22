@@ -6748,10 +6748,15 @@ def order_ship_command(message):
         if session:
             session.close()
 
+@bot.message_handler(commands=['orderplace'])
 def order_place_command(message):
     """Place a new order with all details and notify the user
-    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE PRODUCT_DESCRIPTION [CARRIER]
-    Example: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress
+    Format: /orderplace USER_ID ORDER_ID TRACKING_NUMBER PRICE "PRODUCT_DESCRIPTION" [CARRIER] [ORDER_NUMBER]
+    
+    Examples:
+    Auto order number: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress
+    Manual order number: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress 3
+    With quotes: /orderplace 123456789 AE123456789 LY123456789CN 25.99 "Red Gaming Headphones" AliExpress 5
     """
     if not is_admin(message.chat.id):
         bot.reply_to(message, "⚠️ This command is only available to administrators.")
